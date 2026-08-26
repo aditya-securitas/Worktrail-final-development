@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { API_ENDPOINTS } from './endpoint'
-import { AuthContext, SUPERADMIN_MENU, type AuthUser } from './auth-context'
+import { AuthContext, SUPERADMIN_MENU,CONTRIBUTOR_MENU,CLIENT_MENU, type AuthUser } from './auth-context'
 
 type LoginResponse = {
   message?: string
@@ -27,7 +27,14 @@ function readStoredUser(): AuthUser | null {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(readStoredUser)
   const [token, setToken] = useState<string | null>(() => localStorage.getItem(TOKEN_STORAGE_KEY))
-  const [menu, setMenu] = useState(() => user?.Usertype.toLowerCase() === 'superadmin' ? SUPERADMIN_MENU : [])
+  const [menu, setMenu] = useState(() => {
+    if (!user?.Usertype) return []
+    const userType = user.Usertype.toLowerCase()
+    if (userType === 'superadmin') return SUPERADMIN_MENU
+    if (userType === 'contributor') return CONTRIBUTOR_MENU
+    if (userType === 'client') return CLIENT_MENU
+    return []
+  })
   const [isLoading, setIsLoading] = useState(false)
   const isMenuLoading = false
   const menuError = ''

@@ -16,7 +16,11 @@ function Sidebar({ open, userType, menu, isLoading, error }: SidebarProps) {
 
   if (!open) return null
 
-  return <aside className="dashboard-sidebar"><span className="sidebar-label">{userType} menu</span>{isLoading ? <p className="menu-empty">Loading menu...</p> : menuItems.length > 0 ? <nav>{menuItems.map((item) => { const path = menuPath(item.Route); return <Link className={location.pathname === path ? 'menu-link active' : 'menu-link'} to={path} key={`${item.Route}-${item.components}`}><span>{labelForRoute(item)}</span><small>{item.Route}</small></Link> })}</nav> : <p className="menu-empty">{error || 'No menu items available.'}</p>}</aside>
+  return <aside className="dashboard-sidebar">
+    <span className="sidebar-label">{userType} menu</span>
+    {isLoading ? <p className="menu-empty">Loading menu...</p> : menuItems.length > 0 ? <nav>{menuItems.map((item) => { const path = menuPath(item.Route); return <Link className={location.pathname === path ? 'menu-link active' : 'menu-link'} to={path} key={`${item.Route}-${item.components}`}><span>{labelForRoute(item)}</span></Link> })}</nav> : <p className="menu-empty">{error || 'No menu items available.'}</p>}
+    
+  </aside>
 }
 
 export default Sidebar

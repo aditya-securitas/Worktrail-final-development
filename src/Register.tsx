@@ -38,21 +38,22 @@ function Register({ onLogin }: RegisterProps) {
     setSuccess('')
     if (form.password !== form.confirmPassword) { setError('Passwords do not match.'); return }
     setIsLoading(true)
+    const username = `${form.firstName}_${form.lastName}`.trim().replace(/\s+/g, '_').toLowerCase()
     const payload = {
-      email: form.email,
-      first_name: form.firstName,
-      last_name: form.lastName,
-      company_name: accountType === 'Contributor' ? form.companyName : null,
-      company_code: accountType === 'Contributor' ? form.companyCode : null,
-      gst_no: accountType === 'Contributor' ? form.gstNo : null,
-      address1: accountType === 'Contributor' ? form.address : null,
-      city: accountType === 'Contributor' ? form.city : null,
-      state: accountType === 'Contributor' ? form.state : null,
-      country: accountType === 'Contributor' ? form.country : null,
-      zip_code: accountType === 'Contributor' ? form.zipCode : null,
+      username,
       password: form.password,
-      confirm_password: form.confirmPassword,
-      Usertype: accountType,
+      UserType: accountType,
+      EmailID: form.email,
+      FirstName: form.firstName,
+      LastName: form.lastName,
+      CompanyName: accountType === 'Contributor' ? form.companyName : null,
+      CompanyCode: accountType === 'Contributor' ? form.companyCode : null,
+      GSTNumber: accountType === 'Contributor' ? form.gstNo : null,
+      Address: accountType === 'Contributor' ? form.address : null,
+      City: accountType === 'Contributor' ? form.city : null,
+      State: accountType === 'Contributor' ? form.state : null,
+      Country: accountType === 'Contributor' ? form.country : null,
+      ZIPcode: accountType === 'Contributor' ? form.zipCode : null,
     }
     if (import.meta.env.DEV) {
       console.log('[Register API] Request:', {
