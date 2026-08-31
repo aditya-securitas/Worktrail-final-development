@@ -1,146 +1,32 @@
-import { useLocation, Link } from 'react-router-dom'
+import { useLocation } from 'react-router-dom'
 import { useAuth } from './useAuth'
 import type { MenuRoute } from './auth-context'
-import { useState, useRef, useEffect } from 'react'
+import { useState } from 'react'
 import ServiceRequest from './Components/ServiceRequest'
 import AddEmployee from './Components/AddEmployee'
 import Client from './Components/Client'
 import Contributor from './Components/Contributor'
-import Privacypolicy from './Components/Privacypolicy'
+// import Privacypolicy from './Components/Privacypolicy' // No longer needed here
 import Navbar from './Components/Navbar'
 import Sidebar from './Components/Sidebar'
 import { flattenMenu, menuPath } from './Components/sidebar-utils'
-import DashboardCards from './Components/DashboardCards'
-import DashboardCharts from './Components/DashboardCharts'
-import bgVideo from './assets/video/generate_a_video_for_banner.mp4'
-import { Search, Calendar, RefreshCw } from 'lucide-react'
-
-interface Appeal {
-  requestId: string;
-  date: string;
-  employeeCode: string;
-  status: 'Approved' | 'Pending' | 'Rejected' | 'In Review';
-}
-
-const mockAppeals: Appeal[] = [
-  { requestId: "REQ-2026-081", date: "2026-08-25", employeeCode: "TCS-9876", status: "Approved" },
-  { requestId: "REQ-2026-080", date: "2026-08-24", employeeCode: "INF-3210", status: "Pending" },
-  { requestId: "REQ-2026-079", date: "2026-08-23", employeeCode: "WIP-2109", status: "In Review" },
-  { requestId: "REQ-2026-078", date: "2026-08-22", employeeCode: "RIL-0987", status: "Approved" },
-  { requestId: "REQ-2026-077", date: "2026-08-20", employeeCode: "HCL-2345", status: "Rejected" },
-  { requestId: "REQ-2026-076", date: "2026-08-15", employeeCode: "TCS-4567", status: "Approved" },
-  { requestId: "REQ-2026-075", date: "2026-08-12", employeeCode: "INF-5678", status: "Pending" }
-];
 
 function MenuComponent({ item }: { item: MenuRoute | undefined }) {
-  // If Terms and Conditions or Other Services, open link in new tab and render nothing
-  if (
-    item?.components === 'TermsandConditions.tsx' ||
-    item?.components === 'Termsandconditions.tsx'
-  ) {
-    window.open(
-      'https://walsonsverify.com/assets/documents/Terms_and_condition.pdf',
-      '_blank',
-      'noopener,noreferrer'
-    )
-    return null
-  }
-  if (item?.components === 'OtherServices.tsx') {
-    window.open(
-      'https://www.securitas.in/services/background-verification/',
-      '_blank',
-      'noopener,noreferrer'
-    )
-    return null
-  }
-  if (item?.components === 'ServiceRequest.tsx') return <ServiceRequest />
-  if (item?.components === 'AddEmployee.tsx') return <AddEmployee />
-  if (item?.components === 'Client.tsx') return <Client />
-  if (item?.components === 'Contributor.tsx') return <Contributor />
-  if (item?.components === 'Privacypolicy.tsx') return <Privacypolicy />
+  // This component will handle external links in Dashboard instead, so only render mapped components here
+  if (!item) return null
+  if (item.components === 'ServiceRequest.tsx') return <ServiceRequest />
+  if (item.components === 'AddEmployee.tsx') return <AddEmployee />
+  if (item.components === 'Client.tsx') return <Client />
+  if (item.components === 'Contributor.tsx') return <Contributor />
+  // Don't use Privacypolicy component anymore, open as external link via Dashboard logic
   return null
 }
 
 function Dashboard() {
   const { user, menu, isMenuLoading, menuError } = useAuth()
   const location = useLocation()
-  const [sidebarOpen, setSidebarOpen] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return window.innerWidth >= 768
-    }
-    return true
-  })
+  const [sidebarOpen, setSidebarOpen] = useState(true)
   const menuItems = flattenMenu(menu)
-
-  // Recent Appeals filtering states
-  const [appealSearchQuery, setAppealSearchQuery] = useState("")
-  const [startDate, setStartDate] = useState("")
-  const [endDate, setEndDate] = useState("")
-  const [showDatePicker, setShowDatePicker] = useState(false)
-  const datePickerRef = useRef<HTMLDivElement>(null)
-
-  // Click outside to close custom calendar dropdown
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (datePickerRef.current && !datePickerRef.current.contains(event.target as Node)) {
-        setShowDatePicker(false)
-      }
-    }
-    document.mousedown = undefined; // safety check
-    document.addEventListener("mousedown", handleClickOutside)
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside)
-    }
-  }, [])
-
-  // Filter Recent Appeals
-  const filteredAppeals = mockAppeals.filter(appeal => {
-    const matchesSearch = appeal.requestId.toLowerCase().includes(appealSearchQuery.toLowerCase()) ||
-      appeal.employeeCode.toLowerCase().includes(appealSearchQuery.toLowerCase()) ||
-      appeal.status.toLowerCase().includes(appealSearchQuery.toLowerCase());
-
-    let matchesDate = true;
-    if (startDate) {
-      matchesDate = matchesDate && appeal.date >= startDate;
-    }
-    if (endDate) {
-      matchesDate = matchesDate && appeal.date <= endDate;
-    }
-
-    return matchesSearch && matchesDate;
-  });
-
-  const applyPreset = (preset: 'all' | '7days' | '30days') => {
-    const today = new Date();
-    if (preset === 'all') {
-      setStartDate("")
-      setEndDate("")
-    } else if (preset === '7days') {
-      const pastDate = new Date(today);
-      pastDate.setDate(today.getDate() - 7);
-      setStartDate(pastDate.toISOString().split('T')[0]);
-      setEndDate(today.toISOString().split('T')[0]);
-    } else if (preset === '30days') {
-      const pastDate = new Date(today);
-      pastDate.setDate(today.getDate() - 30);
-      setStartDate(pastDate.toISOString().split('T')[0]);
-      setEndDate(today.toISOString().split('T')[0]);
-    }
-  };
-
-  const getFormattedDateRange = () => {
-    if (!startDate && !endDate) return "All Time"
-
-    const formatDateStr = (str: string) => {
-      if (!str) return ""
-      const d = new Date(str)
-      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-    }
-
-    if (startDate && !endDate) return `From ${formatDateStr(startDate)}`
-    if (!startDate && endDate) return `Until ${formatDateStr(endDate)}`
-    return `${formatDateStr(startDate)} - ${formatDateStr(endDate)}`
-  }
 
   return (
     <main className="min-h-screen bg-[#F8FAFC] flex font-securitas w-full">
@@ -400,9 +286,15 @@ function Dashboard() {
               </div>
             </>
           ) : (
-            <MenuComponent
-              item={menuItems.find((item) => menuPath(item.Route) === location.pathname)}
-            />
+            // Only show the MenuComponent if the item is not an external link
+            (() => {
+              const activeMenuItem = menuItems.find((item) => menuPath(item.Route) === location.pathname)
+              // If it's an external link component, render nothing (link handled in effect above)
+              if (activeMenuItem && activeMenuItem.components && EXTERNAL_LINKS[activeMenuItem.components]) {
+                return null
+              }
+              return <MenuComponent item={activeMenuItem} />
+            })()
           )}
         </div>
 

@@ -1,6 +1,23 @@
 import { useState, type ReactNode } from 'react'
 import { API_ENDPOINTS } from './endpoint'
-import { AuthContext, SUPERADMIN_MENU, CONTRIBUTOR_MENU, CLIENT_MENU, type AuthUser } from './auth-context'
+import {
+  AuthContext,
+  SUPERADMIN_MENU,
+  ADMIN_MENU,
+  FASCILATOR_MENU,
+  CONTRIBUTOR_MENU,
+  CLIENT_MENU,
+  type AuthUser
+} from './auth-context'
+
+// Helper to map user types to their corresponding menus
+const MENU_MAP: Record<string, any> = {
+  superadmin: SUPERADMIN_MENU,
+  admin: ADMIN_MENU,
+  fascilator: FASCILATOR_MENU,
+  contributor: CONTRIBUTOR_MENU,
+  client: CLIENT_MENU
+}
 
 type LoginResponse = {
   message?: string
@@ -95,7 +112,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem(TOKEN_STORAGE_KEY))
   const [menu, setMenu] = useState(() => {
     if (!user?.Usertype) return []
-    return getMenuForUserType(user.Usertype)
+    // Look up the menu for the user's type, case-insensitive
+    const userType = user.Usertype.toLowerCase()
+    return MENU_MAP[userType] ?? []
   })
   const [isLoading, setIsLoading] = useState(false)
   const isMenuLoading = false
@@ -146,7 +165,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!result.ok || data.loginStatus !== true || !data.token || !data.user) throw new Error(data.message || `Login failed (${result.status})`)
       if (data.user.activestatus !== '1') throw new Error('Your account is inactive. Please contact an administrator.')
 
-      const availableMenu = getMenuForUserType(data.user.Usertype)
+      // Update menu selection logic to pick correct menu for user type
+      const userType = data.user.Usertype?.toLowerCase?.()
+      const availableMenu = userType ? MENU_MAP[userType] ?? [] : []
       setMenu(availableMenu)
       setUser(data.user)
       setToken(data.token)
@@ -169,15 +190,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem(TOKEN_STORAGE_KEY)
   }
 
-  return <AuthContext.Provider value={{ user, token, menu, isAuthenticated: user?.activestatus === '1' && Boolean(token), isLoading, isMenuLoading, menuError, error, login, logout }}>{children}</AuthContext.Provider>
+  return (
+    <AuthContext.Provider
+      value={{
+        user,
+        token,
+        menu,
+        isAuthenticated: user?.activestatus === '1' && Boolean(token),
+        isLoading,
+        isMenuLoading,
+        menuError,
+        error,
+        login,
+        logout
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  )
 }
 
 function getLoginResponse(value: unknown): LoginResponse {
   if (typeof value !== 'object' || value === null) return {}
   const response = value as { message?: unknown; user?: unknown; data?: unknown; loginStatus?: unknown; token?: unknown }
-  if (isAuthUser(response.user)) return { message: typeof response.message === 'string' ? response.message : undefined, loginStatus: response.loginStatus === true, token: typeof response.token === 'string' ? response.token : undefined, user: response.user }
+  if (isAuthUser(response.user))
+    return {
+      message: typeof response.message === 'string' ? response.message : undefined,
+      loginStatus: response.loginStatus === true,
+      token: typeof response.token === 'string' ? response.token : undefined,
+      user: response.user
+    }
   if (typeof response.data === 'object' && response.data !== null) return getLoginResponse(response.data)
-  return { message: typeof response.message === 'string' ? response.message : undefined, loginStatus: response.loginStatus === true, token: typeof response.token === 'string' ? response.token : undefined }
+  return {
+    message: typeof response.message === 'string' ? response.message : undefined,
+    loginStatus: response.loginStatus === true,
+    token: typeof response.token === 'string' ? response.token : undefined
+  }
 }
 
 function isAuthUser(value: unknown): value is AuthUser {
@@ -185,4 +233,3 @@ function isAuthUser(value: unknown): value is AuthUser {
   const candidate = value as Partial<AuthUser>
   return typeof candidate.Usertype === 'string' && typeof candidate.activestatus === 'string'
 }
-
