@@ -791,7 +791,7 @@ function AddEmployee() {
     };
  
     return (
-        <section className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+        <section className="relative bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
             {toastState.type && (
                 <div className={`fixed top-5 left-1/2 -translate-x-1/2 z-[9999] px-6 py-3 rounded-lg font-bold text-sm text-white shadow-lg transition-all duration-300 ${
                     toastState.type === 'success' 
@@ -987,63 +987,53 @@ function AddEmployee() {
                 </>
             )}
 
-            {/* Bulk Upload Modal Pop-up */}
+            {activePanel !== null && (
+                <button
+                    type="button"
+                    className=" min-h-[38px] min-w-[92px] px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold border-0 rounded-lg cursor-pointer z-10 active:scale-95 transition-all text-sm flex items-center justify-center gap-1.5"
+                    onClick={handleBack}
+                >
+                    &larr; Back
+                </button>
+            )}
+
             {activePanel === "bulk" && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
-                    <form
-                        onSubmit={handleBulkSubmit}
-                        encType="multipart/form-data"
-                        autoComplete="off"
-                        className="w-full max-w-[480px] bg-white rounded-2xl p-8 border border-slate-100 shadow-xl relative flex flex-col gap-6 box-border animate-[fadeIn_0.2s_ease-out]"
-                    >
-                        {/* Close Icon Button */}
-                        <button
-                            type="button"
-                            onClick={() => handleClick(null)}
-                            className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer text-xl font-bold bg-transparent border-0 outline-none"
+                <a
+                    href="/sample_bulk_upload.csv"
+                    download="sample_bulk_upload.csv"
+                    className="absolute left-6 top-[72px] h-[38px] px-5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-bold border border-emerald-200/50 rounded-lg shadow-xs active:scale-95 transition-all text-xs inline-flex items-center justify-center cursor-pointer mb-2.5 decoration-0"
+                >
+                    Download Sample CSV
+                </a>
+            )}
+
+            {activePanel !== null && (
+                <div className={activePanel === 'bulk' 
+                    ? 'w-full max-w-[575px] min-h-[40vh] h-auto mx-auto mt-10 relative flex flex-col items-center justify-center gap-4 box-border'
+                    : 'w-full mx-auto mt-8 p-0 box-border relative'
+                }>
+                    {activePanel === "bulk" && (
+                        <form
+                            className="w-full flex flex-col items-center gap-8 max-w-[550px] mx-auto bg-white p-8 border border-slate-100 rounded-2xl shadow-sm mt-16 box-border"
+                            onSubmit={handleBulkSubmit}
+                            encType="multipart/form-data"
+                            autoComplete="off"
                         >
-                            &times;
-                        </button>
-
-                        <div className="text-center">
-                            <h3 className="m-0 text-lg font-bold text-slate-800">Bulk Employee Upload</h3>
-                            <p className="m-0 mt-1.5 text-xs text-slate-500 leading-relaxed">
-                                Upload a CSV file matching the required verification schema.
-                            </p>
-                        </div>
-
-                        {/* Download Template CSV Link */}
-                        <a
-                            href="/sample_bulk_upload.csv"
-                            download="sample_bulk_upload.csv"
-                            className="w-full py-2.5 px-4 border border-indigo-100 rounded-xl bg-indigo-50/50 hover:bg-indigo-50 text-indigo-600 text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer transition-colors decoration-none"
-                        >
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                            </svg>
-                            Download Template CSV
-                        </a>
-
-                        <div className="flex flex-col gap-4">
-                            <div className="w-full flex flex-col gap-1.5 text-left">
-                                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Select CSV File</label>
+                            <h3 className="m-0 text-lg font-bold text-slate-800 text-center w-full">Bulk Upload Employees</h3>
+                            <div className="w-full flex flex-row items-center justify-center gap-3 flex-wrap">
                                 <input
                                     type="file"
                                     accept=".csv"
                                     onChange={handleFileChange}
-                                    className="w-full h-10 border border-slate-200 rounded-lg px-3.5 py-1.5 text-sm text-slate-800 bg-white focus:border-indigo-500 focus:outline-none"
+                                    className="flex-[1_1_180px] min-w-0 h-10 border border-slate-200 rounded-lg px-3.5 py-1.5 text-sm text-slate-800 bg-white focus:border-indigo-500 focus:outline-none max-w-[240px]"
                                     required
                                 />
-                            </div>
-
-                            {showContributorField && (
-                                <div className="w-full flex flex-col gap-1.5 text-left">
-                                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Company (Client)</label>
-                                    {showCompanyDropdown ? (
+                                {showContributorField && (
+                                    showCompanyDropdown ? (
                                         <select
                                             value={company}
                                             onChange={handleCompanyChange}
-                                            className="w-full h-10 border border-slate-200 rounded-lg px-3 text-sm text-slate-800 bg-white focus:border-indigo-500 focus:outline-none"
+                                            className="flex-[1_1_130px] h-10 border border-slate-200 rounded-lg px-3 text-sm text-slate-800 bg-white focus:border-indigo-500 focus:outline-none max-w-[150px]"
                                             required
                                         >
                                             <option value="Contributor">Contributor</option>
@@ -1055,46 +1045,21 @@ function AddEmployee() {
                                             type="text"
                                             value={company}
                                             readOnly
-                                            className="w-full h-10 border border-slate-200 rounded-lg px-3 text-sm text-slate-400 bg-slate-50 cursor-not-allowed border-slate-300"
+                                            className="flex-[1_1_130px] h-10 border border-slate-200 rounded-lg px-3 text-sm text-slate-400 bg-slate-50 cursor-not-allowed max-w-[150px]"
                                             tabIndex={-1}
                                         />
-                                    )}
-                                </div>
-                            )}
-                        </div>
-
-                        <div className="w-full flex items-center justify-end gap-3 mt-2">
-                            <button
-                                type="button"
-                                onClick={() => handleClick(null)}
-                                className="h-9 px-5 border border-slate-200 rounded-full text-slate-500 text-[11px] font-bold tracking-wider uppercase bg-white hover:bg-slate-50 transition-colors cursor-pointer"
-                            >
-                                Cancel
-                            </button>
+                                    )
+                                )}
+                            </div>
                             <button
                                 type="submit"
                                 className={btnClass}
                                 disabled={uploading}
                             >
-                                {uploading ? "Uploading..." : "Upload & Process"}
+                                {uploading ? "Submitting..." : "Submit"}
                             </button>
-                        </div>
-                    </form>
-                </div>
-            )}
-
-            {activePanel !== null && activePanel !== "bulk" && (
-                <button
-                    type="button"
-                    className="absolute top-6 left-6 min-h-[38px] min-w-[92px] px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold border-0 rounded-lg cursor-pointer z-10 active:scale-95 transition-all text-sm flex items-center justify-center gap-1.5"
-                    onClick={handleBack}
-                >
-                    &larr; Back
-                </button>
-            )}
-
-            {activePanel !== null && activePanel !== "bulk" && (
-                <div className="w-full mx-auto mt-8 p-0 box-border relative">
+                        </form>
+                    )}
 
                     {activePanel === "new" && (
                         <form

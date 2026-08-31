@@ -1,7 +1,7 @@
-import { useLocation } from 'react-router-dom'
+import { useLocation, Link } from 'react-router-dom'
 import { useAuth } from './useAuth'
 import type { MenuRoute } from './auth-context'
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import ServiceRequest from './Components/ServiceRequest'
 import AddEmployee from './Components/AddEmployee'
 import Client from './Components/Client'
@@ -10,6 +10,15 @@ import Contributor from './Components/Contributor'
 import Navbar from './Components/Navbar'
 import Sidebar from './Components/Sidebar'
 import { flattenMenu, menuPath } from './Components/sidebar-utils'
+import bgVideo from './assets/video/the_element_related_to_BGV.mp4'
+import DashboardCards from './Components/DashboardCards'
+import DashboardCharts from './Components/DashboardCharts'
+import { Search, Calendar, RefreshCw } from 'lucide-react'
+
+const EXTERNAL_LINKS: Record<string, boolean> = {
+  'Privacypolicy.tsx': true,
+  'Termsandconditions.tsx': true
+}
 
 function MenuComponent({ item }: { item: MenuRoute | undefined }) {
   // This component will handle external links in Dashboard instead, so only render mapped components here
@@ -25,14 +34,88 @@ function MenuComponent({ item }: { item: MenuRoute | undefined }) {
 function Dashboard() {
   const { user, menu, isMenuLoading, menuError } = useAuth()
   const location = useLocation()
-  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [sidebarState, setSidebarState] = useState<'full' | 'mini' | 'closed'>('full')
   const menuItems = flattenMenu(menu)
+
+  const [appealSearchQuery, setAppealSearchQuery] = useState('')
+  const [startDate, setStartDate] = useState('')
+  const [endDate, setEndDate] = useState('')
+  const [showDatePicker, setShowDatePicker] = useState(false)
+  const datePickerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (datePickerRef.current && !datePickerRef.current.contains(event.target as Node)) {
+        setShowDatePicker(false)
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside)
+    }
+  }, [])
+
+  useEffect(() => {
+    const activeMenuItem = menuItems.find((item) => menuPath(item.Route) === location.pathname)
+    if (activeMenuItem && activeMenuItem.components) {
+      if (activeMenuItem.components === 'Privacypolicy.tsx') {
+        window.open('https://www.securitas.in/about-us/privacy-policy/', '_blank')
+        window.location.href = '/dashboard'
+      } else if (activeMenuItem.components === 'Termsandconditions.tsx') {
+        window.open('https://walsonsverify.com/assets/documents/Terms_and_condition.pdf', '_blank')
+        window.location.href = '/dashboard'
+      }
+    }
+  }, [location.pathname, menuItems])
+
+  const getFormattedDateRange = () => {
+    if (startDate && endDate) {
+      return `${startDate} to ${endDate}`
+    }
+    return 'Select Date Range'
+  }
+
+  const applyPreset = (preset: 'all' | '7days' | '30days') => {
+    const today = new Date()
+    if (preset === 'all') {
+      setStartDate('')
+      setEndDate('')
+    } else if (preset === '7days') {
+      const past = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)
+      setStartDate(past.toISOString().split('T')[0])
+      setEndDate(today.toISOString().split('T')[0])
+    } else if (preset === '30days') {
+      const past = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000)
+      setStartDate(past.toISOString().split('T')[0])
+      setEndDate(today.toISOString().split('T')[0])
+    }
+  }
+
+  const MOCK_APPEALS = [
+    { requestId: "REQ-001", date: "2026-08-25", employeeCode: "EMP001", status: "Approved" },
+    { requestId: "REQ-002", date: "2026-08-26", employeeCode: "EMP002", status: "Pending" },
+    { requestId: "REQ-003", date: "2026-08-27", employeeCode: "EMP003", status: "Rejected" },
+    { requestId: "REQ-004", date: "2026-08-28", employeeCode: "EMP004", status: "Approved" }
+  ]
+
+  const filteredAppeals = MOCK_APPEALS.filter(appeal => {
+    if (appealSearchQuery.trim()) {
+      const query = appealSearchQuery.toLowerCase()
+      const matchesRequest = appeal.requestId.toLowerCase().includes(query)
+      const matchesEmp = appeal.employeeCode.toLowerCase().includes(query)
+      if (!matchesRequest && !matchesEmp) return false
+    }
+    if (startDate && appeal.date < startDate) return false
+    if (endDate && appeal.date > endDate) return false
+    return true
+  })
+
 
   return (
     <main className="min-h-screen bg-[#F8FAFC] flex font-securitas w-full">
       <Sidebar
-        open={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
+        state={sidebarState}
+        onClose={() => setSidebarState('closed')}
         userType={user?.Usertype}
         menu={menu}
         isLoading={isMenuLoading}
@@ -40,16 +123,22 @@ function Dashboard() {
       />
       <section className="flex-1 flex flex-col justify-between min-h-screen bg-[#F8FAFC] p-6 sm:p-8 transition-all duration-300 overflow-x-hidden">
         <div>
-          <Navbar sidebarOpen={sidebarOpen} onToggleSidebar={() => setSidebarOpen((open) => !open)} />
+          <Navbar sidebarState={sidebarState} onToggleSidebar={() => {
+            setSidebarState((prev) => {
+              if (prev === 'full') return 'mini'
+              if (prev === 'mini') return 'closed'
+              return 'full'
+            })
+          }} />
 
           {location.pathname === '/dashboard' ? (
             <>
               {/* Banner Card */}
-              <div className="relative rounded-3xl overflow-hidden bg-[#031f30] text-white p-8 mb-8 shadow-sm flex flex-col justify-between min-h-[220px]">
+              <div className="relative rounded-3xl overflow-hidden bg-[#031f30] text-white p-8 mb-8 shadow-sm flex flex-col items-end justify-between min-h-[220px]">
                 {/* Background Video */}
                 <div className="absolute inset-0 w-full h-full z-0 overflow-hidden pointer-events-none opacity-45">
                   <video
-                    className=" absolute top-1/2 left-1/2 min-w-full min-h-full -translate-x-1/2 -translate-y-1/2 object-fill scale-105"
+                    className="object-fill absolute inset-0 w-full h-full object-cover  mix-blend-overlay"
                     autoPlay
                     muted
                     loop
@@ -57,13 +146,13 @@ function Dashboard() {
                   >
                     <source src={bgVideo} type="video/mp4" />
                   </video>
-                  <div className="absolute inset-0 bg-gradient-to-r from-[#031f30] via-[#031f30]/10 to-transparent z-10"></div>
+                  <div className="absolute inset-0 bg-gradient-to-l from-[#031f30] via-[#031f30]/10 to-transparent z-10"></div>
                 </div>
 
                 {/* Content */}
-                <div className="relative z-10 max-w-lg mt-auto">
+                <div className="relative z-10 max-w-lg mt-auto flex flex-col items-end">
                   <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight mb-2">WORKTRAIL DASHBOARD</h2>
-                  <p className="text-slate-300 text-xs sm:text-sm leading-relaxed mb-6">
+                  <p className="text-slate-300 text-xs sm:text-sm text-end leading-relaxed mb-6">
                     Candidate background verification portal. Access compliance audit parameters, telemetry signals, and physical checks.
                   </p>
                   <Link to="/AddEmployee">

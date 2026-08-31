@@ -17,7 +17,7 @@ import {
 } from 'lucide-react'
 
 type SidebarProps = {
-  open: boolean;
+  state: 'full' | 'mini' | 'closed';
   onClose?: () => void;
   userType?: string;
   menu: MenuRoute[];
@@ -25,15 +25,11 @@ type SidebarProps = {
   error: string;
 }
 
-function Sidebar({ open, onClose, userType, menu, isLoading, error }: SidebarProps) {
+function Sidebar({ state, onClose, userType, menu, isLoading, error }: SidebarProps) {
   const location = useLocation()
   const navigate = useNavigate()
   const { logout } = useAuth()
   const menuItems = flattenMenu(menu)
-
-  if (!open && window.innerWidth >= 768) {
-    // Return Sidebar collapsed on desktop (with w-0)
-  }
 
   const handleLogout = () => {
     logout()
@@ -77,34 +73,40 @@ function Sidebar({ open, onClose, userType, menu, isLoading, error }: SidebarPro
       {/* Backdrop cover for mobile/tablet when open */}
       <div
         onClick={onClose}
-        className={`fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-40 md:hidden transition-opacity duration-300 ${open ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+        className={`fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-40 md:hidden transition-opacity duration-300 ${state !== 'closed' ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
           }`}
       />
 
       <aside
-        className={`fixed md:sticky top-0 left-0 h-screen bg-custom-gradient flex flex-col justify-between font-securitas select-none text-white border-r border-white/5 overflow-y-auto transition-all duration-300 z-50 ${open
+        className={`fixed md:sticky top-0 left-0 h-screen bg-custom-gradient flex flex-col justify-between font-securitas select-none text-white border-r border-white/5 overflow-y-auto transition-all duration-300 z-50 ${state === 'full'
           ? 'translate-x-0 w-64 p-6'
-          : '-translate-x-full md:translate-x-0 md:w-0 md:p-0 md:border-0 overflow-hidden'
+          : state === 'mini'
+            ? 'translate-x-0 w-20 p-4'
+            : '-translate-x-full md:translate-x-0 md:w-0 md:p-0 md:border-0 overflow-hidden'
           }`}
       >
         <div className="flex flex-col">
           {/* Securitas Logo (three red circles and text in white) */}
-          <div className="flex flex-col items-start mb-2 shrink-0">
+          <div className={`flex flex-col mb-2 shrink-0 ${state === 'mini' ? 'items-center' : 'items-start'}`}>
             <div className="flex gap-1.5 mb-1.5">
               <span className="w-4 h-4 rounded-full bg-[#FF2D37] shadow-[0_2px_4px_rgba(255,45,55,0.2)]"></span>
               <span className="w-4 h-4 rounded-full bg-[#FF2D37] shadow-[0_2px_4px_rgba(255,45,55,0.2)]"></span>
               <span className="w-4 h-4 rounded-full bg-[#FF2D37] shadow-[0_2px_4px_rgba(255,45,55,0.2)]"></span>
             </div>
-            <span className="text-[14px] font-bold tracking-widest text-white uppercase font-mono">Securitas</span>
+            {state !== 'mini' && (
+              <span className="text-[14px] font-bold tracking-widest text-white uppercase font-mono">Securitas</span>
+            )}
           </div>
 
           {/* Separator line */}
           <div className="w-full border-t border-white/10 mb-2 shrink-0"></div>
 
           {/* Menu Section Header */}
-          <span className="text-[11px] font-extrabold tracking-widest text-[#4A6B82] uppercase mb-4 block shrink-0">
-            MENU
-          </span>
+          {state !== 'mini' && (
+            <span className="text-[11px] font-extrabold tracking-widest text-[#4A6B82] uppercase mb-4 block shrink-0">
+              MENU
+            </span>
+          )}
 
           {/* Render Menu Items */}
           {isLoading ? (
@@ -131,11 +133,13 @@ function Sidebar({ open, onClose, userType, menu, isLoading, error }: SidebarPro
                       href={externalUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center justify-between px-4 py-3 rounded-2xl transition-all duration-200 group text-white hover:bg-white/10"
+                      className={`flex items-center rounded-2xl transition-all duration-200 group text-white hover:bg-white/10 ${state === 'mini' ? 'justify-center py-3 px-0' : 'justify-between px-4 py-3'
+                        }`}
+                      title={state === 'mini' ? label : undefined}
                     >
-                      <div className="flex items-center gap-3.5">
+                      <div className={`flex items-center ${state === 'mini' ? 'gap-0' : 'gap-3.5'}`}>
                         <Icon className="w-5 h-5 text-white/90 group-hover:text-white" />
-                        <span className="text-[13px] tracking-wide text-white">{label}</span>
+                        {state !== 'mini' && <span className="text-[13px] tracking-wide text-white">{label}</span>}
                       </div>
                     </a>
                   )
@@ -150,24 +154,26 @@ function Sidebar({ open, onClose, userType, menu, isLoading, error }: SidebarPro
                         onClose()
                       }
                     }}
-                    className={`flex items-center justify-between px-4 py-3 rounded-2xl transition-all duration-200 group ${isActive
-                      ? 'bg-white/10 border border-white/5 text-slate-500 font-semibold shadow-inner'
-                      : 'text-white hover:bg-white/10'
+                    className={`flex items-center rounded-2xl transition-all duration-200 group ${state === 'mini' ? 'justify-center py-3 px-0' : 'justify-between px-4 py-3'
+                      } ${isActive
+                        ? 'bg-white/10 border border-white/5 text-slate-500 font-semibold shadow-inner'
+                        : 'text-white hover:bg-white/10'
                       }`}
+                    title={state === 'mini' ? label : undefined}
                   >
-                    <div className="flex items-center gap-3.5">
+                    <div className={`flex items-center ${state === 'mini' ? 'gap-0' : 'gap-3.5'}`}>
                       <Icon
                         className={`w-5 h-5 transition-colors ${isActive
                           ? 'text-[#10B981]'
                           : 'text-white group-hover:text-white'
                           }`}
                       />
-                      <span className="text-[13px] tracking-wide text-white">{label}</span>
+                      {state !== 'mini' && <span className="text-[13px] tracking-wide text-white">{label}</span>}
                     </div>
-                    {isActive && (
+                    {state !== 'mini' && isActive && (
                       <span className="w-1.5 h-6 bg-[#10B981] rounded-full shadow-[0_0_8px_#10B981]"></span>
                     )}
-                    {!isActive && isServiceRequests && (
+                    {state !== 'mini' && !isActive && isServiceRequests && (
                       <ChevronDown className="w-4 h-4 text-white/70 group-hover:text-white" />
                     )}
                   </Link>
@@ -185,10 +191,12 @@ function Sidebar({ open, onClose, userType, menu, isLoading, error }: SidebarPro
           {/* Logout link button */}
           <button
             onClick={handleLogout}
-            className="flex items-center gap-3.5 px-4 py-3 rounded-2xl text-white hover:bg-white/10 transition-all duration-200 cursor-pointer text-left w-full select-none"
+            className={`flex items-center rounded-2xl text-white hover:bg-white/10 transition-all duration-200 cursor-pointer text-left w-full select-none ${state === 'mini' ? 'justify-center py-3 px-0' : 'gap-3.5 px-4 py-3'
+              }`}
+            title={state === 'mini' ? 'Logout' : undefined}
           >
             <LogOut className="w-5 h-5 text-white group-hover:text-white" />
-            <span className="text-[13px] font-semibold tracking-wide text-white">Logout</span>
+            {state !== 'mini' && <span className="text-[13px] font-semibold tracking-wide text-white">Logout</span>}
           </button>
         </div>
       </aside>

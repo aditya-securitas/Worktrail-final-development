@@ -15,9 +15,12 @@ import {
   Cpu,
   Eye,
   FileText,
+  Clock,
+  AlertTriangle,
+  Zap,
 } from "lucide-react";
-import { motion } from "framer-motion";
-import { useEffect, useState } from "react";
+import { motion, useInView, animate } from "framer-motion";
+import { useEffect, useState, useRef } from "react";
 import { Link } from "react-router-dom";
 import { API_ENDPOINTS } from "./endpoint";
 import bannerVideo from "./assets/video/banner-video.mp4";
@@ -81,6 +84,33 @@ const process: Array<[string, string, string, any]> = [
     FileText,
   ],
 ];
+
+interface CounterProps {
+  value: number;
+  suffix?: string;
+}
+
+function Counter({ value, suffix = "%" }: CounterProps) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const inView = useInView(ref, { once: true, margin: "-50px" });
+
+  useEffect(() => {
+    if (inView) {
+      const controls = animate(0, value, {
+        duration: 2.0,
+        ease: "easeOut",
+        onUpdate(latest) {
+          if (ref.current) {
+            ref.current.textContent = Math.round(latest) + suffix;
+          }
+        },
+      });
+      return () => controls.stop();
+    }
+  }, [value, inView, suffix]);
+
+  return <span ref={ref}>0{suffix}</span>;
+}
 
 function Home() {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -190,8 +220,7 @@ function Home() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
           >
-            <img className="public-logo" src="/favicon.svg" alt="" />
-            <span>SECURITAS</span>
+            <img className="public-logo" src="https://worktrail.ai/static/assets/img/securitas_ab_logo.svg" alt="" />
           </motion.a>
           <nav className={menuOpen ? "home-menu open" : "home-menu"}>
             <a href="#solutions" onClick={() => setMenuOpen(false)}>
@@ -330,46 +359,142 @@ function Home() {
 
       <section className="challenge-section" id="resources">
         <div className="home-container challenge-layout">
-          <div className="challenge-copy">
-            <p className="home-kicker">From risk to impact</p>
-            <h2>The Challenge</h2>
-            <div className="challenge-left-overlay">
-              <p className="overlay-kicker">Identifying candidates and managing manual background verification.</p>
-              <p>Identifying potential candidates, for background verification and manual screening...</p>
+          <motion.div 
+            className="challenge-copy"
+            initial={{ opacity: 0, x: -40 }}
+            whileInView={{ opacity: 1, x: 0 }}
+            viewport={{ once: true, amount: 0.2 }}
+            transition={{ duration: 0.7, ease: "easeOut" }}
+          >
+            <div className="kicker-pill-wrapper">
+              <span className="home-kicker kicker-pill">FROM RISK TO IMPACT</span>
             </div>
-            <p>
-              Hiring for complex work environments requires thorough screening. Outdated verification processes with manual steps can be error-prone, time-consuming, and hard to track, risking non-compliance.
-            </p>
-            <a className="outline-button" href="#contact">
-              LEARN MORE <ArrowRight size={16} />
-            </a>
-          </div>
-          <div className="impact-stack">
-            <article className="impact-card solution-impact">
-              <span className="card-label">Impact & Risks</span>
-              <h3>Operational Inefficiencies</h3>
-              <div className="challenge-list">
-                <div className="challenge-item">
-                  <strong>1. Hiring delays</strong>
-                  <p>Operational inefficiency slows down critical onboarding and candidate progression.</p>
-                </div>
-                <div className="challenge-item">
-                  <strong>2. Lack of standard reports & audit trails</strong>
-                  <p>Compliance issues arise when records are unstructured and hard to audit.</p>
-                </div>
-                <div className="challenge-item">
-                  <strong>3. Lengthy processes & communication gaps</strong>
-                  <p>Reduced candidate satisfaction due to communication voids and slow verifications.</p>
-                </div>
+            <h2>The <span className="gradient-text-challenge">Challenge</span></h2>
+            <div className="challenge-title-bar"></div>
+            
+            <div className="challenge-left-overlay">
+              <div className="overlay-icon-wrapper">
+                <Users size={20} />
               </div>
-            </article>
-            <article className="impact-card result-impact">
-              <span className="card-label">The Future</span>
+              <p>
+                Identifying candidates and <strong>managing manual background</strong> verification and screening.
+              </p>
+            </div>
+            
+            <p className="challenge-desc">
+              Hiring for complex work environments requires thorough screening. Outdated verification processes with manual steps can be <strong>error-prone, time-consuming</strong>, and hard to track, risking non-compliance.
+            </p>
+            
+            <motion.a 
+              className="learn-more-glow-btn" 
+              href="#contact"
+              whileHover={{ scale: 1.04 }}
+              whileTap={{ scale: 0.98 }}
+            >
+              LEARN MORE &rarr;
+            </motion.a>
+          </motion.div>
+          
+          <div className="impact-stack">
+            <motion.article 
+              className="impact-card solution-impact"
+              initial={{ opacity: 0, x: 40 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true, amount: 0.2 }}
+              transition={{ duration: 0.7, ease: "easeOut", delay: 0.1 }}
+              whileHover={{ 
+                y: -6, 
+                boxShadow: "0 20px 45px rgba(155, 119, 255, 0.25)",
+                borderColor: "rgba(155, 119, 255, 0.6)"
+              }}
+            >
+              <div className="card-illustration-wrapper">
+                <svg width="70" height="70" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <rect x="15" y="15" width="40" height="50" rx="6" fill="#080318" stroke="#9b77ff" strokeWidth="2" opacity="0.8"/>
+                  <line x1="25" y1="28" x2="45" y2="28" stroke="#9b77ff" strokeWidth="2" strokeLinecap="round"/>
+                  <line x1="25" y1="36" x2="38" y2="36" stroke="#9b77ff" strokeWidth="2" strokeLinecap="round"/>
+                  <rect x="25" y="44" width="8" height="12" rx="1" fill="#9b77ff"/>
+                  <rect x="37" y="48" width="8" height="8" rx="1" fill="#9b77ff" opacity="0.6"/>
+                  <circle cx="55" cy="55" r="14" fill="#080318" stroke="#ff4d4d" strokeWidth="2"/>
+                  <path d="M55 48V56" stroke="#ff4d4d" strokeWidth="2.5" strokeLinecap="round"/>
+                  <circle cx="55" cy="61" r="1.5" fill="#ff4d4d"/>
+                </svg>
+              </div>
+
+              <span className="card-label">
+                <span className="pulse-dot-purple"></span> IMPACT & RISKS
+              </span>
+              <h3>Operational Inefficiencies</h3>
+              
+              <div className="challenge-list">
+                <motion.div 
+                  className="challenge-item"
+                  whileHover={{ x: 6 }}
+                  transition={{ type: "spring", stiffness: 300, damping: 20 }}
+                >
+                  <div className="item-icon-circle"><Clock size={16} /></div>
+                  <div className="item-copy">
+                    <strong>1. Hiring delays</strong>
+                    <p>Operational inefficiency slows down critical onboarding and candidate progression.</p>
+                  </div>
+                </motion.div>
+                <motion.div 
+                  className="challenge-item"
+                  whileHover={{ x: 6 }}
+                  transition={{ type: "spring", stiffness: 300, damping: 20 }}
+                >
+                  <div className="item-icon-circle"><FileText size={16} /></div>
+                  <div className="item-copy">
+                    <strong>2. Lack of standard reports & audit trails</strong>
+                    <p>Compliance issues arise when records are unstructured and hard to audit.</p>
+                  </div>
+                </motion.div>
+                <motion.div 
+                  className="challenge-item"
+                  whileHover={{ x: 6 }}
+                  transition={{ type: "spring", stiffness: 300, damping: 20 }}
+                >
+                  <div className="item-icon-circle"><Zap size={16} /></div>
+                  <div className="item-copy">
+                    <strong>3. Lengthy processes & gaps</strong>
+                    <p>Reduced candidate satisfaction due to communication voids and slow verifications.</p>
+                  </div>
+                </motion.div>
+              </div>
+            </motion.article>
+            
+            <motion.article 
+              className="impact-card result-impact"
+              initial={{ opacity: 0, x: 40 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true, amount: 0.2 }}
+              transition={{ duration: 0.7, ease: "easeOut", delay: 0.2 }}
+              whileHover={{ 
+                y: -6, 
+                boxShadow: "0 20px 45px rgba(77, 255, 149, 0.25)",
+                borderColor: "rgba(77, 255, 149, 0.6)"
+              }}
+            >
+              <div className="card-illustration-wrapper">
+                <svg width="70" height="70" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="40" cy="40" r="22" stroke="#4dff95" strokeWidth="2" strokeDasharray="6 4" />
+                  <circle cx="40" cy="40" r="16" fill="#02140a" stroke="#4dff95" strokeWidth="1.5" />
+                  <path d="M35 40L38 43L45 36" stroke="#4dff95" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  <circle cx="20" cy="28" r="2.5" fill="#4dff95" opacity="0.7"/>
+                  <circle cx="60" cy="52" r="2.5" fill="#4dff95" opacity="0.7"/>
+                  <circle cx="58" cy="26" r="2" fill="#4dff95" opacity="0.5"/>
+                  <circle cx="24" cy="54" r="1.5" fill="#4dff95" opacity="0.5"/>
+                </svg>
+              </div>
+
+              <span className="card-label">
+                <span className="pulse-dot-green"></span> THE FUTURE
+              </span>
               <h3>Agile & Automated</h3>
               <p>
-                Embrace the transition from manual, error-prone processes to agile, automated workflows. This shift empowers your HR team to focus on core tasks, making hiring faster and smarter.
+                Embrace the transition from manual, error-prone processes to <span className="gradient-text-green">agile, automated workflows</span>. This shift empowers your HR team to focus on core tasks, making hiring faster and smarter.
               </p>
-            </article>
+            </motion.article>
           </div>
         </div>
       </section>
@@ -377,14 +502,101 @@ function Home() {
       {/* Key Benefits Stats Strip */}
       <section className="stats-strip-section">
         <div className="home-container stats-strip-grid">
-          <div className="stat-strip-card">
-            <strong>90%</strong>
-            <span>Verification Timelines Reduced by</span>
-          </div>
-          <div className="stat-strip-card">
-            <strong>99%</strong>
-            <span>Reduction in Non-Compliance Risk</span>
-          </div>
+          <motion.div 
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.6, ease: "easeOut" }}
+          >
+            <motion.div
+              className="stat-strip-card"
+              animate={{ y: [0, -8, 0] }}
+              transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
+              whileHover={{ scale: 1.03, y: -12 }}
+            >
+              <div className="stat-card-left">
+                <svg width="76" height="76" viewBox="0 0 76 76" className="progress-ring">
+                  <circle cx="38" cy="38" r="32" stroke="rgba(255,255,255,0.05)" strokeWidth="4" fill="none" />
+                  <circle 
+                    cx="38" 
+                    cy="38" 
+                    r="32" 
+                    stroke="url(#purpleGrad)" 
+                    strokeWidth="4" 
+                    fill="none" 
+                    strokeDasharray="201" 
+                    strokeDashoffset="20"
+                    strokeLinecap="round"
+                  />
+                  <defs>
+                    <linearGradient id="purpleGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stopColor="#9b77ff" />
+                      <stop offset="100%" stopColor="#ec77ff" />
+                    </linearGradient>
+                  </defs>
+                </svg>
+                <div className="stat-card-icon-overlay">
+                  <Clock size={20} />
+                </div>
+              </div>
+              
+              <div className="stat-card-right">
+                <strong>
+                  <Counter value={90} />
+                </strong>
+                <span className="stat-subtitle">VERIFICATION TIMELINES REDUCED BY</span>
+                <p className="stat-desc">Faster verifications, quicker closures and on-time onboarding.</p>
+              </div>
+            </motion.div>
+          </motion.div>
+          
+          <motion.div 
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.6, ease: "easeOut", delay: 0.15 }}
+          >
+            <motion.div
+              className="stat-strip-card"
+              animate={{ y: [0, -8, 0] }}
+              transition={{ duration: 5, repeat: Infinity, ease: "easeInOut", delay: 1.0 }}
+              whileHover={{ scale: 1.03, y: -12 }}
+            >
+              <div className="stat-card-left">
+                <svg width="76" height="76" viewBox="0 0 76 76" className="progress-ring">
+                  <circle cx="38" cy="38" r="32" stroke="rgba(255,255,255,0.05)" strokeWidth="4" fill="none" />
+                  <circle 
+                    cx="38" 
+                    cy="38" 
+                    r="32" 
+                    stroke="url(#greenGrad)" 
+                    strokeWidth="4" 
+                    fill="none" 
+                    strokeDasharray="201" 
+                    strokeDashoffset="2"
+                    strokeLinecap="round"
+                  />
+                  <defs>
+                    <linearGradient id="greenGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stopColor="#4dff95" />
+                      <stop offset="100%" stopColor="#00f0ff" />
+                    </linearGradient>
+                  </defs>
+                </svg>
+                <div className="stat-card-icon-overlay">
+                  <ShieldCheck size={20} />
+                </div>
+              </div>
+              
+              <div className="stat-card-right">
+                <strong>
+                  <Counter value={99} />
+                </strong>
+                <span className="stat-subtitle">REDUCTION IN NON-COMPLIANCE RISK</span>
+                <p className="stat-desc">Stronger compliance, fewer risks and complete audit readiness.</p>
+              </div>
+            </motion.div>
+          </motion.div>
         </div>
       </section>
 
@@ -686,8 +898,7 @@ function Home() {
         <div className="home-container footer-inner-grid">
           <div className="footer-brand-col">
             <span className="securitas-logo">
-              <img className="public-logo" src="/favicon.svg" alt="" />
-              <span>WORKTRAIL</span>
+              <img className="public-logo" src="https://worktrail.ai/static/assets/img/securitas_ab_logo.svg" alt="" />
             </span>
             <p className="footer-brand-desc">
               Streamlining background screening and credential verification for complex workforce environments.

@@ -3,11 +3,11 @@ import { useAuth } from '../useAuth'
 import { Menu, LogOut } from 'lucide-react'
 
 type NavbarProps = {
-  sidebarOpen: boolean
+  sidebarState: 'full' | 'mini' | 'closed'
   onToggleSidebar: () => void
 }
 
-function Navbar({ sidebarOpen, onToggleSidebar }: NavbarProps) {
+function Navbar({ sidebarState, onToggleSidebar }: NavbarProps) {
   const { logout } = useAuth()
   const navigate = useNavigate()
 
@@ -17,23 +17,23 @@ function Navbar({ sidebarOpen, onToggleSidebar }: NavbarProps) {
   }
 
   return (
-    <header className="flex items-center justify-between w-full h-16 mb-6 select-none bg-transparent">
+    <header className="flex items-center justify-between w-full h-16 mb-6 select-none bg-white rounded-xl p-2">
       {/* Toggle button and Brand */}
-      <div className="flex items-center gap-4">
+      <div className="w-full flex justify-between items-center gap-4">
         <button
           className="p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-[#031f30] transition-colors cursor-pointer select-none focus:outline-none"
           type="button"
-          aria-label={sidebarOpen ? 'Close sidebar' : 'Open sidebar'}
+          aria-label={sidebarState === 'full' ? 'Collapse sidebar' : sidebarState === 'mini' ? 'Close sidebar' : 'Open sidebar'}
           onClick={onToggleSidebar}
         >
           <Menu className="w-5 h-5" />
         </button>
-        <div>
+        <div className='flex items-center gap-2'>
 
           <div className="flex items-center gap-2">
             Welcome in, (Aditya Raghav)
           </div>
-          <span className='text-[11px] font-bold text-salte-400 ml-1'>(TCS)</span>
+          <span className='text-[14px] font-bold text-salte-400 ml-1'>(TCS)</span>
         </div>
       </div>
 
