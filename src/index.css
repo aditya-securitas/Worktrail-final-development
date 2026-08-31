@@ -1,2 +1,62 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&family=Playfair+Display:ital,wght@0,500;0,600;1,500;1,600&display=swap');
 @import "tailwindcss";
+
+.font-securitas {
+    font-family: 'SecuritasPro', 'Manrope', sans-serif;
+}
+
+
+/* 1. Custom Font Faces (SecuritasPro) */
+@font-face {
+    font-family: 'SecuritasPro';
+    src: url('./assets/Font/securitaspro_regular.otf') format('opentype');
+    font-weight: 400;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: 'SecuritasPro';
+    src: url('./assets/Font/securitaspro_bold.otf') format('opentype');
+    font-weight: 700;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: 'SecuritasPro';
+    src: url('./assets/Font/securitaspro_light.otf') format('opentype');
+    font-weight: 300;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: 'SecuritasPro';
+    src: url('./assets/Font/securitaspro_regularItalic.otf') format('opentype');
+    font-weight: 400;
+    font-style: italic;
+}
+
+/* 2. Login & Sign Up Custom Styling */
+.glass-panel {
+    background: rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(5px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.25);
+}
+
+.login-cyber-grid {
+    background-image:
+        linear-gradient(rgba(66, 99, 140, 0.08) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(66, 99, 140, 0.08) 1px, transparent 1px);
+    background-size: 30px 30px;
+}
+
+@keyframes float {
+    0% { transform: translateY(0px); }
+    50% { transform: translateY(-8px); }
+    100% { transform: translateY(0px); }
+}
+
+.float-anim {
+    animation: float 6s ease-in-out infinite;
+}

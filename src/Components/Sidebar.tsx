@@ -1,26 +1,199 @@
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import type { MenuRoute } from '../auth-context'
-import { flattenMenu, labelForRoute, menuPath } from './sidebar-utils'
+import { flattenMenu, menuPath } from './sidebar-utils'
+import { useAuth } from '../useAuth'
+import {
+  LayoutGrid,
+  ShieldCheck,
+  UserPlus,
+  UserCheck,
+  Building,
+  User,
+  Lock,
+  LogOut,
+  ChevronDown,
+  FileText,
+  Globe
+} from 'lucide-react'
 
 type SidebarProps = {
-  open: boolean
-  userType?: string
-  menu: MenuRoute[]
-  isLoading: boolean
-  error: string
+  open: boolean;
+  onClose?: () => void;
+  userType?: string;
+  menu: MenuRoute[];
+  isLoading: boolean;
+  error: string;
 }
 
-function Sidebar({ open, userType, menu, isLoading, error }: SidebarProps) {
+function Sidebar({ open, onClose, userType, menu, isLoading, error }: SidebarProps) {
   const location = useLocation()
+  const navigate = useNavigate()
+  const { logout } = useAuth()
   const menuItems = flattenMenu(menu)
 
-  if (!open) return null
+  if (!open && window.innerWidth >= 768) {
+    // Return Sidebar collapsed on desktop (with w-0)
+  }
 
-  return <aside className="dashboard-sidebar">
-    <span className="sidebar-label">{userType} menu</span>
-    {isLoading ? <p className="menu-empty">Loading menu...</p> : menuItems.length > 0 ? <nav>{menuItems.map((item) => { const path = menuPath(item.Route); return <Link className={location.pathname === path ? 'menu-link active' : 'menu-link'} to={path} key={`${item.Route}-${item.components}`}><span>{labelForRoute(item)}</span></Link> })}</nav> : <p className="menu-empty">{error || 'No menu items available.'}</p>}
-    
-  </aside>
+  const handleLogout = () => {
+    logout()
+    navigate('/login', { replace: true })
+  }
+
+  // Get matching Lucide icon based on menu item route or component name
+  const getIconForComponent = (item: MenuRoute) => {
+    const comp = item.components.toLowerCase()
+    const route = item.Route.toLowerCase()
+    if (route.includes('createnew')) return UserCheck
+    if (comp.includes('dashboard')) return LayoutGrid
+    if (comp.includes('servicerequest')) return ShieldCheck
+    if (comp.includes('addemployee')) return UserPlus
+    if (comp.includes('client')) return Building
+    if (comp.includes('contributor')) return User
+    if (comp.includes('privacypolicy')) return Lock
+    if (comp.includes('termsandconditions')) return FileText
+    if (comp.includes('otherservices')) return Globe
+    return LayoutGrid
+  }
+
+  // Map route component to labels to match screenshot styling
+  const getLabelForComponent = (item: MenuRoute) => {
+    const comp = item.components.toLowerCase()
+    const route = item.Route.toLowerCase()
+    if (route.includes('createnew')) return 'Create New'
+    if (comp.includes('dashboard')) return 'Dashboard'
+    if (comp.includes('servicerequest')) return 'Service Requests'
+    if (comp.includes('addemployee')) return 'Add Employee'
+    if (comp.includes('client')) return 'Client'
+    if (comp.includes('contributor')) return 'Contributor'
+    if (comp.includes('privacypolicy')) return 'Privacy Policy'
+    if (comp.includes('termsandconditions')) return 'Terms & Conditions'
+    if (comp.includes('otherservices')) return 'Other Services'
+    return item.components.replace(/\.tsx?$/, '').replace(/([a-z])([A-Z])/g, '$1 $2')
+  }
+
+  return (
+    <>
+      {/* Backdrop cover for mobile/tablet when open */}
+      <div
+        onClick={onClose}
+        className={`fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-40 md:hidden transition-opacity duration-300 ${open ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+          }`}
+      />
+
+      <aside
+        className={`fixed md:sticky top-0 left-0 h-screen bg-custom-gradient flex flex-col justify-between font-securitas select-none text-white border-r border-white/5 overflow-y-auto transition-all duration-300 z-50 ${open
+          ? 'translate-x-0 w-64 p-6'
+          : '-translate-x-full md:translate-x-0 md:w-0 md:p-0 md:border-0 overflow-hidden'
+          }`}
+      >
+        <div className="flex flex-col">
+          {/* Securitas Logo (three red circles and text in white) */}
+          <div className="flex flex-col items-start mb-2 shrink-0">
+            <div className="flex gap-1.5 mb-1.5">
+              <span className="w-4 h-4 rounded-full bg-[#FF2D37] shadow-[0_2px_4px_rgba(255,45,55,0.2)]"></span>
+              <span className="w-4 h-4 rounded-full bg-[#FF2D37] shadow-[0_2px_4px_rgba(255,45,55,0.2)]"></span>
+              <span className="w-4 h-4 rounded-full bg-[#FF2D37] shadow-[0_2px_4px_rgba(255,45,55,0.2)]"></span>
+            </div>
+            <span className="text-[14px] font-bold tracking-widest text-white uppercase font-mono">Securitas</span>
+          </div>
+
+          {/* Separator line */}
+          <div className="w-full border-t border-white/10 mb-2 shrink-0"></div>
+
+          {/* Menu Section Header */}
+          <span className="text-[11px] font-extrabold tracking-widest text-[#4A6B82] uppercase mb-4 block shrink-0">
+            MENU
+          </span>
+
+          {/* Render Menu Items */}
+          {isLoading ? (
+            <p className="text-xs text-white/55">Loading menu...</p>
+          ) : error ? (
+            <p className="text-xs text-red-300">{error}</p>
+          ) : (
+            <nav className="flex flex-col gap-1">
+              {menuItems.map((item) => {
+                const path = menuPath(item.Route)
+                const isActive = location.pathname === path
+                const Icon = getIconForComponent(item)
+                const label = getLabelForComponent(item)
+                const isServiceRequests = item.components.toLowerCase().includes('servicerequest')
+                const isExternal = item.components.toLowerCase().includes('termsandconditions') || item.components.toLowerCase().includes('otherservices')
+                const externalUrl = item.components.toLowerCase().includes('termsandconditions')
+                  ? 'https://walsonsverify.com/assets/documents/Terms_and_condition.pdf'
+                  : 'https://www.securitas.in/services/background-verification/'
+
+                if (isExternal) {
+                  return (
+                    <a
+                      key={`${item.Route}-${item.components}`}
+                      href={externalUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-between px-4 py-3 rounded-2xl transition-all duration-200 group text-white hover:bg-white/10"
+                    >
+                      <div className="flex items-center gap-3.5">
+                        <Icon className="w-5 h-5 text-white/90 group-hover:text-white" />
+                        <span className="text-[13px] tracking-wide text-white">{label}</span>
+                      </div>
+                    </a>
+                  )
+                }
+
+                return (
+                  <Link
+                    key={`${item.Route}-${item.components}`}
+                    to={path}
+                    onClick={() => {
+                      if (window.innerWidth < 768 && onClose) {
+                        onClose()
+                      }
+                    }}
+                    className={`flex items-center justify-between px-4 py-3 rounded-2xl transition-all duration-200 group ${isActive
+                      ? 'bg-white/10 border border-white/5 text-slate-500 font-semibold shadow-inner'
+                      : 'text-white hover:bg-white/10'
+                      }`}
+                  >
+                    <div className="flex items-center gap-3.5">
+                      <Icon
+                        className={`w-5 h-5 transition-colors ${isActive
+                          ? 'text-[#10B981]'
+                          : 'text-white group-hover:text-white'
+                          }`}
+                      />
+                      <span className="text-[13px] tracking-wide text-white">{label}</span>
+                    </div>
+                    {isActive && (
+                      <span className="w-1.5 h-6 bg-[#10B981] rounded-full shadow-[0_0_8px_#10B981]"></span>
+                    )}
+                    {!isActive && isServiceRequests && (
+                      <ChevronDown className="w-4 h-4 text-white/70 group-hover:text-white" />
+                    )}
+                  </Link>
+                )
+              })}
+            </nav>
+          )}
+        </div>
+
+        {/* Footer Section */}
+        <div className="flex flex-col shrink-0 mt-6">
+          {/* Separator line */}
+          <div className="w-full border-t border-white/10 mb-6"></div>
+
+          {/* Logout link button */}
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-3.5 px-4 py-3 rounded-2xl text-white hover:bg-white/10 transition-all duration-200 cursor-pointer text-left w-full select-none"
+          >
+            <LogOut className="w-5 h-5 text-white group-hover:text-white" />
+            <span className="text-[13px] font-semibold tracking-wide text-white">Logout</span>
+          </button>
+        </div>
+      </aside>
+    </>
+  )
 }
 
 export default Sidebar

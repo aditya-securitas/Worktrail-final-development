@@ -6,6 +6,7 @@ export type AuthUser = {
   created_at: string
   activestatus: string
   Usertype: string
+  CompanyName?: string
 }
 
 export type MenuRoute = {

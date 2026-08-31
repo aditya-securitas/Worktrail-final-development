@@ -1,48 +1,728 @@
-import { ArrowRight, CheckCircle2, Database, FileCheck2, Menu, ShieldCheck, Sparkles, X, type LucideIcon } from 'lucide-react'
-import { motion } from 'framer-motion'
-import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import {
+  ArrowRight,
+  CheckCircle2,
+  Database,
+  FileCheck2,
+  Menu,
+  ShieldCheck,
+  Sparkles,
+  X,
+  type LucideIcon,
+  Users,
+  Handshake,
+  LogIn,
+  CreditCard,
+  Cpu,
+  Eye,
+  FileText,
+} from "lucide-react";
+import { motion } from "framer-motion";
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import { API_ENDPOINTS } from "./endpoint";
+import bannerVideo from "./assets/video/banner-video.mp4";
 
 const solutions: Array<[string, string, string, LucideIcon]> = [
-  ['01', 'Centralise With Confidence', 'Keep all exited employee records in one secure location.', Database],
-  ['02', 'Automate With Ease', 'Streamline third-party verifications through real-time APIs or file uploads.', Sparkles],
-  ['03', 'Control With Clarity', 'Define how your data is used, shared, and accessed.', ShieldCheck],
-  ['04', 'Integrate Seamlessly', 'Connect effortlessly with your HRMS or run WorkTrail independently.', FileCheck2],
-]
+  [
+    "01",
+    "Seamlessly integrate",
+    "Easily integrate with existing ATS/HR platforms.",
+    Database,
+  ],
+  [
+    "02",
+    "Instant Verification",
+    "Verify identity & employment data in real-time.",
+    Sparkles,
+  ],
+  [
+    "03",
+    "Real-time Access",
+    "Check results & manage requests via a secure web portal.",
+    ShieldCheck,
+  ],
+  [
+    "04",
+    "Regulatory Compliance",
+    "Stay compliant with industry regulations.",
+    FileCheck2,
+  ],
+];
 
-const process = [
-  ['01', 'Login & Create Request', 'Start by creating your request with candidate details.'],
-  ['02', 'Payment', 'Securely complete the payment.'],
-  ['03', 'Verification Process', 'Our system automatically verifies data.'],
-  ['04', 'Review & Clarify', 'Review results and raise any questions.'],
-  ['05', 'Final Report', 'Get the completed report.'],
-]
+const process: Array<[string, string, string, any]> = [
+  [
+    "01",
+    "Login & Create Request",
+    "Start by creating your request with candidate details.",
+    LogIn,
+  ],
+  [
+    "02",
+    "Payment",
+    "Securely complete the payment.",
+    CreditCard,
+  ],
+  [
+    "03",
+    "Verification Process",
+    "Our system automatically verifies data.",
+    Cpu,
+  ],
+  [
+    "04",
+    "Review & Clarify",
+    "Review results and raise any questions.",
+    Eye,
+  ],
+  [
+    "05",
+    "Final Report",
+    "Get the completed report.",
+    FileText,
+  ],
+];
 
 function Home() {
-  const [menuOpen, setMenuOpen] = useState(false)
-  const [activeStep, setActiveStep] = useState(0)
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [activeStep, setActiveStep] = useState(0);
+  const [benefitsTab, setBenefitsTab] = useState<"candidate" | "partner">("candidate");
+  
+  const [formState, setFormState] = useState({
+    companyName: "",
+    yourName: "",
+    workEmail: "",
+    jobTitle: "",
+    businessType: "",
+    phoneNumber: "",
+    employeeCount: "",
+    message: ""
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formSuccess, setFormSuccess] = useState("");
+  const [formError, setFormError] = useState("");
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setFormState(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleFormSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    setFormError("");
+    setFormSuccess("");
+
+    try {
+      if (import.meta.env.DEV) {
+        console.log("[Contact API] Submit Request:", formState);
+      }
+      const response = await fetch(API_ENDPOINTS.auth.register, {
+        method: "POST",
+        headers: {
+          APIKEY: "Securitas@#!1234",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          username: formState.yourName.trim().toLowerCase().replace(/\s+/g, "_") + "_lead",
+          password: "LeadUserTempPassword@123",
+          UserType: "Lead",
+          EmailID: formState.workEmail,
+          FirstName: formState.yourName,
+          LastName: "",
+          CompanyName: formState.companyName,
+          GSTNumber: "",
+          Address: formState.message,
+          City: formState.jobTitle,
+          State: formState.businessType,
+          Country: formState.phoneNumber,
+          ZIPcode: formState.employeeCount
+        }),
+      });
+
+      const responseText = await response.text();
+      let responseData: any;
+      try {
+        responseData = JSON.parse(responseText);
+      } catch {
+        responseData = { message: responseText };
+      }
+
+      if (!response.ok) {
+        throw new Error(responseData.message || "Something went wrong. Please try again.");
+      }
+
+      setFormSuccess("Thank you! We've received your request and will connect with you soon.");
+      setFormState({
+        companyName: "",
+        yourName: "",
+        workEmail: "",
+        jobTitle: "",
+        businessType: "",
+        phoneNumber: "",
+        employeeCount: "",
+        message: ""
+      });
+    } catch (err: any) {
+      setFormError(err.message || "Connection error. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   useEffect(() => {
-    const timer = window.setInterval(() => setActiveStep((step) => (step + 1) % process.length), 1500)
-    return () => window.clearInterval(timer)
-  }, [])
+    const timer = window.setInterval(
+      () => setActiveStep((step) => (step + 1) % process.length),
+      1500,
+    );
+    return () => window.clearInterval(timer);
+  }, []);
 
-  return <main className="home-page">
-    <header className="home-header"><div className="home-container home-nav"><motion.a className="securitas-logo" href="https://www.securitas.in" target="_blank" rel="noreferrer" initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .5 }}><img className="public-logo" src="/favicon.svg" alt="" /><span>SECURITAS</span></motion.a><nav className={menuOpen ? 'home-menu open' : 'home-menu'}><a href="#solutions" onClick={() => setMenuOpen(false)}>Solutions</a><a href="#process" onClick={() => setMenuOpen(false)}>How it works</a><a href="#contact" onClick={() => setMenuOpen(false)}>Contact</a><Link className="nav-login" to="/login">Login</Link><a className="nav-cta" href="#contact" onClick={() => setMenuOpen(false)}>Get Started <ArrowRight size={15} /></a></nav><button className="menu-toggle" type="button" aria-label="Toggle menu" onClick={() => setMenuOpen((open) => !open)}>{menuOpen ? <X size={24} /> : <Menu size={24} />}</button></div></header>
+  return (
+    <main className="home-page">
+      <header className="home-header">
+        <div className="home-container home-nav">
+          <motion.a
+            className="securitas-logo"
+            href="https://www.securitas.in"
+            target="_blank"
+            rel="noreferrer"
+            initial={{ opacity: 0, y: -12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+          >
+            <img className="public-logo" src="/favicon.svg" alt="" />
+            <span>SECURITAS</span>
+          </motion.a>
+          <nav className={menuOpen ? "home-menu open" : "home-menu"}>
+            <a href="#solutions" onClick={() => setMenuOpen(false)}>
+              Solutions
+            </a>
+            <a href="#process" onClick={() => setMenuOpen(false)}>
+              How It Works
+            </a>
+            <a href="#resources" onClick={() => setMenuOpen(false)}>
+              Resources
+            </a>
+            <a href="#contact" onClick={() => setMenuOpen(false)}>
+              Contact
+            </a>
+            <Link className="nav-login" to="/login">
+              Login
+            </Link>
+            <a
+              className="nav-cta"
+              href="#contact"
+              onClick={() => setMenuOpen(false)}
+            >
+              Get Started <ArrowRight size={15} />
+            </a>
+          </nav>
+          <button
+            className="menu-toggle"
+            type="button"
+            aria-label="Toggle menu"
+            onClick={() => setMenuOpen((open) => !open)}
+          >
+            {menuOpen ? <X size={24} /> : <Menu size={24} />}
+          </button>
+        </div>
+      </header>
 
-    <section className="home-hero"><div className="home-container hero-layout"><motion.div className="hero-copy" initial={{ opacity: 0, x: -30 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: .7, delay: .15 }}><p className="home-kicker">Secure workforce intelligence</p><h1>Verification,<br /><em>without the wait.</em></h1><p>Stop losing valuable HR hours to endless ex-employee verification emails and calls. WorkTrail centralises, automates, and protects every record.</p><a className="hero-button" href="#contact">Get in touch <ArrowRight size={17} /></a></motion.div><motion.div className="hero-visual" initial={{ opacity: 0, scale: .8 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: .9, delay: .25, ease: 'easeOut' }}><motion.div className="visual-orbit orbit-one" animate={{ rotate: [0, 360] }} transition={{ duration: 24, repeat: Infinity, ease: 'linear' }}></motion.div><motion.div className="visual-orbit orbit-two" animate={{ rotate: [38, -322] }} transition={{ duration: 30, repeat: Infinity, ease: 'linear' }}></motion.div><motion.div className="visual-core" animate={{ y: [0, -12, 0] }} transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}><ShieldCheck size={56} /><span>Verified</span><strong>Workforce</strong></motion.div><motion.div className="data-chip chip-one" animate={{ y: [0, -8, 0] }} transition={{ duration: 3, repeat: Infinity, delay: .3 }}><CheckCircle2 size={15} /> Record matched</motion.div><motion.div className="data-chip chip-two" animate={{ y: [0, 8, 0] }} transition={{ duration: 3.5, repeat: Infinity }}><span>99.8%</span> accuracy</motion.div></motion.div></div><div className="hero-fade"></div></section>
+      <section className="home-hero">
+        <div className="home-container hero-layout">
+          <motion.div
+            className="hero-copy"
+            initial={{ opacity: 0, x: -30 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.7, delay: 0.15 }}
+          >
+            <p className="home-kicker">Secure workforce intelligence</p>
+            <h1>
+              Worktrail: Drowning in Manual Verification Requests & Compliance Risks?
+            </h1>
+            <p>
+              Hiring for complex work environments? Streamline background screening with a faster, smarter approach. Move beyond outdated checks to get better visibility into employee history and credentials.
+            </p>
+            <a className="hero-button" href="#contact">
+              LET'S TALK <ArrowRight size={17} />
+            </a>
+          </motion.div>
+          <motion.div
+            className="hero-visual"
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.9, delay: 0.25, ease: "easeOut" }}
+          >
+            <div className="hero-video-wrapper">
+              <video
+                className="hero-video-player"
+                autoPlay
+                muted
+                loop
+                playsInline
+              >
+                <source src={bannerVideo} type="video/mp4" />
+                Your browser does not support the video tag.
+              </video>
+              <div className="hero-video-glass-reflection"></div>
+            </div>
+          </motion.div>
+        </div>
+        <div className="hero-fade"></div>
+      </section>
 
-    <motion.section className="intro-section" initial="hidden" whileInView="visible" viewport={{ once: true, amount: .2 }} variants={{ hidden: {}, visible: {} }}><motion.div className="home-container intro-copy" variants={{ hidden: { opacity: 0, y: 30 }, visible: { opacity: 1, y: 0 } }} transition={{ duration: .6 }}><p className="home-kicker">One clear source of truth</p><h2>WorkTrail is the smarter way to manage <em>ex-employee verification.</em></h2><p>Secure, scalable, and instant. Our platform centralises, controls, and automates the entire verification workflow, so your teams can focus on what moves business forward.</p></motion.div><div className="home-container solution-grid" id="solutions">{solutions.map(([number, title, copy, Icon], index) => <motion.article className="solution-card" key={number} initial={{ opacity: 0, y: 35 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: .2 }} transition={{ duration: .5, delay: index * .1 }}><motion.div className="solution-icon" whileHover={{ rotate: 8, scale: 1.1 }}><Icon size={24} /></motion.div><span className="solution-number">{number}</span><h3>{title}</h3><p>{copy}</p></motion.article>)}</div></motion.section>
+      <motion.section
+        className="intro-section"
+        id="solutions"
+        initial="hidden"
+        whileInView="visible"
+        viewport={{ once: true, amount: 0.2 }}
+        variants={{ hidden: {}, visible: {} }}
+      >
+        <motion.div
+          className="home-container intro-copy"
+          variants={{
+            hidden: { opacity: 0, y: 30 },
+            visible: { opacity: 1, y: 0 },
+          }}
+          transition={{ duration: 0.6 }}
+        >
+          <p className="home-kicker">One clear source of truth</p>
+          <h2>Worktrail: Simplifying the Verification Journey</h2>
+          <p className="intro-subtitle">Secure, Scalable, Streamlined Solution</p>
+          <p>
+            Automate and streamline your employment verification process. Protect your company from bad hires, manual process, and inaccurate data by ensuring quick and reliable results.
+          </p>
+        </motion.div>
+        <div className="home-container solution-grid">
+          {solutions.map(([number, title, copy, Icon], index) => (
+            <motion.article
+              className="solution-card"
+              key={number}
+              initial={{ opacity: 0, y: 35 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, amount: 0.2 }}
+              transition={{ duration: 0.5, delay: index * 0.1 }}
+            >
+              <motion.div
+                className="solution-icon"
+                whileHover={{ rotate: 8, scale: 1.1 }}
+              >
+                <Icon size={24} />
+              </motion.div>
+              <span className="solution-number">{number}</span>
+              <h3>{title}</h3>
+              <p>{copy}</p>
+            </motion.article>
+          ))}
+        </div>
+      </motion.section>
 
-    <div className="compliance-marquee"><motion.div className="marquee-track" animate={{ x: ['0%', '-50%'] }} transition={{ duration: 24, repeat: Infinity, ease: 'linear' }}>Compliance First <b>/</b> Data Protection <b>/</b> Fraud Prevention <b>/</b> Integrity Matters <b>/</b> Hire with Confidence <b>/</b> Identity Authentication <b>/</b> Trusted Screening <b>/</b> Verified Workforce <b>/</b> Compliance First <b>/</b> Data Protection <b>/</b> Fraud Prevention <b>/</b> Integrity Matters <b>/</b> Hire with Confidence <b>/</b></motion.div></div>
+      <div className="compliance-marquee">
+        <motion.div
+          className="marquee-track"
+          animate={{ x: ["0%", "-50%"] }}
+          transition={{ duration: 24, repeat: Infinity, ease: "linear" }}
+        >
+          Proven Prevention <b>/</b> Integrity Matters <b>/</b> Minimize Delays <b>/</b> Trusted Service <b>/</b> Integrity Matters <b>/</b> Integrity Matters <b>/</b> Integrity Matters <b>/</b> Trusted Service <b>/</b> Proven Prevention <b>/</b> Integrity Matters <b>/</b> Minimize Delays <b>/</b> Trusted Service <b>/</b>
+        </motion.div>
+      </div>
 
-    <section className="challenge-section"><div className="home-container challenge-layout"><div className="challenge-copy"><p className="home-kicker">From risk to impact</p><h2>The challenge of converting compliance risks into measurable business impact.</h2><div className="stat-callout"><strong>50+</strong><span>verification emails and calls every week can disappear with the right system.</span></div><p>Manual processes delay recruitment, create data privacy risks, and offer no measurable return on investment.</p><a className="outline-button" href="#contact">See the difference <ArrowRight size={16} /></a></div><div className="impact-stack"><article className="impact-card solution-impact"><span className="card-label">The solution</span><h3>Built for clarity, designed for control.</h3><p>Upload your master ex-employee data into a secure, encrypted environment. Incoming requests are automatically matched against verified records.</p><div className="impact-points"><span><CheckCircle2 size={16} /> Automated matching</span><span><CheckCircle2 size={16} /> Centralised records</span></div></article><article className="impact-card result-impact"><span className="card-label">The impact</span><h3>Less admin. More momentum.</h3><p>Within three months, teams see a measurable transformation in speed, focus, and operational confidence.</p><div className="impact-points"><span><CheckCircle2 size={16} /> 90% less admin work</span><span><CheckCircle2 size={16} /> A new revenue channel</span></div></article></div></div></section>
+      <section className="challenge-section" id="resources">
+        <div className="home-container challenge-layout">
+          <div className="challenge-copy">
+            <p className="home-kicker">From risk to impact</p>
+            <h2>The Challenge</h2>
+            <div className="challenge-left-overlay">
+              <p className="overlay-kicker">Identifying candidates and managing manual background verification.</p>
+              <p>Identifying potential candidates, for background verification and manual screening...</p>
+            </div>
+            <p>
+              Hiring for complex work environments requires thorough screening. Outdated verification processes with manual steps can be error-prone, time-consuming, and hard to track, risking non-compliance.
+            </p>
+            <a className="outline-button" href="#contact">
+              LEARN MORE <ArrowRight size={16} />
+            </a>
+          </div>
+          <div className="impact-stack">
+            <article className="impact-card solution-impact">
+              <span className="card-label">Impact & Risks</span>
+              <h3>Operational Inefficiencies</h3>
+              <div className="challenge-list">
+                <div className="challenge-item">
+                  <strong>1. Hiring delays</strong>
+                  <p>Operational inefficiency slows down critical onboarding and candidate progression.</p>
+                </div>
+                <div className="challenge-item">
+                  <strong>2. Lack of standard reports & audit trails</strong>
+                  <p>Compliance issues arise when records are unstructured and hard to audit.</p>
+                </div>
+                <div className="challenge-item">
+                  <strong>3. Lengthy processes & communication gaps</strong>
+                  <p>Reduced candidate satisfaction due to communication voids and slow verifications.</p>
+                </div>
+              </div>
+            </article>
+            <article className="impact-card result-impact">
+              <span className="card-label">The Future</span>
+              <h3>Agile & Automated</h3>
+              <p>
+                Embrace the transition from manual, error-prone processes to agile, automated workflows. This shift empowers your HR team to focus on core tasks, making hiring faster and smarter.
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
 
-    <section className="process-section" id="process"><div className="home-container"><motion.div className="process-heading" initial={{ opacity: 0, y: 25 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}><div><p className="home-kicker">Simple from start to finish</p><h2>Process to verify<br /><em>ex-employees with ease.</em></h2></div><p>Our end-to-end platform streamlines every step with speed, accuracy, and transparency.</p></motion.div><div className="process-list">{process.map(([number, title, copy], index) => <motion.article className={index === activeStep ? 'process-step current' : 'process-step'} animate={{ opacity: index <= activeStep ? 1 : .55, y: index === activeStep ? -8 : 0 }} transition={{ duration: .45 }} key={number}><span className="process-number">{number}</span><h3>{title}</h3><p>{copy}</p>{index < process.length - 1 && <span className="process-line"></span>}</motion.article>)}</div></div></section>
+      {/* Key Benefits Stats Strip */}
+      <section className="stats-strip-section">
+        <div className="home-container stats-strip-grid">
+          <div className="stat-strip-card">
+            <strong>90%</strong>
+            <span>Verification Timelines Reduced by</span>
+          </div>
+          <div className="stat-strip-card">
+            <strong>99%</strong>
+            <span>Reduction in Non-Compliance Risk</span>
+          </div>
+        </div>
+      </section>
 
-    <section className="home-cta" id="contact"><div className="home-container cta-inner"><p className="home-kicker">Ready when you are</p><h2>Modern verification for<br /><em>modern businesses.</em></h2><p>Talk to our team about making your verification process faster, safer, and easier to scale.</p><a className="hero-button" href="mailto:verify.global@securitas.in">Start a conversation <ArrowRight size={17} /></a></div></section>
-    <footer className="home-footer"><div className="home-container footer-inner"><a className="securitas-logo" href="https://www.securitas.in" target="_blank" rel="noreferrer"><img className="public-logo" src="/favicon.svg" alt="" /><span>SECURITAS</span></a><div><span>© 2026 Securitas India</span><span>WorkTrail, made simple.</span></div></div></footer>
-  </main>
+      <section className="process-section" id="process">
+        <div className="home-container">
+          <motion.div
+            className="process-heading"
+            initial={{ opacity: 0, y: 25 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+          >
+            <div>
+              <p className="home-kicker">Simple from start to finish</p>
+              <h2>Process to Verify By Employee In & Out Flow</h2>
+            </div>
+            <p>
+              Streamline candidate management and hiring. Get faster results by optimizing your screening workflow and reducing operational steps.
+            </p>
+          </motion.div>
+          <div className="process-list">
+            {process.map(([number, title, copy, IconComponent], index) => (
+              <motion.article
+                className={
+                  index === activeStep ? "process-step current" : "process-step"
+                }
+                animate={{
+                  opacity: index <= activeStep ? 1 : 0.55,
+                  y: index === activeStep ? -8 : 0,
+                }}
+                transition={{ duration: 0.45 }}
+                key={number}
+                onMouseEnter={() => setActiveStep(index)}
+              >
+                <div className="process-icon-wrapper">
+                  <IconComponent size={24} className="process-icon-svg" />
+                </div>
+                <span className="process-number">{number}</span>
+                <h3>{title}</h3>
+                <p>{copy}</p>
+                {index < process.length - 1 && (
+                  <span className="process-line-wrapper">
+                    <span className="process-line-bar"></span>
+                    <span className="process-line-arrow">
+                      <ArrowRight size={10} />
+                    </span>
+                  </span>
+                )}
+              </motion.article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="benefits-toggle-section">
+        <div className="home-container">
+          <motion.div 
+            className="benefits-heading"
+            initial={{ opacity: 0, y: 25 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+          >
+            <h2>What's in it for <em>YOU?</em></h2>
+          </motion.div>
+
+          <div className="benefits-tab-wrapper">
+            <div className="benefits-tabs">
+              <button 
+                className={`benefits-tab ${benefitsTab === "candidate" ? "active" : ""}`}
+                onClick={() => setBenefitsTab("candidate")}
+              >
+                <Users size={16} />
+                Candidate
+              </button>
+              <button 
+                className={`benefits-tab ${benefitsTab === "partner" ? "active" : ""}`}
+                onClick={() => setBenefitsTab("partner")}
+              >
+                <Handshake size={16} />
+                Partner
+              </button>
+            </div>
+          </div>
+
+          <div className="benefits-content-layout">
+            <motion.div 
+              className="benefits-visual-box"
+              key={benefitsTab}
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.4 }}
+            >
+              <img 
+                src={benefitsTab === "candidate" ? "/contributors_hologram.jpg" : "/clients_hologram.jpg"} 
+                alt={benefitsTab === "candidate" ? "Candidate" : "Partner"} 
+                className="benefits-image"
+              />
+            </motion.div>
+
+            <div className="benefits-details">
+              {benefitsTab === "candidate" ? (
+                <div className="benefits-list">
+                  <motion.div className="benefit-item" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 }}>
+                    <div className="benefit-icon"><ShieldCheck size={20} /></div>
+                    <div className="benefit-text">
+                      <h3>Faster Hiring</h3>
+                      <p>Speed up onboarding with seamless workflows & instant verification.</p>
+                    </div>
+                  </motion.div>
+                  <motion.div className="benefit-item" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 }}>
+                    <div className="benefit-icon"><ShieldCheck size={20} /></div>
+                    <div className="benefit-text">
+                      <h3>Real-time visibility</h3>
+                      <p>Stay updated on application status & screening progress.</p>
+                    </div>
+                  </motion.div>
+                  <motion.div className="benefit-item" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3 }}>
+                    <div className="benefit-icon"><ShieldCheck size={20} /></div>
+                    <div className="benefit-text">
+                      <h3>Access from anywhere</h3>
+                      <p>Access the platform from any device, anywhere, anytime.</p>
+                    </div>
+                  </motion.div>
+                </div>
+              ) : (
+                <div className="benefits-list">
+                  <motion.div className="benefit-item" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 }}>
+                    <div className="benefit-icon"><ShieldCheck size={20} /></div>
+                    <div className="benefit-text">
+                      <h3>Direct Integrations</h3>
+                      <p>Easily connect via API or HRMS widgets with full documentation.</p>
+                    </div>
+                  </motion.div>
+                  <motion.div className="benefit-item" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 }}>
+                    <div className="benefit-icon"><ShieldCheck size={20} /></div>
+                    <div className="benefit-text">
+                      <h3>Monetisation Channel</h3>
+                      <p>Turn historical compliance checks into passive revenue streams.</p>
+                    </div>
+                  </motion.div>
+                  <motion.div className="benefit-item" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3 }}>
+                    <div className="benefit-icon"><ShieldCheck size={20} /></div>
+                    <div className="benefit-text">
+                      <h3>Secure Ecosystem</h3>
+                      <p>Data privacy first design with full auditing and access control.</p>
+                    </div>
+                  </motion.div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="home-cta">
+        <div className="home-container cta-inner">
+          <p className="home-kicker">Ready when you are</p>
+          <h2>Modern Verification For Modern Businesses</h2>
+          <a className="hero-button" href="#contact">
+            LET'S TALK <ArrowRight size={17} />
+          </a>
+        </div>
+      </section>
+
+      {/* New Contact Form Section */}
+      <section className="contact-form-section" id="contact">
+        <div className="home-container contact-layout">
+          <div className="contact-copy-block">
+            <p className="home-kicker">Get in touch</p>
+            <h2>Ready to Modernize Your Verification Process?</h2>
+            <p>
+              Tell us about your business, the volume of employees you screen, and we'll connect with you on customized, cost-effective solution.
+            </p>
+            <div className="contact-data-points">
+              <div className="data-point-card">
+                <strong>50+</strong>
+                <span>Database Checks</span>
+              </div>
+              <div className="data-point-card">
+                <strong>0%</strong>
+                <span>Processing Fees</span>
+              </div>
+              <div className="data-point-card">
+                <strong>24x7</strong>
+                <span>Average Turnaround</span>
+              </div>
+            </div>
+          </div>
+          <div className="contact-form-block">
+            <form onSubmit={handleFormSubmit} className="contact-grid-form">
+              <div className="form-group">
+                <label>Company Name</label>
+                <input
+                  type="text"
+                  name="companyName"
+                  value={formState.companyName}
+                  onChange={handleInputChange}
+                  placeholder="e.g. Acme Corp"
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label>Your Name</label>
+                <input
+                  type="text"
+                  name="yourName"
+                  value={formState.yourName}
+                  onChange={handleInputChange}
+                  placeholder="e.g. John Doe"
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label>Your Work Email</label>
+                <input
+                  type="email"
+                  name="workEmail"
+                  value={formState.workEmail}
+                  onChange={handleInputChange}
+                  placeholder="e.g. john@company.com"
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label>Job Title</label>
+                <input
+                  type="text"
+                  name="jobTitle"
+                  value={formState.jobTitle}
+                  onChange={handleInputChange}
+                  placeholder="e.g. HR Director"
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label>Business Type</label>
+                <select
+                  name="businessType"
+                  value={formState.businessType}
+                  onChange={handleInputChange}
+                  required
+                >
+                  <option value="">Select business type</option>
+                  <option value="Background Screening Agency">Background Screening Agency</option>
+                  <option value="Enterprise Employer">Enterprise Employer</option>
+                  <option value="Startup / SME">Startup / SME</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Phone Number</label>
+                <input
+                  type="tel"
+                  name="phoneNumber"
+                  value={formState.phoneNumber}
+                  onChange={handleInputChange}
+                  placeholder="e.g. +91 98765 43210"
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label>Number of Employees</label>
+                <select
+                  name="employeeCount"
+                  value={formState.employeeCount}
+                  onChange={handleInputChange}
+                  required
+                >
+                  <option value="">Select employee count</option>
+                  <option value="1-99">1-99</option>
+                  <option value="100-499">100-499</option>
+                  <option value="500-1999">500-1999</option>
+                  <option value="2000+">2000+</option>
+                </select>
+              </div>
+              <div className="form-group full-width">
+                <label>Message</label>
+                <textarea
+                  name="message"
+                  value={formState.message}
+                  onChange={handleInputChange}
+                  placeholder="Tell us about the volume of employees you screen and your requirements..."
+                  rows={3}
+                  required
+                />
+              </div>
+              
+              {formSuccess && <p className="form-feedback success">{formSuccess}</p>}
+              {formError && <p className="form-feedback error">{formError}</p>}
+
+              <button type="submit" className="form-submit-btn" disabled={isSubmitting}>
+                {isSubmitting ? "SUBMITTING..." : "SUBMIT"}
+              </button>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      <footer className="home-footer">
+        <div className="home-container footer-inner-grid">
+          <div className="footer-brand-col">
+            <span className="securitas-logo">
+              <img className="public-logo" src="/favicon.svg" alt="" />
+              <span>WORKTRAIL</span>
+            </span>
+            <p className="footer-brand-desc">
+              Streamlining background screening and credential verification for complex workforce environments.
+            </p>
+          </div>
+          <div className="footer-links-col">
+            <h4>Product</h4>
+            <a href="#solutions">Product Features</a>
+            <a href="#process">How It Works</a>
+            <a href="#resources">Resources</a>
+            <a href="#careers">Careers</a>
+          </div>
+          <div className="footer-links-col">
+            <h4>Contact</h4>
+            <a href="#contact">Talk to us</a>
+            <a href="#help">Help Center</a>
+            <a href="#status">Status</a>
+            <a href="#developers">Developers</a>
+            <a href="#about">About Us</a>
+          </div>
+          <div className="footer-links-col">
+            <h4>About</h4>
+            <Link to="/Privacypolicy">Legal</Link>
+            <a href="#terms">Terms</a>
+            <a href="#conditions">Conditions</a>
+            <a href="#contact">Contact</a>
+          </div>
+        </div>
+        <div className="home-container footer-bottom">
+          <span>© 2026 Worktrail India. All rights reserved.</span>
+          <span>Verification, without the wait.</span>
+        </div>
+      </footer>
+    </main>
+  );
 }
 
-export default Home
+export default Home;
