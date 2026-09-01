@@ -689,7 +689,7 @@ function Home() {
               transition={{ duration: 0.4 }}
             >
               <img 
-                src={benefitsTab === "candidate" ? "/contributors_hologram.jpg" : "/clients_hologram.jpg"} 
+                src={benefitsTab === "candidate" ? "https://worktrail.ai/static/assets/img/11.png" : "https://worktrail.ai/static/assets/img/22.png"} 
                 alt={benefitsTab === "candidate" ? "Candidate" : "Partner"} 
                 className="benefits-image"
               />

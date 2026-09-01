@@ -29,63 +29,7 @@ type LoginResponse = {
 const USER_STORAGE_KEY = 'worktrail_user'
 const TOKEN_STORAGE_KEY = 'worktrail_token'
 
-const MOCK_CREDENTIALS = [
-  {
-    EmailID: 'superadmin.worktrial@securitas-india.com',
-    password: 'Sec@$#12@!123',
-    user: {
-      id: 1,
-      username: 'Superadmin',
-      created_at: '2026-08-24T15:28:01.360Z',
-      activestatus: '1',
-      Usertype: 'Superadmin'
-    }
-  },
-  {
-    EmailID: 'admin.worktrial@securitas-india.com',
-    password: 'Secure@123',
-    user: {
-      id: 2,
-      username: 'Admin',
-      created_at: '2026-08-24T16:11:05.400Z',
-      activestatus: '1',
-      Usertype: 'Admin'
-    }
-  },
-  {
-    EmailID: 'fascilator.worktrial@securitas-india.com',
-    password: 'Fascilator@123',
-    user: {
-      id: 3,
-      username: 'Fascilator',
-      created_at: '2026-08-24T17:34:24.537Z',
-      activestatus: '1',
-      Usertype: 'Fascilator'
-    }
-  },
-  {
-    EmailID: 'contributor.worktrial@securitas-india.com',
-    password: 'Contributor@123',
-    user: {
-      id: 4,
-      username: 'Contributor',
-      created_at: '2026-08-24T17:35:14.853Z',
-      activestatus: '1',
-      Usertype: 'Contributor'
-    }
-  },
-  {
-    EmailID: 'client.worktrial@securitas-india.com',
-    password: 'Client@123',
-    user: {
-      id: 5,
-      username: 'Client',
-      created_at: '2026-08-24T17:35:38.500Z',
-      activestatus: '1',
-      Usertype: 'Client'
-    }
-  }
-]
+
 
 function getMenuForUserType(usertype: string) {
   const ut = usertype.toLowerCase()
@@ -125,21 +69,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsLoading(true)
     setError('')
     try {
-      // 1. Check local mock credentials
-      const match = MOCK_CREDENTIALS.find(
-        (u) => u.EmailID.toLowerCase() === emailId.toLowerCase() && u.password === password
-      )
-      if (match) {
-        setMenu(getMenuForUserType(match.user.Usertype))
-        setUser(match.user)
-        const mockToken = 'mock-token-' + match.user.Usertype.toLowerCase()
-        setToken(mockToken)
-        localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(match.user))
-        localStorage.setItem(TOKEN_STORAGE_KEY, mockToken)
-        return
-      }
-
-      // 2. Fall back to calling API endpoint
       const loginPayload = { EmailID: emailId, password }
       if (import.meta.env.DEV) {
         console.log('[Login API] Request:', {
