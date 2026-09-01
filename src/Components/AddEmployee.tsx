@@ -1,6 +1,23 @@
 
 import React from "react";
 import { useAuth } from '../useAuth'
+import {
+    Search,
+    Users,
+    Upload,
+    Plus,
+    Pencil,
+    CheckCircle2,
+    XCircle,
+    Calendar,
+    ArrowLeft,
+    Download,
+    Building2,
+    ShieldAlert,
+    Filter,
+    UserCheck,
+    Briefcase
+} from 'lucide-react'
 
 // Custom button style
 const btnClass = "inline-flex items-center justify-center h-9 px-5 bg-gradient-to-r from-emerald-500 to-indigo-600 hover:brightness-110 active:scale-[0.98] text-white font-bold text-[11px] tracking-wider uppercase rounded-full shadow-md hover:shadow-lg transition-all duration-200 cursor-pointer select-none outline-none disabled:grayscale disabled:opacity-50 disabled:cursor-not-allowed";
@@ -253,6 +270,7 @@ function AddEmployee() {
     const [editingRowIndex, setEditingRowIndex] = React.useState<number | null>(null);
     const [submittingNew, setSubmittingNew] = React.useState(false);
     const [submittingUpdate, setSubmittingUpdate] = React.useState(false);
+    const [tableSearchFilter, setTableSearchFilter] = React.useState("");
 
     // Keep the form's Contributor in sync if user/role changes and not showCompanyDropdown
     React.useEffect(() => {
@@ -720,32 +738,275 @@ function AddEmployee() {
 
     // Column structure with Edit column after S. No.
     const tableColumns = [
-        { key: "Sno", label: "S. No." },
-        { key: "edit", label: "Edit" },
-        { key: "EmployeeCode", label: "Employee Code" },
-        { key: "FirstName", label: "First Name" },
-        { key: "MiddleName", label: "Middle Name" },
-        { key: "LastName", label: "Last Name" },
-        { key: "Email", label: "Email" },
-        { key: "MobileNo", label: "Mobile No" },
-        { key: "Department", label: "Department" },
-        { key: "DateOfJoining", label: "Date Of Joining" },
-        { key: "LastPositionHeld", label: "Last Position Held" },
-        { key: "DateOfLeaving", label: "Date Of Leaving" },
-        { key: "LastSalaryAnnual", label: "Last Salary Annual" },
-        { key: "ExitFormalities", label: "Exit Formalities" },
-        { key: "EmploymentType", label: "Employment Type" },
-        { key: "AnyBehaviourIssue", label: "Any Behaviour Issue" },
-        { key: "EligibilityToRehire", label: "Eligibility To Rehire" },
-        { key: "Contributor", label: "Contributor" }
+        { key: "Sno", label: "S. No.", align: "center" },
+        { key: "edit", label: "Action", align: "center" },
+        { key: "EmployeeCode", label: "Emp Code", align: "left" },
+        { key: "FirstName", label: "First Name", align: "left" },
+        { key: "MiddleName", label: "Middle Name", align: "left" },
+        { key: "LastName", label: "Last Name", align: "left" },
+        { key: "Email", label: "Email ID", align: "left" },
+        { key: "MobileNo", label: "Mobile No", align: "left" },
+        { key: "Department", label: "Department", align: "left" },
+        { key: "DateOfJoining", label: "Joining Date", align: "left" },
+        { key: "LastPositionHeld", label: "Position", align: "left" },
+        { key: "DateOfLeaving", label: "Leaving Date", align: "left" },
+        { key: "LastSalaryAnnual", label: "Annual Salary", align: "right" },
+        { key: "ExitFormalities", label: "Exit Formalities", align: "center" },
+        { key: "EmploymentType", label: "Emp Type", align: "center" },
+        { key: "AnyBehaviourIssue", label: "Behavior Issue", align: "left" },
+        { key: "EligibilityToRehire", label: "Rehire Eligible", align: "center" },
+        { key: "Contributor", label: "Contributor", align: "left" }
     ];
 
     function formatDate(val: string | null | undefined) {
         if (!val) return "";
         const d = new Date(val);
         if (isNaN(d.getTime())) return String(val);
-        return d.toLocaleString();
+        return d.toLocaleDateString("en-IN", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric"
+        });
     }
+
+    function formatSalary(val: any) {
+        if (val === null || val === undefined || val === "") return "-";
+        const num = Number(val);
+        if (isNaN(num)) return String(val);
+        return new Intl.NumberFormat("en-IN", {
+            style: "currency",
+            currency: "INR",
+            maximumFractionDigits: 0
+        }).format(num);
+    }
+
+    const renderTableCell = (colKey: string, val: any) => {
+        if (val === null || val === undefined || String(val).trim() === "") {
+            return <span className="text-slate-400 font-normal text-xs">-</span>;
+        }
+
+        if (colKey === "EmployeeCode") {
+            return (
+                <span className="font-mono text-xs font-semibold text-indigo-900 bg-indigo-50/80 px-2 py-0.5 rounded border border-indigo-200/60">
+                    {String(val)}
+                </span>
+            );
+        }
+
+        if (colKey === "DateOfJoining" || colKey === "DateOfLeaving" || colKey === "CreatedAt") {
+            return (
+                <span className="inline-flex items-center gap-1.5 text-xs text-slate-600 font-medium">
+                    <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                    {formatDate(val)}
+                </span>
+            );
+        }
+
+        if (colKey === "LastSalaryAnnual") {
+            return (
+                <span className="font-semibold text-slate-800 text-xs">
+                    {formatSalary(val)}
+                </span>
+            );
+        }
+
+        if (colKey === "EligibilityToRehire") {
+            const v = String(val).trim().toLowerCase();
+            if (v === "yes") {
+                return (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/80">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        Yes
+                    </span>
+                );
+            } else if (v === "no") {
+                return (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200/80">
+                        <XCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                        No
+                    </span>
+                );
+            }
+        }
+
+        if (colKey === "ExitFormalities") {
+            const v = String(val).trim().toLowerCase();
+            if (v === "completed") {
+                return (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/80">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        Completed
+                    </span>
+                );
+            } else if (v === "pending") {
+                return (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200/80">
+                        <ShieldAlert className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                        Pending
+                    </span>
+                );
+            } else if (v === "ongoing") {
+                return (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200/80">
+                        Ongoing
+                    </span>
+                );
+            }
+        }
+
+        if (colKey === "EmploymentType") {
+            return (
+                <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200/60">
+                    {String(val)}
+                </span>
+            );
+        }
+
+        if (colKey === "Email") {
+            return (
+                <span className="text-xs text-indigo-600 font-medium">
+                    {String(val)}
+                </span>
+            );
+        }
+
+        if (colKey === "FirstName" || colKey === "LastName") {
+            return (
+                <span className="font-semibold text-slate-800 text-xs sm:text-sm">
+                    {String(val)}
+                </span>
+            );
+        }
+
+        return <span className="text-xs text-slate-600 font-normal">{String(val)}</span>;
+    };
+
+    const renderTable = (data: any[], title: string) => {
+        const filteredData = data.filter(row => {
+            if (!tableSearchFilter.trim()) return true;
+            const q = tableSearchFilter.toLowerCase();
+            return (
+                (row.FirstName && String(row.FirstName).toLowerCase().includes(q)) ||
+                (row.LastName && String(row.LastName).toLowerCase().includes(q)) ||
+                (row.EmployeeCode && String(row.EmployeeCode).toLowerCase().includes(q)) ||
+                (row.Department && String(row.Department).toLowerCase().includes(q)) ||
+                (row.Email && String(row.Email).toLowerCase().includes(q)) ||
+                (row.Contributor && String(row.Contributor).toLowerCase().includes(q))
+            );
+        });
+
+        return (
+            <div className="w-full mt-6 rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-hidden box-border">
+                {/* Table Header Bar */}
+                <div className="px-5 py-4 bg-slate-50/80 border-b border-slate-200/80 flex items-center justify-between gap-4 flex-wrap">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-xl bg-indigo-50 text-indigo-600">
+                            <Users className="w-5 h-5" />
+                        </div>
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <h3 className="text-base font-bold text-slate-800 m-0">{title}</h3>
+                                <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-100/70 text-indigo-700">
+                                    {data.length} {data.length === 1 ? 'Record' : 'Records'}
+                                </span>
+                            </div>
+                            <p className="text-xs text-slate-500 m-0 mt-0.5">
+                                Showing employee directory and registry compliance records
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* In-Table Quick Filter Input */}
+                    <div className="relative min-w-[220px]">
+                        <Filter className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                        <input
+                            type="text"
+                            placeholder="Filter table rows..."
+                            value={tableSearchFilter}
+                            onChange={(e) => setTableSearchFilter(e.target.value)}
+                            className="w-full h-9 pl-9 pr-3 text-xs bg-white border border-slate-200 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 transition-all"
+                        />
+                    </div>
+                </div>
+
+                {/* Table Scroll Wrapper */}
+                <div className="w-full overflow-x-auto">
+                    <table className="w-full border-collapse text-left min-w-[1100px]">
+                        <thead>
+                            <tr className="bg-slate-100/70 border-b border-slate-200/80">
+                                {tableColumns.map((col) => {
+                                    const alignClass = col.align === 'center' ? 'text-center' : col.align === 'right' ? 'text-right' : 'text-left';
+                                    return (
+                                        <th
+                                            key={col.key}
+                                            className={`whitespace-nowrap px-4 py-3 text-[11px] font-bold text-slate-600 uppercase tracking-wider ${alignClass}`}
+                                        >
+                                            {col.label}
+                                        </th>
+                                    );
+                                })}
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                            {filteredData.length === 0 ? (
+                                <tr>
+                                    <td colSpan={tableColumns.length} className="px-4 py-12 text-center text-slate-400">
+                                        <div className="flex flex-col items-center justify-center gap-2">
+                                            <Users className="w-8 h-8 text-slate-300" />
+                                            <p className="text-sm font-medium text-slate-500 m-0">No matching employees found</p>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ) : (
+                                filteredData.map((row, rowIx) => (
+                                    <tr
+                                        key={rowIx}
+                                        className="hover:bg-indigo-50/30 transition-colors duration-150 group"
+                                    >
+                                        {tableColumns.map((col) => {
+                                            if (col.key === "Sno") {
+                                                return (
+                                                    <td
+                                                        key="Sno"
+                                                        className="whitespace-nowrap px-4 py-3 text-xs text-slate-500 text-center font-medium"
+                                                    >
+                                                        {rowIx + 1}
+                                                    </td>
+                                                );
+                                            }
+                                            if (col.key === "edit") {
+                                                return (
+                                                    <td key="edit" className="whitespace-nowrap px-4 py-3 text-center">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleEditRow(row, rowIx)}
+                                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-600 text-indigo-600 hover:text-white font-semibold text-xs transition-all duration-150 active:scale-95 cursor-pointer border border-indigo-200/60"
+                                                        >
+                                                            <Pencil className="w-3.5 h-3.5 shrink-0" />
+                                                            <span>Edit</span>
+                                                        </button>
+                                                    </td>
+                                                );
+                                            }
+                                            const alignClass = col.align === 'center' ? 'text-center' : col.align === 'right' ? 'text-right' : 'text-left';
+                                            return (
+                                                <td
+                                                    key={col.key}
+                                                    className={`whitespace-nowrap px-4 py-3 ${alignClass}`}
+                                                >
+                                                    {renderTableCell(col.key, row[col.key])}
+                                                </td>
+                                            );
+                                        })}
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        );
+    };
 
     const renderFormField = (
         name: keyof typeof form,
@@ -807,182 +1068,71 @@ function AddEmployee() {
             {/* Search Bar and Action Buttons Row */}
             {activePanel === null && (
                 <>
-                    <div className="w-full flex justify-between items-center mb-6 mt-2.5 gap-3 flex-wrap box-border relative">
-                        <input
-                            type="text"
-                            placeholder="Employee Code"
-                            value={searchEmployeeCode}
-                            onChange={handleSearchChange}
-                            onKeyDown={handleSearchInputKeyDown}
-                            className="min-w-[150px] max-w-[205px] h-9 border border-slate-200 rounded-full px-4 text-sm text-slate-800 bg-white focus:border-indigo-500 focus:outline-none transition-all box-border"
-                            autoComplete="off"
-                        />
-                     
-                        <div className="flex gap-3">
+                    <div className="w-full flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mb-6 mt-2 box-border relative">
+                        {/* Search Input Box */}
+                        <div className="relative w-full sm:w-auto sm:flex-1 sm:max-w-[280px] lg:max-w-[320px]">
+                            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                            <input
+                                type="text"
+                                placeholder="Search by Employee Code..."
+                                value={searchEmployeeCode}
+                                onChange={handleSearchChange}
+                                onKeyDown={handleSearchInputKeyDown}
+                                className="w-full h-11 sm:h-10 border border-slate-200 rounded-full sm:rounded-xl pl-10 pr-4 text-xs sm:text-sm text-slate-800 bg-slate-50/50 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 focus:outline-none transition-all box-border"
+                                autoComplete="off"
+                            />
+                        </div>
+
+                        {/* Action Buttons: 2x2 grid on mobile screens, row on desktop */}
+                        <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 sm:gap-2.5 w-full sm:w-auto">
                             <button
                                 type="button"
-                                className={btnClass}
+                                className="flex items-center justify-center gap-1.5 sm:gap-2.5 h-10 sm:h-11 px-3 sm:px-6 bg-gradient-to-r from-[#10B981] to-[#5850EC] hover:brightness-110 hover:shadow-[0_4px_15px_rgba(8,33,54,0.25)] active:scale-[0.98] text-white font-bold text-[10px] sm:text-xs tracking-wider uppercase rounded-full transition-all shadow-md cursor-pointer select-none text-center"
                                 onClick={handleSearch}
                                 disabled={searchLoading}
                             >
-                                {searchLoading ? "Searching..." : "Search"}
+                                <Search className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+                                <span className="truncate">{searchLoading ? "Searching..." : "Search"}</span>
                             </button>
+
                             <button
                                 type="button"
-                                className={btnClass}
+                                className="flex items-center justify-center gap-1.5 sm:gap-2.5 h-10 sm:h-11 px-3 sm:px-6 bg-gradient-to-r from-[#10B981] to-[#5850EC] hover:brightness-110 hover:shadow-[0_4px_15px_rgba(8,33,54,0.25)] active:scale-[0.98] text-white font-bold text-[10px] sm:text-xs tracking-wider uppercase rounded-full transition-all shadow-md cursor-pointer select-none text-center"
                                 onClick={handleAllEmployees}
                                 disabled={allEmployeesLoading}
                             >
-                                {allEmployeesLoading ? "Loading..." : "View Employee Data"}
+                                <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+                                <span className="truncate">{allEmployeesLoading ? "Loading..." : "View Employee Data"}</span>
                             </button>
+
                             <button
                                 type="button"
-                                className={btnClass}
+                                className="flex items-center justify-center gap-1.5 sm:gap-2.5 h-10 sm:h-11 px-3 sm:px-6 bg-gradient-to-r from-[#10B981] to-[#5850EC] hover:brightness-110 hover:shadow-[0_4px_15px_rgba(8,33,54,0.25)] active:scale-[0.98] text-white font-bold text-[10px] sm:text-xs tracking-wider uppercase rounded-full transition-all shadow-md cursor-pointer select-none text-center"
                                 onClick={() => handleClick("bulk")}
                             >
-                                Bulk Upload
+                                <Upload className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+                                <span className="truncate">Bulk Upload</span>
                             </button>
+
                             <button
                                 type="button"
-                                className={btnClass}
+                                className="flex items-center justify-center gap-1.5 sm:gap-2.5 h-10 sm:h-11 px-3 sm:px-6 bg-gradient-to-r from-[#10B981] to-[#5850EC] hover:brightness-110 hover:shadow-[0_4px_15px_rgba(8,33,54,0.25)] active:scale-[0.98] text-white font-bold text-[10px] sm:text-xs tracking-wider uppercase rounded-full transition-all shadow-md cursor-pointer select-none text-center"
                                 onClick={() => handleClick("new")}
                             >
-                                Create New
+                                <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+                                <span className="truncate">Create New</span>
                             </button>
                         </div>
                     </div>
 
                     {/* Show ONLY ONE TABLE at a time based on activeTable */}
                     {activeTable === 'search' && (searchResults && searchResults.length > 0) && (
-                        <div className="w-full overflow-auto border border-slate-200 rounded-xl mt-6 shadow-sm bg-white box-border">
-                            <table className="border-collapse w-max min-w-[930px] bg-white text-left">
-                                <thead>
-                                    <tr>
-                                        {tableColumns.map(col => (
-                                            <th
-                                                key={col.key}
-                                                className="whitespace-nowrap px-3 py-2.5 border border-slate-100 bg-emerald-50/50 font-bold text-xs text-slate-800 text-center uppercase tracking-wider"
-                                            >
-                                                {col.label}
-                                            </th>
-                                        ))}
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {searchResults.map((row, rowIx) => (
-                                        <tr key={rowIx} className="hover:bg-slate-50/50 transition-colors">
-                                            {tableColumns.map(col => {
-                                                if (col.key === "Sno") {
-                                                    // Serial number frontend based (1-based)
-                                                    return (
-                                                        <td
-                                                            key="Sno"
-                                                            className="whitespace-nowrap px-3 py-2.5 border border-slate-100 text-sm text-slate-600 text-center"
-                                                        >
-                                                            {rowIx + 1}
-                                                        </td>
-                                                    );
-                                                } else if (col.key === "edit") {
-                                                    return (
-                                                        <td
-                                                            key="edit"
-                                                            className="whitespace-nowrap px-3 py-2 border border-slate-100 text-center"
-                                                        >
-                                                            <button
-                                                                className="px-4 py-1.5 rounded-lg border-0 bg-emerald-500 text-white font-bold text-xs hover:brightness-105 active:scale-95 transition-all cursor-pointer"
-                                                                onClick={() => handleEditRow(row, rowIx)}
-                                                            >
-                                                                Edit
-                                                            </button>
-                                                        </td>
-                                                    );
-                                                } else {
-                                                    return (
-                                                        <td
-                                                            key={col.key}
-                                                            className="whitespace-nowrap px-3 py-2.5 border border-slate-100 text-sm text-slate-600 text-center"
-                                                        >
-                                                            {col.key === "DateOfJoining" || col.key === "DateOfLeaving" || col.key === "CreatedAt"
-                                                                ? formatDate(row[col.key])
-                                                                : (row[col.key] !== null && row[col.key] !== undefined
-                                                                    ? String(row[col.key])
-                                                                    : "")
-                                                            }
-                                                        </td>
-                                                    );
-                                                }
-                                            })}
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
+                        renderTable(searchResults, "Search Results")
                     )}
 
                     {/* Show ONLY ONE TABLE at a time based on activeTable */}
                     {activeTable === 'all' && (allEmployeesResults && allEmployeesResults.length > 0) && (
-                        <div className="w-full overflow-auto border border-slate-200 rounded-xl mt-6 shadow-sm bg-white box-border">
-                            <table className="border-collapse w-max min-w-[930px] bg-white text-left">
-                                <thead>
-                                    <tr>
-                                        {tableColumns.map(col => (
-                                            <th
-                                                key={col.key}
-                                                className="whitespace-nowrap px-3 py-2.5 border border-slate-100 bg-blue-50/50 font-bold text-xs text-slate-800 text-center uppercase tracking-wider"
-                                            >
-                                                {col.label}
-                                            </th>
-                                        ))}
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {allEmployeesResults.map((row, rowIx) => (
-                                        <tr key={rowIx} className="hover:bg-slate-50/50 transition-colors">
-                                            {tableColumns.map(col => {
-                                                if (col.key === "Sno") {
-                                                    return (
-                                                        <td
-                                                            key="Sno"
-                                                            className="whitespace-nowrap px-3 py-2.5 border border-slate-100 text-sm text-slate-600 text-center"
-                                                        >
-                                                            {rowIx + 1}
-                                                        </td>
-                                                    );
-                                                } else if (col.key === "edit") {
-                                                    return (
-                                                        <td
-                                                            key="edit"
-                                                            className="whitespace-nowrap px-3 py-2 border border-slate-100 text-center"
-                                                        >
-                                                            <button
-                                                                className="px-4 py-1.5 rounded-lg border-0 bg-emerald-500 text-white font-bold text-xs hover:brightness-105 active:scale-95 transition-all cursor-pointer"
-                                                                onClick={() => handleEditRow(row, rowIx)}
-                                                            >
-                                                                Edit
-                                                            </button>
-                                                        </td>
-                                                    );
-                                                } else {
-                                                    return (
-                                                        <td
-                                                            key={col.key}
-                                                            className="whitespace-nowrap px-3 py-2.5 border border-slate-100 text-sm text-slate-600 text-center"
-                                                        >
-                                                            {col.key === "DateOfJoining" || col.key === "DateOfLeaving" || col.key === "CreatedAt"
-                                                                ? formatDate(row[col.key])
-                                                                : (row[col.key] !== null && row[col.key] !== undefined
-                                                                    ? String(row[col.key])
-                                                                    : "")
-                                                            }
-                                                        </td>
-                                                    );
-                                                }
-                                            })}
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
+                        renderTable(allEmployeesResults, "All Employee Records")
                     )}
                 </>
             )}
