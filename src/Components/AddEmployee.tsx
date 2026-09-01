@@ -5,21 +5,21 @@ import { useAuth } from '../useAuth'
 // Custom button style
 const btnClass = "inline-flex items-center justify-center h-9 px-5 bg-gradient-to-r from-emerald-500 to-indigo-600 hover:brightness-110 active:scale-[0.98] text-white font-bold text-[11px] tracking-wider uppercase rounded-full shadow-md hover:shadow-lg transition-all duration-200 cursor-pointer select-none outline-none disabled:grayscale disabled:opacity-50 disabled:cursor-not-allowed";
 
-const API_URL = "http://localhost:3000/ContributorData";
+const API_URL = "http://10.80.0.83:3000/ContributorData";
 const API_HEADERS = {
     "APIKEY": "Securitas@#!1234",
     "Content-Type": "application/json"
 };
 
 // For Employee Search
-const SEARCH_API_URL = "http://localhost:3000/ContributorEmpSearch";
+const SEARCH_API_URL = "http://10.80.0.83:3000/ContributorEmpSearch";
 const SEARCH_API_HEADERS = {
     "APIKEY": "Securitas@#!1234",
     "Content-Type": "application/json"
 };
 
 // AllEmployeeData API endpoint (assume similar API style)
-const ALL_EMPLOYEE_API_URL = "http://localhost:3000/ContributorEmpSearch";
+const ALL_EMPLOYEE_API_URL = "http://10.80.0.83:3000/ContributorEmpSearch";
 const ALL_EMPLOYEE_API_HEADERS = {
     "APIKEY": "Securitas@#!1234",
     "Content-Type": "application/json"

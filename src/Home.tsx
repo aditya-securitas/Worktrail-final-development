@@ -688,7 +688,7 @@ function Home() {
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.4 }}
             >
-              <img 
+              <img  
                 src={benefitsTab === "candidate" ? "https://worktrail.ai/static/assets/img/11.png" : "https://worktrail.ai/static/assets/img/22.png"} 
                 alt={benefitsTab === "candidate" ? "Candidate" : "Partner"} 
                 className="benefits-image"
