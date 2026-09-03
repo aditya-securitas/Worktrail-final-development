@@ -62,9 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem(TOKEN_STORAGE_KEY))
   const [menu, setMenu] = useState(() => {
     if (!user?.Usertype) return []
-    // Look up the menu for the user's type, case-insensitive
-    const userType = user.Usertype.toLowerCase()
-    return MENU_MAP[userType] ?? []
+    return getMenuForUserType(user.Usertype)
   })
   const [isLoading, setIsLoading] = useState(false)
   const isMenuLoading = false
@@ -101,8 +99,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (data.user.activestatus !== '1') throw new Error('Your account is inactive. Please contact an administrator.')
 
       // Update menu selection logic to pick correct menu for user type
-      const userType = data.user.Usertype?.toLowerCase?.()
-      const availableMenu = userType ? MENU_MAP[userType] ?? [] : []
+      const availableMenu = data.user.Usertype ? getMenuForUserType(data.user.Usertype) : []
       setMenu(availableMenu)
       setUser(data.user)
       setToken(data.token)

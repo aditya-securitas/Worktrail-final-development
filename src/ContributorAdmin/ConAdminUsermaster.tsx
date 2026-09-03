@@ -586,17 +586,7 @@ export default function ConAdminUserMaster() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                   {/* Organization Name */}
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-2">
-                      Organization Name
-                    </label>
-                    <input
-                      type="text"
-                      value={form.organizationName}
-                      readOnly
-                      className={`${inputClass} bg-slate-100 font-semibold text-slate-700 cursor-not-allowed`}
-                    />
-                  </div>
+         
 
                   {/* Company Code */}
                   <div>
