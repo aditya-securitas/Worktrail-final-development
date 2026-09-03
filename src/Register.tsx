@@ -9,8 +9,14 @@ import {
   MapPin, 
   Globe, 
   CreditCard, 
-  Hash 
+  Hash,
+  Eye,
+  EyeOff,
+  CheckCircle2,
+  AlertCircle,
+  ArrowRight
 } from 'lucide-react'
+import securitasLogo from './assets/Img/logo_b.png'
 
 type RegisterProps = { onLogin?: () => void }
 type AccountType = 'Contributor' | 'Client'
@@ -52,6 +58,8 @@ function Register({ onLogin }: RegisterProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
 
   const updateField = (field: keyof RegisterForm, value: string) => 
     setForm((current) => ({ ...current, [field]: value }))
@@ -89,14 +97,6 @@ function Register({ onLogin }: RegisterProps) {
       ZIPcode: accountType === 'Contributor' ? form.zipCode : null,
     }
     
-    if (import.meta.env.DEV) {
-      console.log('[Register API] Request:', {
-        endpoint: API_ENDPOINTS.auth.register,
-        method: 'POST',
-        body: payload,
-      })
-    }
-    
     try {
       const result = await fetch(API_ENDPOINTS.auth.register, { 
         method: 'POST', 
@@ -108,10 +108,10 @@ function Register({ onLogin }: RegisterProps) {
       })
       const data = await result.json().catch(() => ({})) as { message?: string }
       if (!result.ok) throw new Error(data.message || `Registration failed (${result.status})`)
-      setSuccess(data.message || `${accountType} account created successfully.`)
+      setSuccess(data.message || `${accountType} account created successfully!`)
       setForm(emptyForm)
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'Unable to connect to the registration service.')
+      setError(requestError instanceof Error ? requestError.message : 'Unable to connect to registration service.')
     } finally { 
       setIsLoading(false) 
     }
@@ -136,47 +136,81 @@ function Register({ onLogin }: RegisterProps) {
     }
   }
 
-  const input = (field: keyof RegisterForm, label: string, placeholder = label, required = false, type = 'text') => {
+  const input = (
+    field: keyof RegisterForm, 
+    label: string, 
+    placeholder = label, 
+    required = false, 
+    type = 'text',
+    className = 'col-span-1'
+  ) => {
     const Icon = getIconForField(field)
+    const isPasswordField = field === 'password' || field === 'confirmPassword'
+    const isShowing = field === 'password' ? showPassword : showConfirmPassword
+    const actualType = isPasswordField ? (isShowing ? 'text' : 'password') : type
+
     return (
-      <div className="flex flex-col gap-1.5 w-full">
+      <div className={`flex flex-col gap-1.5 w-full ${className}`}>
         <label className="text-[10px] sm:text-[11px] font-bold tracking-wider text-slate-500 uppercase select-none">
-          {label}
+          {label} {required && <span className="text-rose-500">*</span>}
         </label>
-        <div className="flex items-center gap-3 h-[48px] px-4 bg-white border border-slate-200/80 focus-within:border-slate-400 focus-within:ring-2 focus-within:ring-slate-100 rounded-full transition-all">
-          <Icon className="w-4.5 h-4.5 text-slate-400 shrink-0" />
+        <div className="flex items-center gap-2.5 h-[46px] px-3.5 bg-slate-50/70 hover:bg-slate-50 focus-within:bg-white border border-slate-200/90 focus-within:border-[#42638C] focus-within:ring-2 focus-within:ring-slate-100 rounded-2xl transition-all shadow-2xs">
+          <Icon className="w-4 h-4 text-slate-400 shrink-0" />
           <input
-            type={type}
+            type={actualType}
             value={form[field]}
             onChange={(event) => updateField(field, event.target.value)}
             placeholder={placeholder}
             required={required}
-            className="w-full text-slate-800 placeholder-slate-400 outline-none text-[13px] sm:text-[14px] bg-transparent"
+            className="w-full text-slate-800 placeholder-slate-400 outline-none text-xs sm:text-sm bg-transparent font-medium"
           />
+          {isPasswordField && (
+            <button
+              type="button"
+              tabIndex={-1}
+              onClick={() => {
+                if (field === 'password') setShowPassword(!showPassword)
+                else setShowConfirmPassword(!showConfirmPassword)
+              }}
+              className="text-slate-400 hover:text-slate-600 p-1 rounded transition-colors shrink-0 cursor-pointer"
+            >
+              {isShowing ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          )}
         </div>
       </div>
     )
   }
 
   return (
-    <div className="flex flex-col w-full font-securitas">
+    <div className="flex flex-col w-full font-securitas select-text">
+      {/* Brand Header */}
+      <div className="flex items-center justify-between gap-2 mb-5">
+        <img
+          src={securitasLogo}
+          alt="Securitas"
+          className="h-7 sm:h-8 object-contain"
+        />
+      
+      </div>
+
       {/* Headings */}
-      <div className="mb-6 select-none">
-        <h2 className="text-[32px] font-bold text-[#082136] tracking-tight leading-tight mb-2">
+      <div className="mb-4 select-none text-left">
+        <h2 className="text-2xl sm:text-3xl font-extrabold text-[#082136] tracking-tight leading-tight mb-1">
           Create Account
         </h2>
-        <p className="text-slate-500 text-[13px] sm:text-sm font-medium tracking-wide">
-          Choose your account type to get started.
+        <p className="text-slate-500 text-xs sm:text-sm font-medium">
+          Select registration role to start verification onboarding.
         </p>
       </div>
 
       {/* Account Type Toggle Tabs */}
-      <div className="flex bg-slate-200/80 rounded-full p-1 gap-1 mb-6" role="tablist">
+      <div className="flex bg-slate-100 rounded-full p-1 gap-1 mb-5 border border-slate-200/60" role="tablist">
         <button
           className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider rounded-full transition-all duration-200 select-none cursor-pointer ${
             accountType === 'Contributor'
-              ? 'bg-[#031f30] text-white shadow-sm'
-              : 'text-slate-500 hover:text-slate-800'
+              ? 'bg-gradient-to-r from-[#10B981] to-[#5850EC] text-white shadow-md'
+              : 'text-slate-600 hover:text-slate-900'
           }`}
           type="button"
           role="tab"
@@ -188,8 +222,8 @@ function Register({ onLogin }: RegisterProps) {
         <button
           className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider rounded-full transition-all duration-200 select-none cursor-pointer ${
             accountType === 'Client'
-              ? 'bg-[#031f30] text-white shadow-sm'
-              : 'text-slate-500 hover:text-slate-800'
+              ? 'bg-gradient-to-r from-[#10B981] to-[#5850EC] text-white shadow-md'
+              : 'text-slate-600 hover:text-slate-900'
           }`}
           type="button"
           role="tab"
@@ -201,96 +235,84 @@ function Register({ onLogin }: RegisterProps) {
       </div>
 
       {/* Form */}
-      <form onSubmit={handleSubmit} className="flex flex-col gap-4 w-full">
-        {/* Email Field */}
-        {input('email', 'Email ID', 'you@company.com', true, 'email')}
+      <form onSubmit={handleSubmit} className="flex flex-col gap-3.5 w-full">
+        {/* Responsive Grid for Form Fields */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-3.5 w-full">
+          {/* Email Field */}
+          {input('email', 'Official Email', 'name@company.com', true, 'email', 'sm:col-span-2')}
 
-        {/* First & Last Name */}
-        <div className="flex gap-4">
-          {input('firstName', 'First name', 'First name', true)}
-          {input('lastName', 'Last name', 'Last name', true)}
-        </div>
+          {/* First & Last Name */}
+          {input('firstName', 'First Name', 'First name', true, 'text', 'col-span-1')}
+          {input('lastName', 'Last Name', 'Last name', true, 'text', 'col-span-1')}
 
-        {/* Dynamic Contributor Fields */}
-        {accountType === 'Contributor' && (
-          <div className="flex flex-col gap-4">
-            <div className="flex gap-4">
-              {input('companyName', 'Company name', 'Company name', true)}
-              {input('companyCode', 'Company code')}
-            </div>
-            <div className="flex gap-4">
-              {input('gstNo', 'GST number')}
-              {input('address', 'Address')}
-            </div>
-            <div className="flex gap-4">
-              {input('city', 'City')}
-              {input('state', 'State')}
-            </div>
-            <div className="flex gap-4">
-              {input('country', 'Country')}
-              {input('zipCode', 'ZIP code')}
-            </div>
-          </div>
-        )}
+          {/* Dynamic Contributor Fields */}
+          {accountType === 'Contributor' && (
+            <>
+              {input('companyName', 'Company Name', 'e.g. Acme Securitas Pvt Ltd', true, 'text', 'sm:col-span-2')}
+              {input('companyCode', 'Company Code', 'e.g. ACM-01', false, 'text', 'col-span-1')}
+              {input('gstNo', 'GST Number', 'e.g. 07AAACS1122C1ZK', false, 'text', 'col-span-1')}
+              {input('address', 'Office Address', 'Building, Street...', false, 'text', 'sm:col-span-2')}
+              {input('city', 'City', 'e.g. Mumbai', false, 'text', 'col-span-1')}
+              {input('state', 'State', 'e.g. Maharashtra', false, 'text', 'col-span-1')}
+              {input('country', 'Country', 'India', false, 'text', 'col-span-1')}
+              {input('zipCode', 'ZIP / PIN Code', 'e.g. 400001', false, 'text', 'col-span-1')}
+            </>
+          )}
 
-        {/* Passwords */}
-        <div className="flex gap-4">
-          {input('password', 'Password', 'Password', true, 'password')}
-          {input('confirmPassword', 'Confirm password', 'Confirm password', true, 'password')}
+          {/* Passwords */}
+          {input('password', 'Password', 'Min. 6 characters', true, 'password', 'col-span-1')}
+          {input('confirmPassword', 'Confirm Password', 'Re-enter password', true, 'password', 'col-span-1')}
         </div>
 
         {/* Error/Success Handlers */}
         {error && (
-          <p className="text-[11px] sm:text-xs text-red-500 font-semibold text-center mt-1" role="alert">
-            {error}
-          </p>
+          <div className="flex items-center gap-2 p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-700 font-bold animate-fade-in" role="alert">
+            <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+            <span>{error}</span>
+          </div>
         )}
         {success && (
-          <p className="text-[11px] sm:text-xs text-emerald-600 font-semibold text-center mt-1" role="status">
-            {success}
-          </p>
+          <div className="flex items-center gap-2 p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-700 font-bold animate-fade-in" role="status">
+            <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+            <span>{success}</span>
+          </div>
         )}
 
         {/* Submit Button */}
         <button
-          className="w-full h-[54px] mt-2 rounded-full text-white text-[13px] font-bold tracking-widest bg-gradient-to-r from-[#031f30] via-[#0b2b41] to-[#88ffbb] hover:brightness-110 hover:shadow-[0_4px_15px_rgba(8,33,54,0.25)] active:scale-[0.98] transition-all uppercase flex items-center justify-center cursor-pointer select-none"
+          className="w-full h-[48px] rounded-full text-white text-xs sm:text-[13px] font-bold tracking-wider uppercase bg-gradient-to-r from-[#10B981] to-[#5850EC] hover:brightness-110 hover:shadow-[0_8px_25px_rgba(16,185,129,0.3)] active:scale-[0.98] transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer select-none shadow-md disabled:grayscale disabled:opacity-50 disabled:cursor-not-allowed mt-1"
           type="submit"
           disabled={isLoading}
         >
-          {isLoading ? 'Creating account...' : `Create ${accountType} Account`}
+          <span>{isLoading ? 'Creating Account...' : `Create ${accountType} Account`}</span>
+          {!isLoading && <ArrowRight className="w-4 h-4" />}
         </button>
       </form>
 
       {/* Separator */}
-      <div className="w-full border-t border-slate-200/80 my-5"></div>
+      <div className="w-full border-t border-slate-200/80 my-4"></div>
 
       {/* Sign In Switch Link */}
-      <div className="text-center select-none mb-6">
-        <span className="text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+      <div className="text-center select-none mb-3">
+        <span className="text-[11px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider">
           Already have an account?{' '}
         </span>
         <Link
           to="/login"
           onClick={onLogin}
-          className="text-[10px] sm:text-[11px] font-bold text-[#082136] hover:text-[#0b2b41] uppercase tracking-wider transition-colors ml-1"
+          className="text-[11px] sm:text-xs font-extrabold text-[#082136] hover:text-[#0b2b41] uppercase tracking-wider transition-colors ml-1"
         >
           Sign In
         </Link>
       </div>
 
       {/* Telemetry Footer */}
-      <div className="flex flex-col items-center justify-center gap-3 select-none">
-        <p className="text-[9px] sm:text-[10px] text-center leading-normal text-slate-400 font-bold tracking-widest uppercase">
+      <div className="flex flex-col items-center justify-center gap-1 select-none text-center">
+        <p className="text-[8.5px] sm:text-[9.5px] leading-tight text-slate-400 font-bold tracking-wider uppercase">
           System Authorized Operations Only.
-          <br />
+          <br className="hidden sm:inline" />
           IP Logging and Telemetry Tracking Active.
         </p>
-        <Link
-          to="/Privacypolicy"
-          className="text-[10px] sm:text-[11px] font-bold text-[#082136] hover:text-[#0b2b41] uppercase tracking-widest transition-colors"
-        >
-          Privacy Policy
-        </Link>
       </div>
     </div>
   )

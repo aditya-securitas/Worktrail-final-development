@@ -19,6 +19,7 @@ import {
   Globe,
   Receipt
 } from 'lucide-react'
+import securitasLogo from '../assets/Img/logo_w.png'
 
 type SidebarProps = {
   state: 'full' | 'mini' | 'closed';
@@ -99,16 +100,15 @@ function Sidebar({ state, onClose, userType, menu, isLoading, error }: SidebarPr
       >
         {/* Top Fixed Header Section */}
         <div className="flex flex-col shrink-0">
-          {/* Securitas Logo (three red circles and text in white) */}
-          <div className={`flex flex-col mb-2 shrink-0 ${state === 'mini' ? 'items-center' : 'items-start'}`}>
-            <div className="flex gap-1.5 mb-1.5">
-              <span className="w-4 h-4 rounded-full bg-[#FF2D37] shadow-[0_2px_4px_rgba(255,45,55,0.2)]"></span>
-              <span className="w-4 h-4 rounded-full bg-[#FF2D37] shadow-[0_2px_4px_rgba(255,45,55,0.2)]"></span>
-              <span className="w-4 h-4 rounded-full bg-[#FF2D37] shadow-[0_2px_4px_rgba(255,45,55,0.2)]"></span>
+          {/* Securitas Brand Logo */}
+          <div className={`flex flex-col mb-3 shrink-0 ${state === 'mini' ? 'items-center' : 'items-start'}`}>
+            <div className=" flex items-center justify-center">
+              <img
+                src={securitasLogo}
+                alt="Securitas"
+                className={`${state === 'mini' ? 'h-5 w-5 object-contain' : 'h-6 object-contain'}`}
+              />
             </div>
-            {state !== 'mini' && (
-              <span className="text-[14px] font-bold tracking-widest text-white uppercase font-mono">Securitas</span>
-            )}
           </div>
 
           {/* Separator line */}
