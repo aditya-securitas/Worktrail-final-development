@@ -64,13 +64,35 @@ function AuthLayout({ children }: { children: ReactNode }) {
 }
 
 function App() {
-  return <BrowserRouter><AuthProvider><Routes>
-    <Route path="/login" element={<AuthLayout><Login /></AuthLayout>} />
-    <Route path="/register" element={<AuthLayout><Register /></AuthLayout>} />
-    <Route element={<ProtectedRoute />}><Route path="/dashboard" element={<Dashboard />} /><Route path="/ServiceRequest" element={<Dashboard />} /><Route path="/AddEmployee" element={<Dashboard />} /><Route path="/Client" element={<Dashboard />} /><Route path="/Contributor" element={<Dashboard />} /><Route path="/Termsandconditions" element={<Dashboard />} /><Route path="/Privacypolicy" element={<Dashboard />} /><Route path="/OtherServices" element={<Dashboard />} /></Route>
-    <Route path="/" element={<Home />} />
-    <Route path="*" element={<Navigate to="/dashboard" replace />} />
-  </Routes></AuthProvider></BrowserRouter>
+  return (
+    <BrowserRouter>
+      <AuthProvider>
+        <Routes>
+          <Route path="/login" element={<AuthLayout><Login /></AuthLayout>} />
+          <Route path="/register" element={<AuthLayout><Register /></AuthLayout>} />
+          <Route element={<ProtectedRoute />}>
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/ServiceRequest" element={<Dashboard />} />
+            <Route path="/AddEmployee" element={<Dashboard />} />
+            <Route path="/Client" element={<Dashboard />} />
+            <Route path="/CandidateVerification" element={<Dashboard />} />
+            <Route path="/Contributor" element={<Dashboard />} />
+            <Route path="/Termsandconditions" element={<Dashboard />} />
+            <Route path="/Privacypolicy" element={<Dashboard />} />
+            <Route path="/OtherServices" element={<Dashboard />} />
+            <Route path="/OrgMaster" element={<Dashboard />} />
+            <Route path="/UserMaster" element={<Dashboard />} />
+            <Route path="/Recyclebin" element={<Dashboard />} />
+            <Route path="/Invoice" element={<Dashboard />} />
+            <Route path="/ConAdminAddEmployee" element={<Dashboard />} />
+            <Route path="/ConAdminUsermaster" element={<Dashboard />} />
+          </Route>
+          <Route path="/" element={<Home />} />
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        </Routes>
+      </AuthProvider>
+    </BrowserRouter>
+  )
 }
 
 export default App

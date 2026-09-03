@@ -1,16 +1,31 @@
 import { Folder, Clock, CheckCircle2, AlertTriangle, HelpCircle, ThumbsUp } from 'lucide-react'
 
-interface DashboardCardsProps {
-  userType?: string;
+export interface DashboardStats {
+  totalCases: number
+  casePending: number
+  caseResponded: number
+  caseRejected: number
+  requestsPending: number
+  requestsResponded: number
 }
 
-export function DashboardCards({ userType }: DashboardCardsProps) {
-  const isContributor = userType?.toLowerCase() === 'contributor' || userType?.toLowerCase() === 'fascilator';
+interface DashboardCardsProps {
+  userType?: string
+  stats?: Partial<DashboardStats>
+}
+
+export function DashboardCards({ userType, stats }: DashboardCardsProps) {
+  const isContributor = userType?.toLowerCase() === 'contributor' || userType?.toLowerCase() === 'fascilator'
+
+  const formatNumber = (val: number | undefined, fallback: number = 0) => {
+    const num = val !== undefined ? val : fallback
+    return String(num).padStart(2, '0')
+  }
 
   const cards = [
     {
       title: 'TOTAL CASES',
-      value: '07',
+      value: formatNumber(stats?.totalCases, 7),
       sub: 'Database records',
       icon: Folder,
       colorClass: 'text-[#5850EC]',
@@ -19,7 +34,7 @@ export function DashboardCards({ userType }: DashboardCardsProps) {
     },
     {
       title: 'CASE PENDING',
-      value: '02',
+      value: formatNumber(stats?.casePending, 2),
       sub: 'Active running checks',
       icon: Clock,
       colorClass: 'text-orange-500',
@@ -28,7 +43,7 @@ export function DashboardCards({ userType }: DashboardCardsProps) {
     },
     {
       title: 'CASE RESPONDED',
-      value: '03',
+      value: formatNumber(stats?.caseResponded, 3),
       sub: 'Completed checks',
       icon: CheckCircle2,
       colorClass: 'text-emerald-500',
@@ -37,7 +52,7 @@ export function DashboardCards({ userType }: DashboardCardsProps) {
     },
     {
       title: 'CASE REJECTED',
-      value: '02',
+      value: formatNumber(stats?.caseRejected, 2),
       sub: 'Disputed compliance',
       icon: AlertTriangle,
       colorClass: 'text-red-500',
@@ -46,7 +61,7 @@ export function DashboardCards({ userType }: DashboardCardsProps) {
     },
     {
       title: 'REQUESTS PENDING',
-      value: '02',
+      value: formatNumber(stats?.requestsPending, 2),
       sub: 'Running queries',
       icon: HelpCircle,
       colorClass: 'text-blue-500',
@@ -55,7 +70,7 @@ export function DashboardCards({ userType }: DashboardCardsProps) {
     },
     {
       title: 'REQUESTS RESPONDED',
-      value: '03',
+      value: formatNumber(stats?.requestsResponded, 3),
       sub: 'Completed queries',
       icon: ThumbsUp,
       colorClass: 'text-pink-500',

@@ -5,14 +5,29 @@ import { useState, useEffect, useRef } from 'react'
 import ServiceRequest from './Components/ServiceRequest'
 import AddEmployee from './Components/AddEmployee'
 import Client from './Components/Client'
+import CandidateVerificationForm from './Components/CandidateVerificationForm'
 import Contributor from './Components/Contributor'
-// import Privacypolicy from './Components/Privacypolicy' // No longer needed here
+import OrgMaster from './Components/OrgMaster'
+import UserMaster from './Components/Usermaster'
+import Recyclebin from './Components/Recyclebin'
+import OtherServices from './Components/OtherServices'
+import Invoice from './Components/Invoice'
+import ConAdminAddEmployee from './ContributorAdmin/ConAdminAddEmployee'
+import ConAdminUsermaster from './ContributorAdmin/ConAdminUsermaster'
 import Navbar from './Components/Navbar'
 import Sidebar from './Components/Sidebar'
 import { flattenMenu, menuPath } from './Components/sidebar-utils'
 import bgVideo from './assets/video/the_element_related_to_BGV.mp4'
-import DashboardCards from './Components/DashboardCards'
-import DashboardCharts from './Components/DashboardCharts'
+import DashboardCards, { type DashboardStats } from './Components/DashboardCards'
+import DashboardCharts, {
+  TransactionTelemetryChart,
+  type ProgressionPoint,
+  type ComplianceDistribution
+} from './Components/DashboardCharts'
+import {
+  type VerificationRecord,
+  STORAGE_KEY_VERIFICATION_RECORDS
+} from './Components/CandidateVerificationForm'
 import { Search, Calendar, RefreshCw } from 'lucide-react'
 
 const EXTERNAL_LINKS: Record<string, boolean> = {
@@ -21,27 +36,232 @@ const EXTERNAL_LINKS: Record<string, boolean> = {
 }
 
 function MenuComponent({ item }: { item: MenuRoute | undefined }) {
-  // This component will handle external links in Dashboard instead, so only render mapped components here
   if (!item) return null
   if (item.components === 'ServiceRequest.tsx') return <ServiceRequest />
   if (item.components === 'AddEmployee.tsx') return <AddEmployee />
   if (item.components === 'Client.tsx') return <Client />
+  if (item.components === 'CandidateVerificationForm.tsx') return <CandidateVerificationForm />
   if (item.components === 'Contributor.tsx') return <Contributor />
-  // Don't use Privacypolicy component anymore, open as external link via Dashboard logic
+  if (item.components === 'OrgMaster.tsx') return <OrgMaster />
+  if (item.components === 'Usermaster.tsx') return <UserMaster />
+  if (item.components === 'Recyclebin.tsx') return <Recyclebin />
+  if (item.components === 'OtherServices.tsx') return <OtherServices />
+  if (item.components === 'Invoice.tsx') return <Invoice />
+  if (item.components === 'ConAdminAddEmployee.tsx') return <ConAdminAddEmployee />
+  if (item.components === 'ConAdminUsermaster.tsx') return <ConAdminUsermaster />
   return null
 }
 
 function Dashboard() {
   const { user, menu, isMenuLoading, menuError } = useAuth()
   const location = useLocation()
+
+  // If user is Client, render the dedicated Candidate Verification Form (standalone, no sidebar/header)
+  if (user?.Usertype?.toLowerCase() === 'client') {
+    return <CandidateVerificationForm />
+  }
+
   const [sidebarState, setSidebarState] = useState<'full' | 'mini' | 'closed'>('full')
   const menuItems = flattenMenu(menu)
 
+  const [timeframe, setTimeframe] = useState<'daily' | 'weekly' | 'monthly'>('daily')
   const [appealSearchQuery, setAppealSearchQuery] = useState('')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [showDatePicker, setShowDatePicker] = useState(false)
   const datePickerRef = useRef<HTMLDivElement>(null)
+
+  // Dynamic records loaded from live verification storage
+  const [allRecords, setAllRecords] = useState<VerificationRecord[]>([])
+
+  const loadRecords = () => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY_VERIFICATION_RECORDS)
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setAllRecords(parsed)
+          return
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    // Default seeded records if storage empty
+    const seed: VerificationRecord[] = [
+      {
+        id: 'rec-1',
+        requestId: 'VR-849201',
+        candidateName: 'Aarav Sharma',
+        employeeId: 'EMP-1001',
+        candidateEmail: 'aarav.sharma@tcs.com',
+        contactNumber: '+91 98234 11223',
+        verifierId: '2',
+        verifierName: 'Tata Consultancy Services (TCS)',
+        verifierCategory: 'IT & Consulting',
+        verifierCode: 'TCS-GLB',
+        dateOfJoining: '2021-06-15',
+        dateOfLeaving: '2024-03-31',
+        isCurrentlyEmployed: false,
+        designation: 'Senior Systems Engineer',
+        department: 'Digital Cloud Practices',
+        verificationType: 'Standard Employment Verification',
+        remarks: 'Confirmed relieving date.',
+        uploadedFilesCount: 2,
+        submittedBy: 'hr.ops@clienttech.io',
+        submittedAt: '2026-08-30',
+        status: 'Pending'
+      },
+      {
+        id: 'rec-2',
+        requestId: 'VR-732049',
+        candidateName: 'Priya Mukherjee',
+        employeeId: 'EMP-1002',
+        candidateEmail: 'priya.m@infosys.com',
+        contactNumber: '+91 99102 33445',
+        verifierId: '3',
+        verifierName: 'Infosys Limited',
+        verifierCategory: 'Technology Services',
+        verifierCode: 'INF-CORP',
+        dateOfJoining: '2020-01-10',
+        dateOfLeaving: '2023-11-20',
+        isCurrentlyEmployed: false,
+        designation: 'Lead Business Analyst',
+        department: 'Fintech Solutions',
+        verificationType: 'Comprehensive Screening',
+        remarks: 'Experience letter verified.',
+        uploadedFilesCount: 3,
+        submittedBy: 'talent@walsonspartners.com',
+        submittedAt: '2026-08-28',
+        status: 'Verified'
+      },
+      {
+        id: 'rec-3',
+        requestId: 'VR-619482',
+        candidateName: 'Rohan Deshmukh',
+        employeeId: 'EMP-1003',
+        candidateEmail: 'rohan.d@securitas.in',
+        contactNumber: '+91 97654 88776',
+        verifierId: '1',
+        verifierName: 'Securitas India',
+        verifierCategory: 'Security Services',
+        verifierCode: 'SEC-IND',
+        dateOfJoining: '2022-04-01',
+        dateOfLeaving: 'Present',
+        isCurrentlyEmployed: true,
+        designation: 'Operations Supervisor',
+        department: 'Site Security Division',
+        verificationType: 'Standard Employment Verification',
+        remarks: 'Active employee verification.',
+        uploadedFilesCount: 1,
+        submittedBy: 'client.verify@globalretail.com',
+        submittedAt: '2026-08-27',
+        status: 'Verified'
+      },
+      {
+        id: 'rec-4',
+        requestId: 'VR-504938',
+        candidateName: 'Sneha Patel',
+        employeeId: 'EMP-1004',
+        candidateEmail: 'sneha.patel@wipro.com',
+        contactNumber: '+91 98450 67210',
+        verifierId: '4',
+        verifierName: 'Wipro Limited',
+        verifierCategory: 'IT Infrastructure',
+        verifierCode: 'WIP-IND',
+        dateOfJoining: '2019-08-12',
+        dateOfLeaving: '2022-05-18',
+        isCurrentlyEmployed: false,
+        designation: 'Quality Assurance Lead',
+        department: 'Enterprise Applications',
+        verificationType: 'Comprehensive Screening',
+        remarks: 'Verification completed.',
+        uploadedFilesCount: 2,
+        submittedBy: 'verification@fintechcorp.org',
+        submittedAt: '2026-08-25',
+        status: 'Verified'
+      },
+      {
+        id: 'rec-5',
+        requestId: 'VR-392817',
+        candidateName: 'Vikram Sengupta',
+        employeeId: 'EMP-1005',
+        candidateEmail: 'vikram.s@accenture.com',
+        contactNumber: '+91 98112 44556',
+        verifierId: '5',
+        verifierName: 'Accenture India',
+        verifierCategory: 'Management Consulting',
+        verifierCode: 'ACC-TECH',
+        dateOfJoining: '2023-02-01',
+        dateOfLeaving: '2024-01-15',
+        isCurrentlyEmployed: false,
+        designation: 'Software Associate',
+        department: 'Cloud First Practice',
+        verificationType: 'Standard Employment Verification',
+        remarks: 'Candidate integrity disputed.',
+        uploadedFilesCount: 1,
+        submittedBy: 'recruiter@techventures.io',
+        submittedAt: '2026-08-24',
+        status: 'Rejected'
+      },
+      {
+        id: 'rec-6',
+        requestId: 'VR-281940',
+        candidateName: 'Ananya Verma',
+        employeeId: 'EMP-1006',
+        candidateEmail: 'ananya.v@cognizant.com',
+        contactNumber: '+91 97123 99887',
+        verifierId: '6',
+        verifierName: 'Cognizant Technology Solutions',
+        verifierCategory: 'IT & Digital Engineering',
+        verifierCode: 'CTS-GLB',
+        dateOfJoining: '2021-11-01',
+        dateOfLeaving: '2024-06-30',
+        isCurrentlyEmployed: false,
+        designation: 'Full Stack Developer',
+        department: 'Banking & Financial Services',
+        verificationType: 'Standard Employment Verification',
+        remarks: 'Pending HR signoff.',
+        uploadedFilesCount: 2,
+        submittedBy: 'hr.audit@globalsolutions.in',
+        submittedAt: '2026-08-29',
+        status: 'Pending'
+      },
+      {
+        id: 'rec-7',
+        requestId: 'VR-194820',
+        candidateName: 'Karan Mehra',
+        employeeId: 'EMP-1007',
+        candidateEmail: 'karan.m@hcltech.com',
+        contactNumber: '+91 99881 22334',
+        verifierId: '7',
+        verifierName: 'HCLTech',
+        verifierCategory: 'Technology Services',
+        verifierCode: 'HCL-ENG',
+        dateOfJoining: '2020-07-15',
+        dateOfLeaving: '2023-09-30',
+        isCurrentlyEmployed: false,
+        designation: 'DevOps Engineer',
+        department: 'Infrastructure Operations',
+        verificationType: 'Comprehensive Screening',
+        remarks: 'Discrepancy in exit formality.',
+        uploadedFilesCount: 1,
+        submittedBy: 'talent.check@enterpriseit.com',
+        submittedAt: '2026-08-23',
+        status: 'Rejected'
+      }
+    ]
+
+    setAllRecords(seed)
+  }
+
+  useEffect(() => {
+    loadRecords()
+    const handleStorage = () => loadRecords()
+    window.addEventListener('storage', handleStorage)
+    return () => window.removeEventListener('storage', handleStorage)
+  }, [])
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -91,25 +311,113 @@ function Dashboard() {
     }
   }
 
-  const MOCK_APPEALS = [
-    { requestId: "REQ-001", date: "2026-08-25", employeeCode: "EMP001", status: "Approved" },
-    { requestId: "REQ-002", date: "2026-08-26", employeeCode: "EMP002", status: "Pending" },
-    { requestId: "REQ-003", date: "2026-08-27", employeeCode: "EMP003", status: "Rejected" },
-    { requestId: "REQ-004", date: "2026-08-28", employeeCode: "EMP004", status: "Approved" }
-  ]
-
-  const filteredAppeals = MOCK_APPEALS.filter(appeal => {
+  // Filter records dynamically based on query and date range
+  const filteredRecords = allRecords.filter(record => {
     if (appealSearchQuery.trim()) {
-      const query = appealSearchQuery.toLowerCase()
-      const matchesRequest = appeal.requestId.toLowerCase().includes(query)
-      const matchesEmp = appeal.employeeCode.toLowerCase().includes(query)
-      if (!matchesRequest && !matchesEmp) return false
+      const q = appealSearchQuery.toLowerCase()
+      const matchReq = record.requestId?.toLowerCase().includes(q)
+      const matchEmp = record.employeeId?.toLowerCase().includes(q)
+      const matchName = record.candidateName?.toLowerCase().includes(q)
+      const matchOrg = record.verifierName?.toLowerCase().includes(q)
+      if (!matchReq && !matchEmp && !matchName && !matchOrg) return false
     }
-    if (startDate && appeal.date < startDate) return false
-    if (endDate && appeal.date > endDate) return false
+    if (startDate && record.submittedAt < startDate) return false
+    if (endDate && record.submittedAt > endDate) return false
     return true
   })
 
+  // 1. Dynamic Dashboard Stats
+  const stats: DashboardStats = {
+    totalCases: filteredRecords.length,
+    casePending: filteredRecords.filter(r => r.status === 'Pending' || (r.status as any) === 'In Progress').length,
+    caseResponded: filteredRecords.filter(r => r.status === 'Verified').length,
+    caseRejected: filteredRecords.filter(r => r.status === 'Rejected').length,
+    requestsPending: filteredRecords.filter(r => r.status === 'Pending').length,
+    requestsResponded: filteredRecords.filter(r => r.status === 'Verified').length,
+  }
+
+  // 2. Dynamic Compliance Distribution
+  const distribution: ComplianceDistribution = {
+    total: filteredRecords.length,
+    pending: stats.casePending,
+    responded: stats.caseResponded,
+    rejected: stats.caseRejected,
+  }
+
+  // 3. Dynamic Progression Points based on Timeframe
+  const getProgressionData = (): ProgressionPoint[] => {
+    if (timeframe === 'daily') {
+      const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+      const counts: Record<string, { logged: number; completed: number }> = {}
+      days.forEach(d => { counts[d] = { logged: 0, completed: 0 } })
+
+      filteredRecords.forEach(r => {
+        const d = new Date(r.submittedAt)
+        const dayIdx = (d.getDay() + 6) % 7 // 0 = Mon, 6 = Sun
+        const dayName = days[dayIdx]
+        if (counts[dayName]) {
+          counts[dayName].logged += 1
+          if (r.status === 'Verified') {
+            counts[dayName].completed += 1
+          }
+        }
+      })
+
+      return days.map(day => ({
+        label: day,
+        logged: counts[day].logged,
+        completed: counts[day].completed
+      }))
+    } else if (timeframe === 'weekly') {
+      const weeks = ['Week 1', 'Week 2', 'Week 3', 'Week 4']
+      const counts: Record<string, { logged: number; completed: number }> = {}
+      weeks.forEach(w => { counts[w] = { logged: 0, completed: 0 } })
+
+      filteredRecords.forEach(r => {
+        const d = new Date(r.submittedAt)
+        const dateNum = d.getDate()
+        const weekIdx = Math.min(Math.floor((dateNum - 1) / 7), 3)
+        const weekName = weeks[weekIdx]
+        if (counts[weekName]) {
+          counts[weekName].logged += 1
+          if (r.status === 'Verified') {
+            counts[weekName].completed += 1
+          }
+        }
+      })
+
+      return weeks.map(w => ({
+        label: w,
+        logged: counts[w].logged,
+        completed: counts[w].completed
+      }))
+    } else {
+      // monthly
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+      const counts: Record<string, { logged: number; completed: number }> = {}
+      months.forEach(m => { counts[m] = { logged: 0, completed: 0 } })
+
+      filteredRecords.forEach(r => {
+        const d = new Date(r.submittedAt)
+        const mIdx = d.getMonth()
+        const mName = months[mIdx]
+        if (counts[mName]) {
+          counts[mName].logged += 1
+          if (r.status === 'Verified') {
+            counts[mName].completed += 1
+          }
+        }
+      })
+
+      return months.map(m => ({
+        label: m,
+        logged: counts[m].logged,
+        completed: counts[m].completed
+      }))
+    }
+  }
+
+  const progressionData = getProgressionData()
 
   return (
     <main className="min-h-screen bg-[#F8FAFC] flex font-securitas w-full">
@@ -138,7 +446,7 @@ function Dashboard() {
                 {/* Background Video */}
                 <div className="absolute inset-0 w-full h-full z-0 overflow-hidden pointer-events-none opacity-45">
                   <video
-                    className="object-fill absolute inset-0 w-full h-full object-cover  mix-blend-overlay"
+                    className="object-fill absolute inset-0 w-full h-full object-cover mix-blend-overlay"
                     autoPlay
                     muted
                     loop
@@ -164,7 +472,7 @@ function Dashboard() {
               </div>
 
               {/* Six Metrics Cards Component */}
-              <DashboardCards userType={user?.Usertype} />
+              <DashboardCards userType={user?.Usertype} stats={stats} />
 
               {/* Switcher Header */}
               <div className="flex justify-between items-center mb-6">
@@ -173,14 +481,55 @@ function Dashboard() {
                   <span className="text-[9px] text-slate-400 font-bold tracking-widest mt-1.5 block">SENTINEL TELEMETRY CHARTS</span>
                 </div>
                 <div className="bg-slate-100 rounded-full p-1 flex gap-1.5 text-xs font-bold text-slate-500">
-                  <button className="bg-[#031f30] text-white px-3.5 py-1.5 rounded-full uppercase cursor-pointer">Daily</button>
-                  <button className="hover:text-slate-800 px-3.5 py-1.5 uppercase cursor-pointer">Weekly</button>
-                  <button className="hover:text-slate-800 px-3.5 py-1.5 uppercase cursor-pointer">Monthly</button>
+                  <button
+                    type="button"
+                    onClick={() => setTimeframe('daily')}
+                    className={`px-3.5 py-1.5 rounded-full uppercase cursor-pointer transition-all ${
+                      timeframe === 'daily'
+                        ? 'bg-[#031f30] text-white shadow-xs'
+                        : 'hover:text-slate-800 text-slate-500'
+                    }`}
+                  >
+                    Daily
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTimeframe('weekly')}
+                    className={`px-3.5 py-1.5 rounded-full uppercase cursor-pointer transition-all ${
+                      timeframe === 'weekly'
+                        ? 'bg-[#031f30] text-white shadow-xs'
+                        : 'hover:text-slate-800 text-slate-500'
+                    }`}
+                  >
+                    Weekly
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTimeframe('monthly')}
+                    className={`px-3.5 py-1.5 rounded-full uppercase cursor-pointer transition-all ${
+                      timeframe === 'monthly'
+                        ? 'bg-[#031f30] text-white shadow-xs'
+                        : 'hover:text-slate-800 text-slate-500'
+                    }`}
+                  >
+                    Monthly
+                  </button>
                 </div>
               </div>
 
               {/* Two Column Charts Component */}
-              <DashboardCharts />
+              <DashboardCharts
+                timeframe={timeframe}
+                progressionData={progressionData}
+                distribution={distribution}
+              />
+
+              {/* Superadmin Exclusive: Full-Width Transaction & Revenue Telemetry Chart Under Compliance Analytics */}
+              {user?.Usertype?.toLowerCase() === 'superadmin' && (
+                <div className="mt-8">
+                  <TransactionTelemetryChart timeframe={timeframe} />
+                </div>
+              )}
 
               {/* Recent Appeals Title & Subtitle */}
               <div className="flex flex-col gap-1 mb-6 mt-8 select-none">
@@ -325,46 +674,54 @@ function Dashboard() {
                     <thead>
                       <tr className="whitespace-nowrap text-[11px] font-bold uppercase tracking-wider text-slate-500 bg-slate-50/85 rounded-2xl border-b border-slate-100">
                         <th className="px-5 pb-5 pt-2">Request ID</th>
+                        <th className="px-5 pb-5 pt-2">Candidate & Org</th>
                         <th className="px-5 pb-5 pt-2">Date</th>
-                        <th className="px-5 pb-5 pt-2">Employee Code</th>
+                        <th className="px-5 pb-5 pt-2">Employee ID</th>
                         <th className="px-5 pb-5 pt-2">Status</th>
                         <th className="px-5 pb-5 pt-2">Action</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-[13px] text-slate-650 font-semibold bg-white">
-                      {filteredAppeals.length > 0 ? (
-                        filteredAppeals.map((appeal) => (
-                          <tr key={appeal.requestId} className="hover:bg-slate-50 transition-all duration-200 border-b border-slate-100">
-                            <td className="px-5 py-4 font-bold text-[#031f30] font-mono">{appeal.requestId}</td>
-                            <td className="px-5 py-4 text-slate-500 font-medium font-mono">{appeal.date}</td>
-                            <td className="px-5 py-4 text-slate-600 font-mono">{appeal.employeeCode}</td>
+                      {filteredRecords.length > 0 ? (
+                        filteredRecords.map((record) => (
+                          <tr key={record.id || record.requestId} className="hover:bg-slate-50 transition-all duration-200 border-b border-slate-100">
+                            <td className="px-5 py-4 font-bold text-[#031f30] font-mono">{record.requestId}</td>
                             <td className="px-5 py-4">
-                              <span className={`px-2.5 py-1 text-[9px] font-bold tracking-wider uppercase rounded-full ${appeal.status === 'Approved'
-                                ? 'bg-emerald-50 text-emerald-600'
-                                : appeal.status === 'Pending'
-                                  ? 'bg-amber-50 text-amber-600'
-                                  : appeal.status === 'Rejected'
-                                    ? 'bg-rose-50 text-rose-600'
-                                    : 'bg-indigo-50 text-indigo-600'
-                                }`}>
-                                {appeal.status}
+                              <div className="flex flex-col">
+                                <span className="font-bold text-slate-900">{record.candidateName}</span>
+                                <span className="text-[11px] text-slate-400 font-normal">{record.verifierName}</span>
+                              </div>
+                            </td>
+                            <td className="px-5 py-4 text-slate-500 font-medium font-mono">{record.submittedAt}</td>
+                            <td className="px-5 py-4 text-slate-600 font-mono">{record.employeeId}</td>
+                            <td className="px-5 py-4">
+                              <span className={`px-2.5 py-1 text-[9px] font-bold tracking-wider uppercase rounded-full ${
+                                record.status === 'Verified'
+                                  ? 'bg-emerald-50 text-emerald-600'
+                                  : record.status === 'Pending' || (record.status as any) === 'In Progress'
+                                    ? 'bg-amber-50 text-amber-600'
+                                    : record.status === 'Rejected'
+                                      ? 'bg-rose-50 text-rose-600'
+                                      : 'bg-indigo-50 text-indigo-600'
+                              }`}>
+                                {record.status}
                               </span>
                             </td>
                             <td className="px-5 py-4 select-none">
-                              <button
-                                onClick={() => alert(`Reviewing Request ${appeal.requestId}...`)}
+                              <Link
+                                to="/Client"
                                 className="text-xs font-bold text-[#5850EC] hover:text-[#4f46e5] hover:underline cursor-pointer focus:outline-none"
                               >
-                                View Detail
-                              </button>
+                                View Details
+                              </Link>
                             </td>
                           </tr>
                         ))
                       ) : (
                         <tr>
-                          <td colSpan={5} className="px-5 py-12 text-center text-slate-400 bg-white select-none">
+                          <td colSpan={6} className="px-5 py-12 text-center text-slate-400 bg-white select-none">
                             <Calendar className="w-10 h-10 mx-auto text-slate-300 mb-3" />
-                            <p className="font-semibold text-xs text-slate-500">No recent appeals found</p>
+                            <p className="font-semibold text-xs text-slate-500">No verification appeals found</p>
                             <p className="text-[11px] text-slate-400 mt-1">Try resetting the filters or date range.</p>
                           </td>
                         </tr>
@@ -375,10 +732,8 @@ function Dashboard() {
               </div>
             </>
           ) : (
-            // Only show the MenuComponent if the item is not an external link
             (() => {
               const activeMenuItem = menuItems.find((item) => menuPath(item.Route) === location.pathname)
-              // If it's an external link component, render nothing (link handled in effect above)
               if (activeMenuItem && activeMenuItem.components && EXTERNAL_LINKS[activeMenuItem.components]) {
                 return null
               }

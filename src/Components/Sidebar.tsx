@@ -8,12 +8,16 @@ import {
   UserPlus,
   UserCheck,
   Building,
+  Building2,
+  UserCog,
   User,
+  Trash2,
   Lock,
   LogOut,
   ChevronDown,
   FileText,
-  Globe
+  Globe,
+  Receipt
 } from 'lucide-react'
 
 type SidebarProps = {
@@ -44,8 +48,12 @@ function Sidebar({ state, onClose, userType, menu, isLoading, error }: SidebarPr
     if (comp.includes('dashboard')) return LayoutGrid
     if (comp.includes('servicerequest')) return ShieldCheck
     if (comp.includes('addemployee')) return UserPlus
+    if (comp.includes('orgmaster')) return Building2
+    if (comp.includes('usermaster')) return UserCog
+    if (comp.includes('recyclebin')) return Trash2
     if (comp.includes('client')) return Building
     if (comp.includes('contributor')) return User
+    if (comp.includes('invoice')) return Receipt
     if (comp.includes('privacypolicy')) return Lock
     if (comp.includes('termsandconditions')) return FileText
     if (comp.includes('otherservices')) return Globe
@@ -60,8 +68,12 @@ function Sidebar({ state, onClose, userType, menu, isLoading, error }: SidebarPr
     if (comp.includes('dashboard')) return 'Dashboard'
     if (comp.includes('servicerequest')) return 'Service Requests'
     if (comp.includes('addemployee')) return 'Add Employee'
+    if (comp.includes('orgmaster')) return 'Org Master'
+    if (comp.includes('usermaster')) return 'User Master'
+    if (comp.includes('recyclebin')) return 'Recycle Bin'
     if (comp.includes('client')) return 'Client'
     if (comp.includes('contributor')) return 'Contributor'
+    if (comp.includes('invoice')) return 'Invoices & Reports'
     if (comp.includes('privacypolicy')) return 'Privacy Policy'
     if (comp.includes('termsandconditions')) return 'Terms & Conditions'
     if (comp.includes('otherservices')) return 'Other Services'
@@ -78,14 +90,15 @@ function Sidebar({ state, onClose, userType, menu, isLoading, error }: SidebarPr
       />
 
       <aside
-        className={`fixed md:sticky top-0 left-0 h-screen bg-custom-gradient flex flex-col justify-between font-securitas select-none text-white border-r border-white/5 overflow-y-auto transition-all duration-300 z-50 ${state === 'full'
+        className={`fixed md:sticky top-0 left-0 h-screen bg-custom-gradient flex flex-col justify-between font-securitas select-none text-white border-r border-white/5 overflow-hidden transition-all duration-300 z-50 ${state === 'full'
           ? 'translate-x-0 w-64 p-6'
           : state === 'mini'
             ? 'translate-x-0 w-20 p-4'
             : '-translate-x-full md:translate-x-0 md:w-0 md:p-0 md:border-0 overflow-hidden'
           }`}
       >
-        <div className="flex flex-col">
+        {/* Top Fixed Header Section */}
+        <div className="flex flex-col shrink-0">
           {/* Securitas Logo (three red circles and text in white) */}
           <div className={`flex flex-col mb-2 shrink-0 ${state === 'mini' ? 'items-center' : 'items-start'}`}>
             <div className="flex gap-1.5 mb-1.5">
@@ -107,14 +120,16 @@ function Sidebar({ state, onClose, userType, menu, isLoading, error }: SidebarPr
               MENU
             </span>
           )}
+        </div>
 
-          {/* Render Menu Items */}
+        {/* Scrollable Menu Items Section */}
+        <div className="flex-1 min-h-0 sidebar-scroll pr-1">
           {isLoading ? (
             <p className="text-xs text-white/55">Loading menu...</p>
           ) : error ? (
             <p className="text-xs text-red-300">{error}</p>
           ) : (
-            <nav className="flex flex-col gap-1">
+            <nav className="flex flex-col gap-1 pb-2">
               {menuItems.map((item) => {
                 const path = menuPath(item.Route)
                 const isActive = location.pathname === path
@@ -183,10 +198,10 @@ function Sidebar({ state, onClose, userType, menu, isLoading, error }: SidebarPr
           )}
         </div>
 
-        {/* Footer Section */}
-        <div className="flex flex-col shrink-0 mt-6">
+        {/* Fixed Bottom Footer Section */}
+        <div className="flex flex-col shrink-0 pt-4 mt-auto">
           {/* Separator line */}
-          <div className="w-full border-t border-white/10 mb-6"></div>
+          <div className="w-full border-t border-white/10 mb-4"></div>
 
           {/* Logout link button */}
           <button

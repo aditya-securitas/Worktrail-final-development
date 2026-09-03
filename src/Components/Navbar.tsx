@@ -1,6 +1,7 @@
+import React from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../useAuth'
-import { Menu, LogOut } from 'lucide-react'
+import { Menu, LogOut, User as UserIcon } from 'lucide-react'
 
 type NavbarProps = {
   sidebarState: 'full' | 'mini' | 'closed'
@@ -8,7 +9,7 @@ type NavbarProps = {
 }
 
 function Navbar({ sidebarState, onToggleSidebar }: NavbarProps) {
-  const { logout } = useAuth()
+  const { user, logout } = useAuth()
   const navigate = useNavigate()
 
   const handleLogout = () => {
@@ -16,9 +17,12 @@ function Navbar({ sidebarState, onToggleSidebar }: NavbarProps) {
     navigate('/login', { replace: true })
   }
 
+  const displayName = user?.username || 'User'
+  const companyName = user?.CompanyName
+
   return (
-    <header className="flex items-center justify-between w-full h-16 mb-6 select-none bg-white rounded-xl p-2">
-      {/* Toggle button and Brand */}
+    <header className="flex items-center justify-between w-full h-16 mb-6 select-none bg-white rounded-2xl p-3 shadow-xs border border-slate-100">
+      {/* Toggle button and Welcome text */}
       <div className="w-full flex justify-between items-center gap-4">
         <button
           className="p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-[#031f30] transition-colors cursor-pointer select-none focus:outline-none"
@@ -28,25 +32,26 @@ function Navbar({ sidebarState, onToggleSidebar }: NavbarProps) {
         >
           <Menu className="w-5 h-5" />
         </button>
-        <div className='flex items-center gap-2'>
 
-          <div className="flex items-center gap-2">
-            Welcome in, (Aditya Raghav)
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 text-xs sm:text-sm font-medium text-slate-600">
+            <span>Welcome,</span>
+            <span className="font-bold text-slate-900 bg-slate-100 px-3 py-1 rounded-full border border-slate-200/60 flex items-center gap-1.5">
+              <UserIcon className="w-3.5 h-3.5 text-[#0680A6]" />
+              {displayName}
+            </span>
           </div>
-          <span className='text-[14px] font-bold text-salte-400 ml-1'>(TCS)</span>
+          {companyName && (
+            <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200/60 hidden sm:inline-flex">
+              {companyName}
+            </span>
+          )}
         </div>
       </div>
 
       {/* Quick Actions */}
       <div className="flex items-center gap-3">
-        {/* <button
-          className="flex items-center gap-2 px-4 py-2 text-xs font-bold text-slate-500 hover:text-slate-800 transition-colors cursor-pointer rounded-full bg-slate-100 hover:bg-slate-200 focus:outline-none"
-          type="button"
-          onClick={handleLogout}
-        >
-          <LogOut className="w-3.5 h-3.5" />
-          <span>Log out</span>
-        </button> */}
+        {/* Quick action buttons if needed */}
       </div>
     </header>
   )

@@ -1,5 +1,6 @@
 
 import React from "react";
+import * as XLSX from "xlsx";
 import { useAuth } from '../useAuth'
 import {
     Search,
@@ -16,7 +17,14 @@ import {
     ShieldAlert,
     Filter,
     UserCheck,
-    Briefcase
+    FileSpreadsheet,
+    FileText,
+    Info,
+    Sparkles,
+    ArrowRight,
+    X,
+    FileCheck,
+    HelpCircle
 } from 'lucide-react'
 
 // Custom button style
@@ -83,6 +91,48 @@ const ALL_API_FIELDS: Record<string, any> = {
     EligibilityToRehire: null,
     Contributor: null, // Will be filled later
 };
+
+/**
+ * Standard sample rows formatted identically to the Create New Employee Form
+ */
+export const SAMPLE_BULK_ROWS = [
+    {
+        "First Name": "Rahul",
+        "Middle Name": "Kumar",
+        "Last Name": "Sharma",
+        "Employee Code": "EMP-1001",
+        "Email": "rahul.sharma@example.com",
+        "Mobile No": "9876543210",
+        "Department": "Engineering",
+        "Last Position Held": "Senior Software Engineer",
+        "Date of Joining": "2021-04-15",
+        "Date of Leaving": "2024-01-31",
+        "Last Salary Annual": 1200000,
+        "Employment Type": "Full-Time",
+        "Exit Formalities": "Completed",
+        "Any Behaviour Issue": "None",
+        "Eligibility to Rehire": "Yes",
+        "Contributor": "Securitas"
+    },
+    {
+        "First Name": "Priya",
+        "Middle Name": "",
+        "Last Name": "Verma",
+        "Employee Code": "EMP-1002",
+        "Email": "priya.verma@example.com",
+        "Mobile No": "9812345678",
+        "Department": "Human Resources",
+        "Last Position Held": "HR Manager",
+        "Date of Joining": "2020-08-01",
+        "Date of Leaving": "2023-11-30",
+        "Last Salary Annual": 950000,
+        "Employment Type": "Full-Time",
+        "Exit Formalities": "Completed",
+        "Any Behaviour Issue": "None",
+        "Eligibility to Rehire": "Yes",
+        "Contributor": "Securitas"
+    }
+];
 /**
  * For a row from excel (with keys potentially like "Last Name"), produce the correct API JSON shape,
  * preserving field names/values as expected for the API.
@@ -320,9 +370,34 @@ function AddEmployee() {
         setActiveTable(null);
     };
 
+    const [isDragging, setIsDragging] = React.useState(false);
+
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files.length > 0) {
             setSelectedFile(e.target.files[0]);
+        }
+    };
+
+    const handleDragOver = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragging(true);
+    };
+
+    const handleDragLeave = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragging(false);
+    };
+
+    const handleDrop = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragging(false);
+        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            const file = e.dataTransfer.files[0];
+            if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+                setSelectedFile(file);
+            } else {
+                toast.error("Please select a valid Excel file (.xlsx or .xls)");
+            }
         }
     };
 
@@ -331,78 +406,75 @@ function AddEmployee() {
         setForm(prev => ({ ...prev, Contributor: e.target.value }));
     };
 
-    const readCsvFile = async (file: File): Promise<any[]> => {
+    const handleDownloadExcelSample = () => {
+        try {
+            const worksheet = XLSX.utils.json_to_sheet(SAMPLE_BULK_ROWS);
+            // Pre-configure column widths for pleasant viewing in Excel
+            worksheet['!cols'] = [
+                { wch: 15 }, // First Name
+                { wch: 15 }, // Middle Name
+                { wch: 15 }, // Last Name
+                { wch: 18 }, // Employee Code
+                { wch: 28 }, // Email
+                { wch: 16 }, // Mobile No
+                { wch: 20 }, // Department
+                { wch: 28 }, // Last Position Held
+                { wch: 18 }, // Date of Joining
+                { wch: 18 }, // Date of Leaving
+                { wch: 20 }, // Last Salary Annual
+                { wch: 18 }, // Employment Type
+                { wch: 18 }, // Exit Formalities
+                { wch: 22 }, // Any Behaviour Issue
+                { wch: 22 }, // Eligibility to Rehire
+                { wch: 20 }  // Contributor
+            ];
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, 'Sample_Employees');
+            XLSX.writeFile(workbook, 'employee_bulk_upload_sample.xlsx');
+            toast.success("Downloaded sample Excel (.xlsx) template!");
+        } catch (err: any) {
+            toast.error(`Failed to download template: ${err?.message || 'Unknown error'}`);
+        }
+    };
+
+    const readUploadedFile = async (file: File): Promise<any[]> => {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
-            reader.onload = (evt: any) => {
+            reader.onload = (e: any) => {
                 try {
-                    const text = evt.target.result as string;
-                    const lines: string[] = [];
-                    let row: string[] = [""];
-                    let inQuotes = false;
-
-                    for (let i = 0; i < text.length; i++) {
-                        const c = text[i];
-                        const next = text[i+1];
-                        if (c === '"') {
-                            if (inQuotes && next === '"') {
-                                row[row.length - 1] += '"';
-                                i++;
-                            } else {
-                                inQuotes = !inQuotes;
-                            }
-                        } else if (c === ',' && !inQuotes) {
-                            row.push("");
-                        } else if ((c === '\r' || c === '\n') && !inQuotes) {
-                            if (c === '\r' && next === '\n') {
-                                i++;
-                            }
-                            lines.push(JSON.stringify(row));
-                            row = [""];
-                        } else {
-                            row[row.length - 1] += c;
-                        }
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array', cellDates: true });
+                    const firstSheetName = workbook.SheetNames[0];
+                    if (!firstSheetName) {
+                        return resolve([]);
                     }
-                    if (row.length > 1 || row[0] !== "") {
-                        lines.push(JSON.stringify(row));
-                    }
-
-                    if (lines.length === 0) return resolve([]);
-                    const headers = JSON.parse(lines[0]) as string[];
-                    const json: any[] = [];
-                    for (let i = 1; i < lines.length; i++) {
-                        const values = JSON.parse(lines[i]) as string[];
-                        const item: Record<string, any> = {};
-                        headers.forEach((header, idx) => {
-                            item[header.trim()] = values[idx] !== undefined ? values[idx].trim() : "";
-                        });
-                        json.push(item);
-                    }
-                    resolve(json);
+                    const worksheet = workbook.Sheets[firstSheetName];
+                    const jsonRows = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+                    resolve(jsonRows);
                 } catch (err) {
                     reject(err);
                 }
             };
             reader.onerror = (err) => reject(err);
-            reader.readAsText(file);
+            reader.readAsArrayBuffer(file);
         });
     };
 
     const handleBulkSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!selectedFile) {
-            toast.error("Please select a CSV file.");
+            toast.error("Please select an Excel file (.xlsx or .xls).");
             return;
         }
         setUploading(true);
 
         try {
-            const csvRows = await readCsvFile(selectedFile);
-            if (!Array.isArray(csvRows) || csvRows.length === 0) {
-                throw new Error("CSV file is empty or format is incorrect");
+            const rawRows = await readUploadedFile(selectedFile);
+            if (!Array.isArray(rawRows) || rawRows.length === 0) {
+                throw new Error("Excel file is empty or format is invalid. Please use the sample template.");
             }
-            // Map and normalize each row using the correct company (always correct for Contributor/Client)
-            const normalizedRows = xlsxRows.map(row => normalizeBulkRow(row, company));
+            // Map and normalize each row using the correct company
+            const normalizedRows = rawRows.map(row => normalizeBulkRow(row, company));
             const rowsToSend = normalizedRows;
 
             console.log("Sending bulk JSON to API:", rowsToSend);
@@ -429,11 +501,11 @@ function AddEmployee() {
             setUploading(false);
             setSelectedFile(null);
             setCompany(initialCompany);
-            toast.success("Bulk upload submitted!");
+            toast.success(`Successfully uploaded ${rowsToSend.length} employee records!`);
             // --- Go back to main screen after success ---
             setTimeout(() => {
                 handleBack();
-            }, 1200); // Give user time to see toast
+            }, 1200);
         } catch (err: any) {
             setUploading(false);
             toast.error(`Bulk upload failed: ${err?.message || "Unknown error"}`);
@@ -1147,68 +1219,266 @@ function AddEmployee() {
                 </button>
             )}
 
-            {activePanel === "bulk" && (
-                <a
-                    href="/sample_bulk_upload.csv"
-                    download="sample_bulk_upload.csv"
-                    className="absolute left-6 top-[72px] h-[38px] px-5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-bold border border-emerald-200/50 rounded-lg shadow-xs active:scale-95 transition-all text-xs inline-flex items-center justify-center cursor-pointer mb-2.5 decoration-0"
-                >
-                    Download Sample CSV
-                </a>
-            )}
-
             {activePanel !== null && (
-                <div className={activePanel === 'bulk' 
-                    ? 'w-full max-w-[575px] min-h-[40vh] h-auto mx-auto mt-10 relative flex flex-col items-center justify-center gap-4 box-border'
-                    : 'w-full mx-auto mt-8 p-0 box-border relative'
-                }>
+                <div className="w-full mx-auto mt-4 p-0 box-border relative">
                     {activePanel === "bulk" && (
-                        <form
-                            className="w-full flex flex-col items-center gap-8 max-w-[550px] mx-auto bg-white p-8 border border-slate-100 rounded-2xl shadow-sm mt-16 box-border"
-                            onSubmit={handleBulkSubmit}
-                            encType="multipart/form-data"
-                            autoComplete="off"
-                        >
-                            <h3 className="m-0 text-lg font-bold text-slate-800 text-center w-full">Bulk Upload Employees</h3>
-                            <div className="w-full flex flex-row items-center justify-center gap-3 flex-wrap">
-                                <input
-                                    type="file"
-                                    accept=".csv"
-                                    onChange={handleFileChange}
-                                    className="flex-[1_1_180px] min-w-0 h-10 border border-slate-200 rounded-lg px-3.5 py-1.5 text-sm text-slate-800 bg-white focus:border-indigo-500 focus:outline-none max-w-[240px]"
-                                    required
-                                />
-                                {showContributorField && (
-                                    showCompanyDropdown ? (
-                                        <select
-                                            value={company}
-                                            onChange={handleCompanyChange}
-                                            className="flex-[1_1_130px] h-10 border border-slate-200 rounded-lg px-3 text-sm text-slate-800 bg-white focus:border-indigo-500 focus:outline-none max-w-[150px]"
-                                            required
-                                        >
-                                            <option value="Contributor">Contributor</option>
-                                            <option value="TCS">TCS</option>
-                                            <option value="Securitas">Securitas</option>
-                                        </select>
-                                    ) : (
-                                        <input
-                                            type="text"
-                                            value={company}
-                                            readOnly
-                                            className="flex-[1_1_130px] h-10 border border-slate-200 rounded-lg px-3 text-sm text-slate-400 bg-slate-50 cursor-not-allowed max-w-[150px]"
-                                            tabIndex={-1}
-                                        />
-                                    )
-                                )}
+                        <div className="w-full max-w-5xl mx-auto flex flex-col gap-8">
+                            {/* Hero Header */}
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 sm:p-8 rounded-3xl bg-gradient-to-r from-[#031f30] via-[#063352] to-[#0680A6] text-white shadow-xl relative overflow-hidden">
+                                <div className="absolute top-0 right-0 w-80 h-80 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20"></div>
+                                <div className="relative z-10">
+                                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md text-[11px] font-bold tracking-wider uppercase text-emerald-300 mb-3 border border-white/10">
+                                        <Sparkles className="w-3.5 h-3.5" />
+                                        Batch Ingestion Engine
+                                    </div>
+                                    <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+                                        Bulk Employee Onboarding
+                                    </h2>
+                                    <p className="text-xs sm:text-sm text-slate-300 mt-1 max-w-xl">
+                                        Download the pre-formatted Excel sheet, fill your candidate verification records, and upload for automated batch processing.
+                                    </p>
+                                </div>
+
+                                <button
+                                    type="button"
+                                    onClick={handleBack}
+                                    className="self-start sm:self-center inline-flex items-center gap-2 px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-full font-bold text-xs backdrop-blur-md border border-white/20 transition-all active:scale-95 cursor-pointer shrink-0"
+                                >
+                                    <ArrowLeft className="w-4 h-4" /> Back to Dashboard
+                                </button>
                             </div>
-                            <button
-                                type="submit"
-                                className={btnClass}
-                                disabled={uploading}
-                            >
-                                {uploading ? "Submitting..." : "Submit"}
-                            </button>
-                        </form>
+
+                            {/* 2-Step Action Grid */}
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                {/* Step 1: Download Template */}
+                                <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
+                                    <div>
+                                        <div className="flex items-center justify-between gap-4 mb-4">
+                                            <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold shadow-xs">
+                                                <FileSpreadsheet className="w-6 h-6" />
+                                            </div>
+                                            <span className="px-3 py-1 text-[11px] font-extrabold tracking-wider uppercase bg-emerald-100/70 text-emerald-800 rounded-full">
+                                                Step 1
+                                            </span>
+                                        </div>
+
+                                        <h3 className="text-lg sm:text-xl font-bold text-slate-900 mb-2">
+                                            Download Excel Template
+                                        </h3>
+                                        <p className="text-xs sm:text-sm text-slate-500 leading-relaxed mb-6">
+                                            Get the official Excel spreadsheet (<code>.xlsx</code>) pre-configured with headers and sample records matching the Single Employee Entry form.
+                                        </p>
+
+                                        {/* Included Column Chips */}
+                                        <div className="mb-6">
+                                            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-2.5">
+                                                Pre-configured Columns (16 Fields):
+                                            </span>
+                                            <div className="flex flex-wrap gap-1.5">
+                                                {[
+                                                    "First Name",
+                                                    "Middle Name",
+                                                    "Last Name",
+                                                    "Employee Code",
+                                                    "Email",
+                                                    "Mobile No",
+                                                    "Department",
+                                                    "Last Position Held",
+                                                    "Date of Joining",
+                                                    "Date of Leaving",
+                                                    "Annual Salary",
+                                                    "Employment Type",
+                                                    "Exit Formalities",
+                                                    "Any Behaviour Issue",
+                                                    "Eligibility to Rehire",
+                                                    "Contributor"
+                                                ].map((col, idx) => (
+                                                    <span
+                                                        key={idx}
+                                                        className="px-2.5 py-1 text-[11px] font-medium bg-slate-100 text-slate-700 rounded-lg border border-slate-200/70"
+                                                    >
+                                                        {col}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <button
+                                        type="button"
+                                        onClick={handleDownloadExcelSample}
+                                        className="w-full flex items-center justify-center gap-3 py-3.5 px-6 bg-gradient-to-r from-emerald-500 to-teal-600 hover:brightness-110 active:scale-[0.99] text-white rounded-2xl font-bold text-sm shadow-md hover:shadow-lg transition-all cursor-pointer select-none"
+                                    >
+                                        <Download className="w-5 h-5 shrink-0" />
+                                        <span>Download Sample Template (.xlsx)</span>
+                                    </button>
+                                </div>
+
+                                {/* Step 2: Upload Completed File */}
+                                <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
+                                    <form onSubmit={handleBulkSubmit} className="flex flex-col h-full justify-between">
+                                        <div>
+                                            <div className="flex items-center justify-between gap-4 mb-4">
+                                                <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold shadow-xs">
+                                                    <Upload className="w-6 h-6" />
+                                                </div>
+                                                <span className="px-3 py-1 text-[11px] font-extrabold tracking-wider uppercase bg-indigo-100/70 text-indigo-800 rounded-full">
+                                                    Step 2
+                                                </span>
+                                            </div>
+
+                                            <h3 className="text-lg sm:text-xl font-bold text-slate-900 mb-2">
+                                                Upload Completed Sheet
+                                            </h3>
+                                            <p className="text-xs sm:text-sm text-slate-500 leading-relaxed mb-6">
+                                                Select or drop your populated Excel spreadsheet (<code>.xlsx</code> / <code>.xls</code>) to validate and insert records.
+                                            </p>
+
+                                            {/* Drag & Drop Zone */}
+                                            <div
+                                                onDragOver={handleDragOver}
+                                                onDragLeave={handleDragLeave}
+                                                onDrop={handleDrop}
+                                                className={`relative border-2 border-dashed rounded-2xl p-6 text-center transition-all cursor-pointer ${
+                                                    isDragging
+                                                        ? 'border-indigo-500 bg-indigo-50/50 scale-[1.01]'
+                                                        : selectedFile
+                                                        ? 'border-emerald-300 bg-emerald-50/30'
+                                                        : 'border-slate-300 hover:border-indigo-400 bg-slate-50/50 hover:bg-slate-50'
+                                                }`}
+                                            >
+                                                <input
+                                                    type="file"
+                                                    accept=".xlsx, .xls"
+                                                    onChange={handleFileChange}
+                                                    id="bulk-excel-input"
+                                                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10"
+                                                />
+
+                                                {selectedFile ? (
+                                                    <div className="flex items-center justify-between gap-3 p-3 bg-white rounded-xl border border-emerald-200 shadow-2xs">
+                                                        <div className="flex items-center gap-3 min-w-0 text-left">
+                                                            <div className="w-10 h-10 rounded-lg bg-emerald-500 text-white flex items-center justify-center shrink-0">
+                                                                <FileSpreadsheet className="w-5 h-5" />
+                                                            </div>
+                                                            <div className="truncate">
+                                                                <p className="text-xs sm:text-sm font-bold text-slate-900 truncate">
+                                                                    {selectedFile.name}
+                                                                </p>
+                                                                <p className="text-[11px] text-slate-500 font-mono">
+                                                                    {(selectedFile.size / 1024).toFixed(1)} KB • Ready to submit
+                                                                </p>
+                                                            </div>
+                                                        </div>
+
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setSelectedFile(null);
+                                                            }}
+                                                            className="relative z-20 text-slate-400 hover:text-rose-500 p-1.5 rounded-lg hover:bg-rose-50 transition-colors"
+                                                            title="Remove file"
+                                                        >
+                                                            <X className="w-4 h-4" />
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex flex-col items-center justify-center py-4">
+                                                        <div className="w-12 h-12 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center mb-2">
+                                                            <Upload className="w-6 h-6" />
+                                                        </div>
+                                                        <p className="text-xs sm:text-sm font-bold text-slate-800">
+                                                            Drop your Excel file here or <span className="text-indigo-600 underline">browse</span>
+                                                        </p>
+                                                        <p className="text-[11px] text-slate-400 mt-1">
+                                                            Supports .xlsx and .xls workbooks
+                                                        </p>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Company Select if applicable */}
+                                            {showContributorField && (
+                                                <div className="mt-4 text-left">
+                                                    <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block mb-1.5">
+                                                        Target Contributor / Client Organization
+                                                    </label>
+                                                    {showCompanyDropdown ? (
+                                                        <select
+                                                            value={company}
+                                                            onChange={handleCompanyChange}
+                                                            className="w-full h-11 border border-slate-200 rounded-xl px-3.5 text-xs sm:text-sm text-slate-800 bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 outline-none"
+                                                            required
+                                                        >
+                                                            <option value="Contributor">Contributor</option>
+                                                            <option value="TCS">TCS</option>
+                                                            <option value="Securitas">Securitas</option>
+                                                        </select>
+                                                    ) : (
+                                                        <input
+                                                            type="text"
+                                                            value={company}
+                                                            readOnly
+                                                            className="w-full h-11 border border-slate-200 rounded-xl px-3.5 text-xs sm:text-sm text-slate-400 bg-slate-50 cursor-not-allowed"
+                                                            tabIndex={-1}
+                                                        />
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <button
+                                            type="submit"
+                                            disabled={uploading || !selectedFile}
+                                            className="mt-6 w-full flex items-center justify-center gap-2 py-3.5 px-6 bg-gradient-to-r from-[#10B981] to-[#5850EC] hover:brightness-110 active:scale-[0.99] text-white rounded-2xl font-bold text-sm shadow-md hover:shadow-lg transition-all cursor-pointer disabled:grayscale disabled:opacity-50 disabled:cursor-not-allowed select-none"
+                                        >
+                                            <FileCheck className="w-5 h-5 shrink-0" />
+                                            <span>{uploading ? "Processing & Ingesting..." : "Process & Upload Excel File"}</span>
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+
+                            {/* Guidelines & Compliance Card */}
+                            <div className="bg-slate-50 border border-slate-200/80 rounded-3xl p-6 sm:p-8">
+                                <div className="flex items-center gap-2 mb-4 text-slate-900">
+                                    <Info className="w-5 h-5 text-indigo-600" />
+                                    <h4 className="text-sm sm:text-base font-bold">
+                                        Data Formatting Guidelines
+                                    </h4>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <div className="bg-white p-4 rounded-2xl border border-slate-200/70">
+                                        <span className="text-xs font-bold text-slate-900 block mb-1">
+                                            📅 Date Format
+                                        </span>
+                                        <p className="text-xs text-slate-500 leading-relaxed">
+                                            Use standard <code>YYYY-MM-DD</code> dates (e.g. <code>2024-01-31</code>) for Joining & Leaving dates.
+                                        </p>
+                                    </div>
+
+                                    <div className="bg-white p-4 rounded-2xl border border-slate-200/70">
+                                        <span className="text-xs font-bold text-slate-900 block mb-1">
+                                            💼 Employment Types
+                                        </span>
+                                        <p className="text-xs text-slate-500 leading-relaxed">
+                                            Accepted values: <code>Full-Time</code>, <code>Part-Time</code>, <code>Contract</code>, or <code>Intern</code>.
+                                        </p>
+                                    </div>
+
+                                    <div className="bg-white p-4 rounded-2xl border border-slate-200/70">
+                                        <span className="text-xs font-bold text-slate-900 block mb-1">
+                                            💰 Salary & Numbers
+                                        </span>
+                                        <p className="text-xs text-slate-500 leading-relaxed">
+                                            Input numeric salary values without currency symbols or commas (e.g. <code>1200000</code>).
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     )}
 
                     {activePanel === "new" && (

@@ -6,6 +6,7 @@ import {
   ADMIN_MENU,
   FASCILATOR_MENU,
   CONTRIBUTOR_MENU,
+  CONTRIBUTOR_ADMIN_MENU,
   CLIENT_MENU,
   type AuthUser
 } from './auth-context'
@@ -16,6 +17,9 @@ const MENU_MAP: Record<string, any> = {
   admin: ADMIN_MENU,
   fascilator: FASCILATOR_MENU,
   contributor: CONTRIBUTOR_MENU,
+  contributoradmin: CONTRIBUTOR_ADMIN_MENU,
+  admin_contributor: CONTRIBUTOR_ADMIN_MENU,
+  'contributor admin': CONTRIBUTOR_ADMIN_MENU,
   client: CLIENT_MENU
 }
 
@@ -33,7 +37,9 @@ const TOKEN_STORAGE_KEY = 'worktrail_token'
 
 function getMenuForUserType(usertype: string) {
   const ut = usertype.toLowerCase()
-  if (ut === 'superadmin' || ut === 'admin') return SUPERADMIN_MENU
+  if (ut === 'superadmin') return SUPERADMIN_MENU
+  if (ut === 'admin') return ADMIN_MENU
+  if (ut === 'contributoradmin' || ut === 'admin_contributor' || ut === 'contributor admin') return CONTRIBUTOR_ADMIN_MENU
   if (ut === 'contributor' || ut === 'fascilator') return CONTRIBUTOR_MENU
   if (ut === 'client') return CLIENT_MENU
   return []
