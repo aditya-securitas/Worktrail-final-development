@@ -264,12 +264,12 @@ export default function ConUserAddEmployee() {
     const [isDragging, setIsDragging] = useState(false);
 
     // Toast notification state
-    const [toastState, setToastState] = useState<{ message: string; type: "success" | "error" | null }>({
+    const [toastState, setToastState] = useState<{ message: string; type: "success" | "error" | "info" | null }>({
         message: "",
         type: null
     });
 
-    const showToast = (message: string, type: "success" | "error") => {
+    const showToast = (message: string, type: "success" | "error" | "info") => {
         setToastState({ message, type });
         setTimeout(() => setToastState({ message: "", type: null }), 3500);
     };
@@ -940,6 +940,8 @@ export default function ConUserAddEmployee() {
                     className={`fixed top-5 left-1/2 -translate-x-1/2 z-[9999] px-6 py-3 rounded-lg font-bold text-sm text-white shadow-lg transition-all duration-300 ${
                         toastState.type === "success"
                             ? "bg-emerald-500 border border-emerald-400/20"
+                            : toastState.type === "info"
+                            ? "bg-sky-500 border border-sky-400/20"
                             : "bg-rose-500 border border-rose-400/20"
                     }`}
                 >
