@@ -767,7 +767,7 @@ function AddEmployee() {
 
     const handleSearch = async () => {
         if (!searchEmployeeCode.trim()) {
-            toast.error("Please enter an EmployeeCode to search.");
+            handleAllEmployees();
             return;
         }
         setSearchLoading(true);
@@ -1239,17 +1239,15 @@ function AddEmployee() {
                                 <span className="truncate">{searchLoading ? "Searching..." : "Search"}</span>
                             </button>
 
-                            {canEdit && (
-                                <button
-                                    type="button"
-                                    className="flex items-center justify-center gap-1.5 sm:gap-2.5 h-10 sm:h-11 px-3 sm:px-6 bg-gradient-to-r from-[#10B981] to-[#5850EC] hover:brightness-110 hover:shadow-[0_4px_15px_rgba(8,33,54,0.25)] active:scale-[0.98] text-white font-bold text-[10px] sm:text-xs tracking-wider uppercase rounded-full transition-all shadow-md cursor-pointer select-none text-center"
-                                    onClick={handleAllEmployees}
-                                    disabled={allEmployeesLoading}
-                                >
-                                    <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
-                                    <span className="truncate">{allEmployeesLoading ? "Loading..." : "View Employee Data"}</span>
-                                </button>
-                            )}
+                            <button
+                                type="button"
+                                className="flex items-center justify-center gap-1.5 sm:gap-2.5 h-10 sm:h-11 px-3 sm:px-6 bg-gradient-to-r from-[#10B981] to-[#5850EC] hover:brightness-110 hover:shadow-[0_4px_15px_rgba(8,33,54,0.25)] active:scale-[0.98] text-white font-bold text-[10px] sm:text-xs tracking-wider uppercase rounded-full transition-all shadow-md cursor-pointer select-none text-center"
+                                onClick={handleAllEmployees}
+                                disabled={allEmployeesLoading}
+                            >
+                                <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+                                <span className="truncate">{allEmployeesLoading ? "Loading..." : "View All Employee Data"}</span>
+                            </button>
 
                             <button
                                 type="button"
@@ -1277,7 +1275,7 @@ function AddEmployee() {
                     )}
 
                     {/* Show ONLY ONE TABLE at a time based on activeTable */}
-                    {canEdit && activeTable === 'all' && (allEmployeesResults && allEmployeesResults.length > 0) && (
+                    {activeTable === 'all' && (allEmployeesResults && allEmployeesResults.length > 0) && (
                         renderTable(allEmployeesResults, "All Employee Records")
                     )}
                 </>

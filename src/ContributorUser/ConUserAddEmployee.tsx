@@ -303,7 +303,7 @@ export default function ConUserAddEmployee() {
 
     const handleSearch = async () => {
         if (!searchEmployeeCode.trim()) {
-            showToast("Please enter an Employee Code to search.", "error");
+            handleAllEmployees();
             return;
         }
         setSearchLoading(true);
@@ -357,13 +357,9 @@ export default function ConUserAddEmployee() {
     };
 
     const handleAllEmployees = async () => {
-        if (!canEdit) {
-            showToast("You do not have permission to view all employee records.", "error");
-            return;
-        }
         setAllEmployeesLoading(true);
         try {
-            const contributorVal = user?.CompanyName || initialCompany || company || "Securitas India";
+            const contributorVal = (user?.CompanyName || initialCompany || company || "Securitas India").trim();
             const bodyPayload: any = {
                 Contributor: contributorVal
             };
@@ -977,17 +973,15 @@ export default function ConUserAddEmployee() {
                                 <span className="truncate">{searchLoading ? "Searching..." : "Search"}</span>
                             </button>
 
-                            {canEdit && (
-                                <button
-                                    type="button"
-                                    className="flex items-center justify-center gap-1.5 sm:gap-2.5 h-10 sm:h-11 px-3 sm:px-6 bg-gradient-to-r from-[#10B981] to-[#5850EC] hover:brightness-110 hover:shadow-[0_4px_15px_rgba(8,33,54,0.25)] active:scale-[0.98] text-white font-bold text-[10px] sm:text-xs tracking-wider uppercase rounded-full transition-all shadow-md cursor-pointer select-none text-center"
-                                    onClick={handleAllEmployees}
-                                    disabled={allEmployeesLoading}
-                                >
-                                    <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
-                                    <span className="truncate">{allEmployeesLoading ? "Loading..." : "View Employee Data"}</span>
-                                </button>
-                            )}
+                            <button
+                                type="button"
+                                className="flex items-center justify-center gap-1.5 sm:gap-2.5 h-10 sm:h-11 px-3 sm:px-6 bg-gradient-to-r from-[#10B981] to-[#5850EC] hover:brightness-110 hover:shadow-[0_4px_15px_rgba(8,33,54,0.25)] active:scale-[0.98] text-white font-bold text-[10px] sm:text-xs tracking-wider uppercase rounded-full transition-all shadow-md cursor-pointer select-none text-center"
+                                onClick={handleAllEmployees}
+                                disabled={allEmployeesLoading}
+                            >
+                                <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+                                <span className="truncate">{allEmployeesLoading ? "Loading..." : "View All Employee Data"}</span>
+                            </button>
 
                             <button
                                 type="button"
@@ -1022,8 +1016,8 @@ export default function ConUserAddEmployee() {
                         </div>
                     )}
 
-                    {canEdit && activeTable === "all" && allEmployeesResults && allEmployeesResults.length > 0 && renderTable(allEmployeesResults, "All Employee Records")}
-                    {canEdit && activeTable === "all" && allEmployeesResults && allEmployeesResults.length === 0 && (
+                    {activeTable === "all" && allEmployeesResults && allEmployeesResults.length > 0 && renderTable(allEmployeesResults, "All Employee Records")}
+                    {activeTable === "all" && allEmployeesResults && allEmployeesResults.length === 0 && (
                         <div className="w-full bg-white rounded-3xl p-10 border border-slate-200/80 shadow-sm text-center flex flex-col items-center justify-center gap-3 animate-fade-in">
                             <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400">
                                 <Users className="w-7 h-7" />
