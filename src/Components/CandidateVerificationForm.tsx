@@ -24,12 +24,22 @@ import {
   AlertCircle,
   CreditCard,
   IndianRupee,
-  Receipt
+  Receipt,
+  LayoutGrid,
+  Zap,
+  FileSpreadsheet,
+  Download,
+  ArrowLeft,
+  UserCheck,
+  Check,
+  Plus
 } from 'lucide-react'
+import * as XLSX from 'xlsx'
 import { useAuth } from '../useAuth'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { API_ENDPOINTS } from '../endpoint'
-
+import Logo_w from '../assets/Img/Logo_w.png'
+import { markClientHasRequests } from '../client-utils'
 declare global {
   interface Window {
     Razorpay?: new (options: RazorpayOptions) => RazorpayInstance
@@ -90,6 +100,125 @@ export type VerificationRecord = {
 export const STORAGE_KEY_VERIFICATION_RECORDS = 'worktrail_verification_records'
 
 /**
+ * Standard pre-formatted sample rows for bulk candidate verification upload (.xlsx)
+ */
+export const SAMPLE_CANDIDATE_BULK_ROWS = [
+  {
+    "Candidate Full Name": "Aarav Sharma",
+    "Candidate Email": "aarav.sharma@tcs.com",
+    "Contact Number": "+91 98234 11223",
+    "Employee Code": "EMP-1001",
+    "Verifier Organization": "Tata Consultancy Services (TCS)",
+    "Designation": "Senior Systems Engineer",
+    "Department": "Digital Cloud Practices",
+    "Date of Joining": "2021-06-15",
+    "Date of Leaving": "2024-03-31",
+    "Currently Employed": "No",
+    "Verification Type": "Standard Employment Verification",
+    "Remarks": "Confirmed relieving date and integrity clearance."
+  },
+  {
+    "Candidate Full Name": "Priya Mukherjee",
+    "Candidate Email": "priya.m@infosys-consult.com",
+    "Contact Number": "+91 99102 33445",
+    "Employee Code": "EMP-1002",
+    "Verifier Organization": "Infosys Limited",
+    "Designation": "Lead Business Analyst",
+    "Department": "Fintech Solutions",
+    "Date of Joining": "2020-01-10",
+    "Date of Leaving": "2023-11-20",
+    "Currently Employed": "No",
+    "Verification Type": "Comprehensive Screening",
+    "Remarks": "Candidate provided experience letter #INF/2023/88."
+  },
+  {
+    "Candidate Full Name": "Rohan Deshmukh",
+    "Candidate Email": "rohan.d@securitas-emp.in",
+    "Contact Number": "+91 97654 88776",
+    "Employee Code": "EMP-1003",
+    "Verifier Organization": "Securitas India",
+    "Designation": "Operations Supervisor",
+    "Department": "Site Security Division",
+    "Date of Joining": "2022-04-01",
+    "Date of Leaving": "Present",
+    "Currently Employed": "Yes",
+    "Verification Type": "Standard Employment Verification",
+    "Remarks": "Currently active employee verification check."
+  }
+]
+
+function formatExcelDate(val: any): string {
+  if (!val) return ''
+  if (val instanceof Date) {
+    return val.toISOString().split('T')[0]
+  }
+  if (typeof val === 'number') {
+    const d = new Date((val - (25567 + 2)) * 86400 * 1000)
+    return isNaN(d.getTime()) ? '' : d.toISOString().split('T')[0]
+  }
+  const str = String(val).trim()
+  if (str.toLowerCase() === 'present') return 'Present'
+  return str
+}
+
+function parseBooleanEmployed(val: any): boolean {
+  if (!val) return false
+  const s = String(val).toLowerCase().trim()
+  return s === 'yes' || s === 'true' || s === '1' || s === 'present' || s === 'currently employed'
+}
+
+function normalizeBulkCandidateRow(row: any): {
+  candidateName: string
+  employeeId: string
+  candidateEmail: string
+  contactNumber: string
+  verifierName: string
+  designation: string
+  department: string
+  dateOfJoining: string
+  dateOfLeaving: string
+  isCurrentlyEmployed: boolean
+  verificationType: string
+  remarks: string
+} {
+  const getVal = (possibleKeys: string[]): string => {
+    for (const key of possibleKeys) {
+      if (row[key] !== undefined && row[key] !== null) {
+        return String(row[key]).trim()
+      }
+      const lowerKey = key.toLowerCase()
+      const foundKey = Object.keys(row).find(k => k.toLowerCase().trim() === lowerKey)
+      if (foundKey && row[foundKey] !== undefined && row[foundKey] !== null) {
+        return String(row[foundKey]).trim()
+      }
+    }
+    return ''
+  }
+
+  const rawDoj = row['Date of Joining'] || row['dateOfJoining'] || row['DOJ'] || row['Joining Date']
+  const rawDol = row['Date of Leaving'] || row['dateOfLeaving'] || row['DOL'] || row['Leaving Date']
+  const rawEmployed = row['Currently Employed'] || row['isCurrentlyEmployed'] || row['Employed']
+
+  const isCurrentlyEmployed = parseBooleanEmployed(rawEmployed)
+
+  return {
+    candidateName: getVal(['Candidate Full Name', 'Candidate Name', 'candidateName', 'Full Name', 'Name', 'First Name']),
+    employeeId: getVal(['Employee Code', 'employeeId', 'Employee ID', 'Emp Code', 'Emp ID']),
+    candidateEmail: getVal(['Candidate Email', 'candidateEmail', 'Email', 'Email Address', 'EmailID']),
+    contactNumber: getVal(['Contact Number', 'contactNumber', 'Mobile No', 'Phone', 'Contact']),
+    verifierName: getVal(['Verifier Organization', 'verifierName', 'Organization', 'Company', 'Company Name']),
+    designation: getVal(['Designation', 'designation', 'Position', 'Last Position Held']),
+    department: getVal(['Department', 'department']),
+    dateOfJoining: formatExcelDate(rawDoj),
+    dateOfLeaving: isCurrentlyEmployed ? 'Present' : formatExcelDate(rawDol),
+    isCurrentlyEmployed,
+    verificationType: getVal(['Verification Type', 'verificationType']) || 'Standard Employment Verification',
+    remarks: getVal(['Remarks', 'remarks', 'Comments', 'Notes'])
+  }
+}
+
+
+/**
  * Extract a clean brand domain slug dynamically from any organization name.
  * e.g. "Tata Consultancy Services (TCS)" -> "tcs.com"
  * e.g. "Securitas India Ltd" -> "securitas.com"
@@ -140,14 +269,20 @@ export function getOrgLogoUrl(name: string): string {
  */
 export function OrgLogo({
   name,
+  organizationName,
   className = 'w-9 h-9',
+  size,
   fallbackTextSize = 'text-sm'
 }: {
-  name: string
+  name?: string
+  organizationName?: string
   className?: string
+  size?: string
   fallbackTextSize?: string
 }) {
-  const domain = getDynamicBrandDomain(name)
+  const effectiveName = name || organizationName || ''
+  const sizeClass = size === 'sm' ? 'w-8 h-8' : size === 'lg' ? 'w-12 h-12' : className
+  const domain = getDynamicBrandDomain(effectiveName)
   const [imgUrlIndex, setImgUrlIndex] = useState<number>(0)
   const [hasError, setHasError] = useState(false)
 
@@ -174,20 +309,20 @@ export function OrgLogo({
   if (!domain || hasError) {
     return (
       <div
-        className={`${className} rounded-xl bg-gradient-to-tr from-[#0680A6] to-[#10B981] flex items-center justify-center text-white font-extrabold ${fallbackTextSize} shadow-sm shrink-0 select-none`}
+        className={`${sizeClass} rounded-xl bg-gradient-to-tr from-[#0680A6] to-[#10B981] flex items-center justify-center text-white font-extrabold ${fallbackTextSize} shadow-sm shrink-0 select-none`}
       >
-        {(name ? name.charAt(0) : 'O').toUpperCase()}
+        {(effectiveName ? effectiveName.charAt(0) : 'O').toUpperCase()}
       </div>
     )
   }
 
   return (
     <div
-      className={`${className} rounded-xl bg-white border border-slate-200/90 p-1.5 flex items-center justify-center shadow-xs shrink-0 overflow-hidden`}
+      className={`${sizeClass} rounded-xl bg-white border border-slate-200/90 p-1.5 flex items-center justify-center shadow-xs shrink-0 overflow-hidden`}
     >
       <img
         src={logoSources[imgUrlIndex]}
-        alt={name}
+        alt={effectiveName}
         className="w-full h-full object-contain filter drop-shadow-2xs"
         loading="lazy"
         onError={handleImageError}
@@ -252,9 +387,193 @@ function CandidateVerificationForm() {
   } | null>(null)
 
   // Submission & feedback states
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [submissionSuccess, setSubmissionSuccess] = useState(false)
   const [generatedRequestId, setGeneratedRequestId] = useState('')
   const [formError, setFormError] = useState('')
+
+  // Bulk Upload feature states (matching AddEmployee pattern)
+  const [activeMode, setActiveMode] = useState<'single' | 'bulk'>('single')
+  const [bulkFile, setBulkFile] = useState<File | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
+  const [bulkParsedRows, setBulkParsedRows] = useState<ReturnType<typeof normalizeBulkCandidateRow>[]>([])
+  const [bulkUploading, setBulkUploading] = useState(false)
+  const [bulkError, setBulkError] = useState('')
+  const [bulkSuccessMessage, setBulkSuccessMessage] = useState('')
+
+  // Step 1: Download Sample Excel Template
+  const handleDownloadExcelSample = () => {
+    try {
+      const worksheet = XLSX.utils.json_to_sheet(SAMPLE_CANDIDATE_BULK_ROWS)
+      worksheet['!cols'] = [
+        { wch: 22 }, // Candidate Full Name
+        { wch: 28 }, // Candidate Email
+        { wch: 18 }, // Contact Number
+        { wch: 16 }, // Employee Code
+        { wch: 34 }, // Verifier Organization
+        { wch: 25 }, // Designation
+        { wch: 24 }, // Department
+        { wch: 16 }, // Date of Joining
+        { wch: 16 }, // Date of Leaving
+        { wch: 18 }, // Currently Employed
+        { wch: 32 }, // Verification Type
+        { wch: 45 }  // Remarks
+      ]
+      const workbook = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Candidate_Verification_Sample')
+      XLSX.writeFile(workbook, 'candidate_verification_bulk_sample.xlsx')
+    } catch (err: any) {
+      setBulkError(`Failed to download template: ${err?.message || 'Unknown error'}`)
+    }
+  }
+
+  // Step 2: Read & Parse Uploaded Excel File
+  const readUploadedFile = async (file: File): Promise<any[]> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = (e: any) => {
+        try {
+          const data = new Uint8Array(e.target.result)
+          const workbook = XLSX.read(data, { type: 'array', cellDates: true })
+          const firstSheetName = workbook.SheetNames[0]
+          if (!firstSheetName) return resolve([])
+          const worksheet = workbook.Sheets[firstSheetName]
+          const jsonRows = XLSX.utils.sheet_to_json(worksheet, { defval: '' })
+          resolve(jsonRows)
+        } catch (err) {
+          reject(err)
+        }
+      }
+      reader.onerror = (err) => reject(err)
+      reader.readAsArrayBuffer(file)
+    })
+  }
+
+  const handleBulkFileSelected = async (file: File) => {
+    setBulkFile(file)
+    setBulkError('')
+    setBulkSuccessMessage('')
+    try {
+      const rows = await readUploadedFile(file)
+      if (!Array.isArray(rows) || rows.length === 0) {
+        setBulkError('Excel file is empty or format is invalid. Please download and use the official sample template.')
+        setBulkParsedRows([])
+        return
+      }
+      const normalized = rows.map(normalizeBulkCandidateRow).filter(r => r.candidateName && r.candidateName.trim().length > 0)
+      if (normalized.length === 0) {
+        setBulkError('No candidate records detected. Please ensure the "Candidate Full Name" column is filled.')
+        setBulkParsedRows([])
+        return
+      }
+      setBulkParsedRows(normalized)
+    } catch (err: any) {
+      setBulkError(err?.message || 'Failed to parse Excel file.')
+      setBulkParsedRows([])
+    }
+  }
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    setIsDragging(false)
+  }
+
+  const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    setIsDragging(false)
+    const files = e.dataTransfer.files
+    if (files && files[0]) {
+      const file = files[0]
+      if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+        await handleBulkFileSelected(file)
+      } else {
+        setBulkError('Please drop an Excel spreadsheet (.xlsx or .xls).')
+      }
+    }
+  }
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      await handleBulkFileSelected(file)
+    }
+  }
+
+  // Handle Bulk Batch Submission
+  const handleBulkSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!bulkFile || bulkParsedRows.length === 0) {
+      setBulkError('Please select a populated Excel spreadsheet.')
+      return
+    }
+    setBulkUploading(true)
+    setBulkError('')
+
+    try {
+      const todayFormatted = new Date().toISOString().split('T')[0]
+      const newRecords: VerificationRecord[] = bulkParsedRows.map((row, idx) => {
+        const genId = `VR-${Math.floor(100000 + Math.random() * 900000)}`
+        // Match organization from live organizations list
+        const matchedOrg = organizations.find(o => 
+          o.OrganizationName.toLowerCase().includes((row.verifierName || '').toLowerCase()) ||
+          (row.verifierName || '').toLowerCase().includes(o.OrganizationName.toLowerCase())
+        )
+        return {
+          id: `bulk-${Date.now()}-${idx}`,
+          requestId: genId,
+          candidateName: row.candidateName,
+          employeeId: row.employeeId || `EMP-${1000 + idx}`,
+          candidateEmail: row.candidateEmail || '',
+          contactNumber: row.contactNumber || '',
+          verifierId: matchedOrg ? String(matchedOrg.OrganizationID) : '99',
+          verifierName: matchedOrg ? matchedOrg.OrganizationName : (row.verifierName || 'Enterprise Verifier'),
+          verifierCategory: (matchedOrg as any)?.Category || 'Registered Organization',
+          verifierCode: matchedOrg ? `ORG-${matchedOrg.OrganizationID}` : 'VER-BATCH',
+          dateOfJoining: row.dateOfJoining || todayFormatted,
+          dateOfLeaving: row.isCurrentlyEmployed ? 'Present' : (row.dateOfLeaving || todayFormatted),
+          isCurrentlyEmployed: Boolean(row.isCurrentlyEmployed),
+          designation: row.designation || 'N/A',
+          department: row.department || 'General',
+          verificationType: row.verificationType || 'Standard Employment Verification',
+          remarks: row.remarks || 'Bulk candidate verification batch request',
+          uploadedFilesCount: 0,
+          submittedBy: user?.username || user?.FirstName || 'Client User',
+          submittedAt: todayFormatted,
+          status: 'Pending'
+        }
+      })
+
+      // Persist to storage
+      const existing = localStorage.getItem(STORAGE_KEY_VERIFICATION_RECORDS)
+      const recordsList: VerificationRecord[] = existing ? JSON.parse(existing) : []
+      const updatedList = [...newRecords, ...recordsList]
+      localStorage.setItem(STORAGE_KEY_VERIFICATION_RECORDS, JSON.stringify(updatedList))
+
+      // Mark client has requests
+      markClientHasRequests(user, user?.username)
+
+      setBulkSuccessMessage(`Successfully processed & submitted ${newRecords.length} candidate verification requests!`)
+
+      setTimeout(() => {
+        navigate('/dashboard', {
+          state: {
+            newRequestId: newRecords[0]?.requestId,
+            candidateName: `${newRecords.length} Candidates (Bulk Batch)`
+          }
+        })
+      }, 1000)
+    } catch (err: any) {
+      setBulkError(err?.message || 'Failed to submit bulk verification requests.')
+    } finally {
+      setBulkUploading(false)
+    }
+  }
+
 
   // Fetch Organizations from live API
   const fetchOrgs = async () => {
@@ -372,152 +691,65 @@ function CandidateVerificationForm() {
       return
     }
 
-    if (!amount || Number(amount) <= 0) {
-      setFormError('Please enter a valid verification fee amount.')
-      return
-    }
-
-    setPaymentState('processing')
+    setIsSubmitting(true)
 
     try {
-      // 1. Create Order via backend API
-      const createOrderPayload = {
+      // 1. Generate unique Request ID
+      const newId = `VR-${Math.floor(100000 + Math.random() * 900000)}`
+      const todayFormatted = new Date().toISOString().split('T')[0]
+
+      // 2. Build and save verification record directly (Bypassing payment gateway)
+      const newRecord: VerificationRecord = {
+        id: `rec-${Date.now()}`,
+        requestId: newId,
         candidateName: candidateName.trim(),
-        email: candidateEmail.trim(),
-        phone: contactNumber.trim(),
-        organizationId: selectedOrgId || null,
-        amount: Number(amount),
+        employeeId: employeeId.trim(),
+        candidateEmail: candidateEmail.trim(),
+        contactNumber: contactNumber.trim(),
+        verifierId: String(selectedOrg.OrganizationID),
+        verifierName: selectedOrg.OrganizationName,
+        verifierCategory: 'Registered Organization',
+        verifierCode: `ORG-${selectedOrg.OrganizationID}`,
+        dateOfJoining,
+        dateOfLeaving: isCurrentlyEmployed ? 'Present' : dateOfLeaving,
+        isCurrentlyEmployed,
+        designation: designation.trim() || 'N/A',
+        department: department.trim() || 'General',
+        verificationType,
+        remarks: remarks.trim(),
+        uploadedFilesCount: uploadedFiles.length,
+        submittedBy: user?.username || user?.FirstName || 'Client User',
+        submittedAt: todayFormatted,
+        status: 'Pending'
       }
 
-      console.log('[Payment/CreateOrder] Request JSON:', createOrderPayload)
+      try {
+        const existing = localStorage.getItem(STORAGE_KEY_VERIFICATION_RECORDS)
+        const recordsList: VerificationRecord[] = existing ? JSON.parse(existing) : []
+        recordsList.unshift(newRecord)
+        localStorage.setItem(STORAGE_KEY_VERIFICATION_RECORDS, JSON.stringify(recordsList))
+        markClientHasRequests(user, candidateEmail)
+      } catch (storageErr) {
+        console.error('Failed to persist verification record:', storageErr)
+      }
 
-      const orderRes = await fetch(API_ENDPOINTS.payments.createOrder, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(createOrderPayload),
+      setGeneratedRequestId(newId)
+      setSubmissionSuccess(true)
+      const candName = candidateName.trim()
+      handleResetForm()
+
+      // 3. Immediately redirect to the dashboard where the verification request is shown
+      navigate('/dashboard', {
+        state: {
+          newRequestId: newId,
+          candidateName: candName
+        }
       })
-
-      if (!orderRes.ok) {
-        const errorText = await orderRes.text()
-        throw new Error(errorText || 'Failed to initialize payment order.')
-      }
-
-      const order = await orderRes.json()
-      console.log('[Payment/CreateOrder] Response JSON:', order)
-
-      // 2. Load Razorpay script
-      const isLoaded = await loadRazorpay()
-      if (!isLoaded || !window.Razorpay) {
-        throw new Error('Razorpay Checkout SDK could not be loaded. Please check your internet connection.')
-      }
-
-      // 3. Open Razorpay Checkout Modal
-      const checkout = new window.Razorpay({
-        key: order.key,
-        amount: order.amount,
-        currency: order.currency || 'INR',
-        name: 'Worktrail Verification',
-        description: `Candidate Verification for ${candidateName}`,
-        order_id: order.orderId,
-        prefill: {
-          name: candidateName,
-          email: candidateEmail,
-          contact: contactNumber,
-        },
-        theme: { color: '#0680A6' },
-        modal: {
-          ondismiss: () => {
-            setPaymentState('idle')
-            setPaymentMessage('Payment cancelled by user.')
-          },
-        },
-        handler: async (paymentResponse: RazorpayPaymentResponse) => {
-          try {
-            // 4. Verify payment via backend API
-            const verifyRes = await fetch(API_ENDPOINTS.payments.verify, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify(paymentResponse),
-            })
-
-            if (!verifyRes.ok) {
-              const verifyError = await verifyRes.text()
-              throw new Error(verifyError || 'Payment signature verification failed.')
-            }
-
-            const verifyResult = await verifyRes.json()
-            console.log('[Payment/Verify] Response JSON:', verifyResult)
-
-            const newId = `VR-${Math.floor(100000 + Math.random() * 900000)}`
-            const transactionId =
-              verifyResult?.transaction?.TransactionID ||
-              verifyResult?.TransactionID ||
-              paymentResponse.razorpay_payment_id
-
-            // 5. Build and save verification record
-            const newRecord: VerificationRecord = {
-              id: `rec-${Date.now()}`,
-              requestId: newId,
-              candidateName: candidateName.trim(),
-              employeeId: employeeId.trim(),
-              candidateEmail: candidateEmail.trim(),
-              contactNumber: contactNumber.trim(),
-              verifierId: String(selectedOrg.OrganizationID),
-              verifierName: selectedOrg.OrganizationName,
-              verifierCategory: 'Registered Organization',
-              verifierCode: `ORG-${selectedOrg.OrganizationID}`,
-              dateOfJoining,
-              dateOfLeaving: isCurrentlyEmployed ? 'Present' : dateOfLeaving,
-              isCurrentlyEmployed,
-              designation: designation.trim() || 'N/A',
-              department: department.trim() || 'General',
-              verificationType,
-              remarks: remarks.trim(),
-              uploadedFilesCount: uploadedFiles.length,
-              submittedBy: user?.username || 'Client User',
-              submittedAt: new Date().toISOString(),
-              status: 'Pending',
-              amount: Number(amount),
-              transactionId,
-              paymentId: paymentResponse.razorpay_payment_id,
-              orderId: paymentResponse.razorpay_order_id,
-            }
-
-            try {
-              const existing = localStorage.getItem(STORAGE_KEY_VERIFICATION_RECORDS)
-              const recordsList: VerificationRecord[] = existing ? JSON.parse(existing) : []
-              recordsList.unshift(newRecord)
-              localStorage.setItem(STORAGE_KEY_VERIFICATION_RECORDS, JSON.stringify(recordsList))
-            } catch (storageErr) {
-              console.error('Failed to persist verification record:', storageErr)
-            }
-
-            setGeneratedRequestId(newId)
-            setTransactionDetails({
-              transactionId,
-              orderId: paymentResponse.razorpay_order_id,
-              paymentId: paymentResponse.razorpay_payment_id,
-              amount: Number(amount),
-            })
-            setPaymentState('success')
-            setSubmissionSuccess(true)
-          } catch (verifyError: any) {
-            console.error('[Payment/Verify] Error:', verifyError)
-            setPaymentState('idle')
-            setPaymentMessage(verifyError?.message || 'Payment verification failed.')
-          }
-        },
-      })
-
-      checkout.open()
-    } catch (orderError: any) {
-      console.error('[Payment/CreateOrder] Error:', orderError)
-      setPaymentState('idle')
-      setPaymentMessage(orderError?.message || 'Payment order could not be initiated.')
+    } catch (submitErr: any) {
+      console.error('Submission error:', submitErr)
+      setFormError(submitErr?.message || 'Verification request could not be submitted.')
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -528,16 +760,9 @@ function CandidateVerificationForm() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-18 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#0680A6] to-[#10B981] flex items-center justify-center shadow-md">
-                <Building2 className="w-6 h-6 text-white" />
-              </div>
+            
               <div>
-                <span className="text-xs font-bold uppercase tracking-widest text-[#88ffbb] block leading-none">
-                  Walsons / Securitas
-                </span>
-                <span className="text-base sm:text-lg font-extrabold tracking-tight text-white">
-                  Verification Portal
-                </span>
+                <img src={Logo_w} alt="Worktrail Logo" className="w-24 h-8 object-contain" />
               </div>
             </div>
 
@@ -545,6 +770,16 @@ function CandidateVerificationForm() {
               <ShieldCheck className="w-4 h-4 text-emerald-400" />
               <span>Enterprise Client Gateway</span>
             </div>
+
+            {/* Dashboard Navigation Button */}
+            <Link
+              to="/dashboard"
+              className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-white text-xs font-semibold tracking-wide transition-all ml-2"
+              title="Go to Dashboard"
+            >
+              <LayoutGrid className="w-4 h-4 text-[#fff]" />
+              <span className='text-white'>Dashboard</span>
+            </Link>
           </div>
 
           {/* User Profile & Logout */}
@@ -601,8 +836,8 @@ function CandidateVerificationForm() {
                   <span>AES-256 Encrypted</span>
                 </div>
                 <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-lg border border-white/10">
-                  <CreditCard className="w-4 h-4 text-emerald-300" />
-                  <span>Razorpay Gateway</span>
+                  <Zap className="w-4 h-4 text-emerald-300" />
+                  <span>Direct Verification</span>
                 </div>
                 <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-lg border border-white/10">
                   <Sparkles className="w-4 h-4 text-amber-300" />
@@ -627,8 +862,51 @@ function CandidateVerificationForm() {
           </div>
         </div>
 
-        {/* 3. Select Verifier Section */}
-        <section className="bg-white rounded-3xl p-6 sm:p-10 shadow-sm border border-slate-200/80">
+        {/* Mode Selector Tabs: Single Verification vs Bulk Upload */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 p-2 bg-white rounded-2xl border border-slate-200/90 shadow-2xs">
+          <div className="flex items-center gap-2 p-1 bg-slate-100/90 rounded-xl">
+            <button
+              type="button"
+              onClick={() => setActiveMode('single')}
+              className={`flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg text-xs font-bold tracking-wider uppercase transition-all cursor-pointer ${
+                activeMode === 'single'
+                  ? 'bg-white text-[#031f30] shadow-sm border border-slate-200/80'
+                  : 'text-slate-500 hover:text-slate-900 hover:bg-white/50'
+              }`}
+            >
+              <UserCheck className="w-4 h-4 text-[#0680A6]" />
+              <span>Single Candidate Verification</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveMode('bulk')}
+              className={`flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg text-xs font-bold tracking-wider uppercase transition-all cursor-pointer ${
+                activeMode === 'bulk'
+                  ? 'bg-gradient-to-r from-emerald-500 to-indigo-600 text-white shadow-sm'
+                  : 'text-slate-500 hover:text-slate-900 hover:bg-white/50'
+              }`}
+            >
+              <Upload className="w-4 h-4" />
+              <span>Bulk Upload (.xlsx)</span>
+              <span className={`px-1.5 py-0.5 text-[9px] font-extrabold rounded-full ${
+                activeMode === 'bulk' ? 'bg-white/25 text-white' : 'bg-emerald-100 text-emerald-800'
+              }`}>
+                BATCH
+              </span>
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2 px-3 text-xs text-slate-500">
+            <Sparkles className="w-4 h-4 text-emerald-500 shrink-0" />
+            <span className="hidden sm:inline">Choose single form entry or bulk Excel ingestion</span>
+          </div>
+        </div>
+
+        {activeMode === 'single' ? (
+          <>
+            {/* 3. Select Verifier Section */}
+            <section className="bg-white rounded-3xl p-6 sm:p-10 shadow-sm border border-slate-200/80">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-6 border-b border-slate-100">
             <div>
               <span className="text-xs font-bold uppercase tracking-wider text-[#0680A6] block mb-1">
@@ -1129,44 +1407,30 @@ function CandidateVerificationForm() {
                 </div>
               </div>
 
-              {/* 4. Payment Section */}
+              {/* 4. Confirmation Section */}
               <div className="space-y-4 pt-2">
                 <h3 className="text-sm font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2 pb-2 border-b border-slate-100">
-                  <CreditCard className="w-4 h-4 text-[#0680A6]" />
-                  4. Payment & Gateway Processing
+                  <CheckCircle2 className="w-4 h-4 text-[#0680A6]" />
+                  4. Review &amp; Direct Submission
                 </h3>
 
-                <div className="p-6 rounded-2xl bg-gradient-to-br from-slate-50 via-indigo-50/20 to-emerald-50/20 border border-slate-200/80">
+                <div className="p-6 rounded-2xl bg-gradient-to-br from-slate-50 via-emerald-50/20 to-sky-50/20 border border-slate-200/80">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
-                      <span className="text-xs font-bold uppercase tracking-wider text-[#0680A6] block mb-1">
-                        Razorpay Secure Checkout
+                      <span className="text-xs font-bold uppercase tracking-wider text-emerald-600 block mb-1">
+                        Direct Enterprise Dispatch
                       </span>
                       <h4 className="text-base font-bold text-slate-900">
-                        Candidate Verification Service Fee
+                        Candidate Verification Request
                       </h4>
                       <p className="text-xs text-slate-500 mt-1">
-                        Encrypted transaction processed directly by Razorpay Payment Gateway.
+                        Your request will be transmitted directly to <strong className="text-slate-700">{selectedOrg?.OrganizationName || 'the selected verifier'}</strong> and tracked in real-time on your dashboard.
                       </p>
                     </div>
 
-                    <div className="flex items-center gap-2 max-w-xs">
-                      <div className="relative">
-                        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 font-bold text-sm">
-                          ₹
-                        </span>
-                        <input
-                          type="number"
-                          min="1"
-                          step="0.01"
-                          value={amount}
-                          onChange={(e) => setAmount(e.target.value)}
-                          placeholder="Amount"
-                          className="w-32 pl-8 pr-3 py-2.5 bg-white border border-slate-200 rounded-xl text-base font-bold text-slate-900 outline-none focus:border-[#0680A6] focus:ring-2 focus:ring-[#0680A6]/10 font-mono text-right"
-                          required
-                        />
-                      </div>
-                      <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">INR</span>
+                    <div className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-100/70 border border-emerald-200 text-emerald-800 text-xs font-bold shrink-0 select-none">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                      <span>Ready for Verification</span>
                     </div>
                   </div>
                 </div>
@@ -1177,7 +1441,7 @@ function CandidateVerificationForm() {
                 <button
                   type="button"
                   onClick={handleResetForm}
-                  disabled={paymentState === 'processing'}
+                  disabled={isSubmitting}
                   className="w-full sm:w-auto px-6 py-3 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                 >
                   <RotateCcw className="w-4 h-4 text-slate-400" />
@@ -1186,20 +1450,20 @@ function CandidateVerificationForm() {
 
                 <button
                   type="submit"
-                  disabled={paymentState === 'processing'}
+                  disabled={isSubmitting}
                   className={`w-full sm:w-auto px-8 py-3.5 rounded-full bg-gradient-to-r from-[#10B981] to-[#5850EC] hover:brightness-110 active:scale-[0.98] text-white font-bold text-xs uppercase tracking-wider shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2.5 cursor-pointer select-none ${
-                    paymentState === 'processing' ? 'opacity-70 cursor-not-allowed' : ''
+                    isSubmitting ? 'opacity-70 cursor-not-allowed' : ''
                   }`}
                 >
-                  {paymentState === 'processing' ? (
+                  {isSubmitting ? (
                     <>
                       <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
-                      <span>Processing Payment & Request...</span>
+                      <span>Submitting Request...</span>
                     </>
                   ) : (
                     <>
-                      <CreditCard className="w-4 h-4" />
-                      <span>Pay ₹{amount || '0'} & Submit Verification</span>
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>Submit Verification Request</span>
                     </>
                   )}
                 </button>
@@ -1217,6 +1481,263 @@ function CandidateVerificationForm() {
             </p>
           </div>
         )}
+      </>
+    ) : (
+      /* Bulk Candidate Verification Panel (Identical Architecture to AddEmployee) */
+      <div className="w-full mx-auto flex flex-col gap-8 animate-in fade-in duration-300">
+        {/* Hero Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 sm:p-8 rounded-3xl bg-gradient-to-r from-[#031f30] via-[#063352] to-[#0680A6] text-white shadow-xl relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-80 h-80 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20"></div>
+          <div className="relative z-10">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md text-[11px] font-bold tracking-wider uppercase text-emerald-300 mb-3 border border-white/10">
+              <Sparkles className="w-3.5 h-3.5" />
+              Batch Ingestion Engine
+            </div>
+            <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+              Bulk Candidate Verification
+            </h2>
+            <p className="text-xs sm:text-sm text-slate-300 mt-1 max-w-xl">
+              Download the pre-formatted Excel sheet, fill your candidate verification records, and upload for automated batch processing.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setActiveMode('single')}
+            className="self-start sm:self-center inline-flex items-center gap-2 px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-full font-bold text-xs backdrop-blur-md border border-white/20 transition-all active:scale-95 cursor-pointer shrink-0"
+          >
+            <ArrowLeft className="w-4 h-4" /> Switch to Single Entry
+          </button>
+        </div>
+
+        {/* 2-Step Action Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Step 1: Download Template */}
+          <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
+            <div>
+              <div className="flex items-center justify-between gap-4 mb-4">
+                <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold shadow-xs">
+                  <FileSpreadsheet className="w-6 h-6" />
+                </div>
+                <span className="px-3 py-1 text-[11px] font-extrabold tracking-wider uppercase bg-emerald-100/70 text-emerald-800 rounded-full">
+                  Step 1
+                </span>
+              </div>
+
+              <h3 className="text-lg sm:text-xl font-bold text-slate-900 mb-2">
+                Download Excel Template
+              </h3>
+              <p className="text-xs sm:text-sm text-slate-500 leading-relaxed mb-6">
+                Get the official Excel spreadsheet (<code>.xlsx</code>) pre-configured with headers and sample records matching the Candidate Verification form.
+              </p>
+
+              {/* Included Column Chips */}
+              <div className="mb-6">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-2.5">
+                  Pre-configured Columns (12 Fields):
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    'Candidate Full Name',
+                    'Candidate Email',
+                    'Contact Number',
+                    'Employee Code',
+                    'Verifier Organization',
+                    'Designation',
+                    'Department',
+                    'Date of Joining',
+                    'Date of Leaving',
+                    'Currently Employed',
+                    'Verification Type',
+                    'Remarks'
+                  ].map((col, idx) => (
+                    <span
+                      key={idx}
+                      className="px-2.5 py-1 text-[11px] font-medium bg-slate-100 text-slate-700 rounded-lg border border-slate-200/70"
+                    >
+                      {col}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleDownloadExcelSample}
+              className="w-full flex items-center justify-center gap-3 py-3.5 px-6 bg-gradient-to-r from-emerald-500 to-teal-600 hover:brightness-110 active:scale-[0.99] text-white rounded-2xl font-bold text-sm shadow-md hover:shadow-lg transition-all cursor-pointer select-none"
+            >
+              <Download className="w-5 h-5 shrink-0" />
+              <span>Download Sample Template (.xlsx)</span>
+            </button>
+          </div>
+
+          {/* Step 2: Upload Completed Sheet */}
+          <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
+            <form onSubmit={handleBulkSubmit} className="flex flex-col h-full justify-between">
+              <div>
+                <div className="flex items-center justify-between gap-4 mb-4">
+                  <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold shadow-xs">
+                    <Upload className="w-6 h-6" />
+                  </div>
+                  <span className="px-3 py-1 text-[11px] font-extrabold tracking-wider uppercase bg-indigo-100/70 text-indigo-800 rounded-full">
+                    Step 2
+                  </span>
+                </div>
+
+                <h3 className="text-lg sm:text-xl font-bold text-slate-900 mb-2">
+                  Upload Completed Sheet
+                </h3>
+                <p className="text-xs sm:text-sm text-slate-500 leading-relaxed mb-6">
+                  Select or drop your populated Excel spreadsheet (<code>.xlsx</code> / <code>.xls</code>) to validate and submit batch verification requests.
+                </p>
+
+                {/* Drag & Drop Zone */}
+                <div
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                  className={`relative border-2 border-dashed rounded-2xl p-6 text-center transition-all cursor-pointer ${
+                    isDragging
+                      ? 'border-indigo-500 bg-indigo-50/50 scale-[1.01]'
+                      : bulkFile
+                      ? 'border-emerald-300 bg-emerald-50/30'
+                      : 'border-slate-300 hover:border-indigo-400 bg-slate-50/50 hover:bg-slate-50'
+                  }`}
+                >
+                  <input
+                    type="file"
+                    accept=".xlsx, .xls"
+                    onChange={handleFileChange}
+                    id="candidate-bulk-excel-input"
+                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10"
+                  />
+
+                  {bulkFile ? (
+                    <div className="flex items-center justify-between gap-3 p-3 bg-white rounded-xl border border-emerald-200 shadow-2xs">
+                      <div className="flex items-center gap-3 min-w-0 text-left">
+                        <div className="w-10 h-10 rounded-lg bg-emerald-500 text-white flex items-center justify-center shrink-0">
+                          <FileSpreadsheet className="w-5 h-5" />
+                        </div>
+                        <div className="truncate">
+                          <p className="text-xs sm:text-sm font-bold text-slate-900 truncate">
+                            {bulkFile.name}
+                          </p>
+                          <p className="text-[11px] text-slate-500 font-mono">
+                            {(bulkFile.size / 1024).toFixed(1)} KB • Ready to submit
+                          </p>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setBulkFile(null)
+                          setBulkParsedRows([])
+                          setBulkError('')
+                          setBulkSuccessMessage('')
+                        }}
+                        className="relative z-20 text-slate-400 hover:text-rose-500 p-1.5 rounded-lg hover:bg-rose-50 transition-colors"
+                        title="Remove file"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center gap-2 py-4">
+                      <FileSpreadsheet className="w-10 h-10 text-slate-400 mb-1" />
+                      <p className="text-xs sm:text-sm font-semibold text-slate-700">
+                        Drop your completed <code>.xlsx</code> file here, or{' '}
+                        <span className="text-[#0680A6] underline font-bold">browse</span>
+                      </p>
+                      <p className="text-[11px] text-slate-400">
+                        Supports Microsoft Excel spreadsheets (.xlsx, .xls)
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Feedback Messages */}
+                {bulkError && (
+                  <div className="mt-4 p-3.5 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-2.5 text-xs text-rose-700 font-medium">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-rose-500 mt-0.5" />
+                    <span>{bulkError}</span>
+                  </div>
+                )}
+
+                {bulkSuccessMessage && (
+                  <div className="mt-4 p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl flex items-start gap-2.5 text-xs text-emerald-700 font-medium">
+                    <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-500 mt-0.5" />
+                    <span>{bulkSuccessMessage}</span>
+                  </div>
+                )}
+
+                {/* Parsed records summary & preview table */}
+                {bulkParsedRows.length > 0 && (
+                  <div className="mt-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
+                        <Check className="w-3.5 h-3.5" />
+                        <span>{bulkParsedRows.length} Candidates Detected</span>
+                      </div>
+                      <span className="text-[11px] text-slate-400">Preview (First 3)</span>
+                    </div>
+
+                    <div className="max-h-40 overflow-y-auto rounded-xl border border-slate-200 text-[11px] bg-slate-50/50">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="bg-slate-100/80 text-slate-500 font-bold border-b border-slate-200">
+                            <th className="py-2 px-3">#</th>
+                            <th className="py-2 px-3">Candidate</th>
+                            <th className="py-2 px-3">Emp Code</th>
+                            <th className="py-2 px-3">Verifier</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {bulkParsedRows.slice(0, 3).map((r, i) => (
+                            <tr key={i} className="border-b border-slate-100 hover:bg-white transition-colors">
+                              <td className="py-1.5 px-3 font-mono text-slate-400">{i + 1}</td>
+                              <td className="py-1.5 px-3 font-semibold text-slate-800">{r.candidateName}</td>
+                              <td className="py-1.5 px-3 font-mono text-slate-600">{r.employeeId || 'N/A'}</td>
+                              <td className="py-1.5 px-3 text-slate-600 truncate max-w-[120px]">{r.verifierName || 'Enterprise'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="pt-6">
+                <button
+                  type="submit"
+                  disabled={bulkUploading || !bulkFile || bulkParsedRows.length === 0}
+                  className="w-full flex items-center justify-center gap-3 py-3.5 px-6 bg-gradient-to-r from-emerald-500 to-indigo-600 hover:brightness-110 active:scale-[0.99] text-white rounded-2xl font-bold text-sm shadow-md hover:shadow-lg transition-all cursor-pointer select-none disabled:grayscale disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {bulkUploading ? (
+                    <>
+                      <RefreshCw className="w-5 h-5 animate-spin" />
+                      <span>Processing Batch Ingestion...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-5 h-5" />
+                      <span>
+                        {bulkParsedRows.length > 0
+                          ? `Process & Submit ${bulkParsedRows.length} Bulk Verification Requests`
+                          : 'Upload & Process Batch File'}
+                      </span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    )}
       </main>
 
       {/* 5. Standalone Footer */}
@@ -1260,11 +1781,11 @@ function CandidateVerificationForm() {
 
             <div>
               <span className="text-[10px] font-extrabold uppercase tracking-widest text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full">
-                Payment & Verification Success
+                Verification Request Transmitted
               </span>
               <h3 className="text-2xl font-bold text-slate-900 mt-3">Request Submitted!</h3>
               <p className="text-xs text-slate-500 mt-1">
-                Your payment was verified and the request for <strong className="text-slate-800">{candidateName}</strong> has been transmitted to{' '}
+                Your verification request for <strong className="text-slate-800">{candidateName}</strong> has been transmitted to{' '}
                 <strong className="text-slate-800">{selectedOrg?.OrganizationName}</strong>.
               </p>
             </div>
@@ -1274,26 +1795,10 @@ function CandidateVerificationForm() {
                 <span className="text-slate-400">Request ID:</span>
                 <span className="font-mono font-bold text-slate-800">{generatedRequestId}</span>
               </div>
-              {transactionDetails && (
-                <>
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Transaction ID:</span>
-                    <span className="font-mono text-slate-800 truncate max-w-[200px]" title={transactionDetails.transactionId}>
-                      {transactionDetails.transactionId}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Payment ID:</span>
-                    <span className="font-mono text-slate-800 truncate max-w-[200px]" title={transactionDetails.paymentId}>
-                      {transactionDetails.paymentId}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Amount Paid:</span>
-                    <span className="font-bold text-emerald-600">₹{transactionDetails.amount} INR</span>
-                  </div>
-                </>
-              )}
+              <div className="flex justify-between">
+                <span className="text-slate-400">Status:</span>
+                <span className="font-bold text-amber-600">Pending Review</span>
+              </div>
               <div className="flex justify-between">
                 <span className="text-slate-400">Candidate:</span>
                 <span className="font-semibold text-slate-800">
@@ -1311,18 +1816,22 @@ function CandidateVerificationForm() {
                 type="button"
                 onClick={() => {
                   setSubmissionSuccess(false)
-                  handleResetForm()
+                  navigate('/dashboard')
                 }}
-                className="w-full py-3 bg-gradient-to-r from-[#10B981] to-[#5850EC] hover:brightness-110 text-white rounded-full font-bold text-xs uppercase tracking-wider transition-all cursor-pointer shadow-md"
+                className="w-full py-3 bg-gradient-to-r from-[#10B981] to-[#5850EC] hover:brightness-110 text-white rounded-full font-bold text-xs uppercase tracking-wider transition-all cursor-pointer shadow-md flex items-center justify-center gap-2"
               >
-                Submit Another Request
+                <LayoutGrid className="w-4 h-4" />
+                <span>Go to Dashboard</span>
               </button>
               <button
                 type="button"
-                onClick={() => setSubmissionSuccess(false)}
+                onClick={() => {
+                  setSubmissionSuccess(false)
+                  handleResetForm()
+                }}
                 className="w-full py-2.5 text-slate-500 hover:text-slate-700 font-semibold text-xs transition-colors cursor-pointer"
               >
-                Close
+                Submit Another Candidate
               </button>
             </div>
           </div>

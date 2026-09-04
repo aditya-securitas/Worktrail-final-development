@@ -17,6 +17,8 @@ const MENU_MAP: Record<string, any> = {
   admin: ADMIN_MENU,
   fascilator: FASCILATOR_MENU,
   contributor: CONTRIBUTOR_MENU,
+  contributoruser: CONTRIBUTOR_MENU,
+  'contributor user': CONTRIBUTOR_MENU,
   contributoradmin: CONTRIBUTOR_ADMIN_MENU,
   admin_contributor: CONTRIBUTOR_ADMIN_MENU,
   'contributor admin': CONTRIBUTOR_ADMIN_MENU,
@@ -33,14 +35,13 @@ type LoginResponse = {
 const USER_STORAGE_KEY = 'worktrail_user'
 const TOKEN_STORAGE_KEY = 'worktrail_token'
 
-
-
 function getMenuForUserType(usertype: string) {
-  const ut = usertype.toLowerCase()
+  const ut = (usertype || '').toLowerCase().trim().replace(/[\s_-]+/g, '')
   if (ut === 'superadmin') return SUPERADMIN_MENU
   if (ut === 'admin') return ADMIN_MENU
-  if (ut === 'contributoradmin' || ut === 'admin_contributor' || ut === 'contributor admin') return CONTRIBUTOR_ADMIN_MENU
-  if (ut === 'contributor' || ut === 'fascilator') return CONTRIBUTOR_MENU
+  if (ut === 'contributoradmin' || ut === 'admincontributor') return CONTRIBUTOR_ADMIN_MENU
+  if (ut === 'contributor' || ut === 'contributoruser') return CONTRIBUTOR_MENU
+  if (ut === 'fascilator') return FASCILATOR_MENU
   if (ut === 'client') return CLIENT_MENU
   return []
 }
@@ -105,6 +106,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setToken(data.token)
       localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(data.user))
       localStorage.setItem(TOKEN_STORAGE_KEY, data.token)
+      return data.user
     } catch (requestError) {
       const message = requestError instanceof Error ? requestError.message : 'Unable to connect to the login service.'
       setError(message)

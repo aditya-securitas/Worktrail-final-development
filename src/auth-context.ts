@@ -3,7 +3,9 @@ import { createContext } from 'react'
 export type AuthUser = {
   id?: number
   username?: string
-  CompanyName?:string
+  FirstName?: string
+  LastName?: string
+  CompanyName?: string
   password?: string
   created_at: string
   activestatus: string
@@ -60,7 +62,7 @@ export const FASCILATOR_MENU: MenuRoute[] = [
 export const CONTRIBUTOR_ADMIN_MENU: MenuRoute[] = [
   { Sno: 1, Usertype: 'ContributorAdmin', Route: '/dashboard', components: 'Dashboard.tsx' },
   { Sno: 2, Usertype: 'ContributorAdmin', Route: '/ServiceRequest', components: 'ServiceRequest.tsx' },
-  { Sno: 3, Usertype: 'ContributorAdmin', Route: '/ConAdminAddEmployee', components: 'ConAdminAddEmployee.tsx' },
+  { Sno: 3, Usertype: 'ContributorAdmin', Route: '/ConAdminAddEmployee', components: 'ConUserAddEmployee.tsx' },
   { Sno: 4, Usertype: 'ContributorAdmin', Route: '/ConAdminUsermaster', components: 'ConAdminUsermaster.tsx' },
   { Sno: 5, Usertype: 'ContributorAdmin', Route: '/Termsandconditions', components: 'TermsandConditions.tsx' },
   { Sno: 6, Usertype: 'ContributorAdmin', Route: '/Privacypolicy', components: 'Privacypolicy.tsx' },
@@ -74,7 +76,7 @@ export const ADMIN_CONTRIBUTOR_MENU = CONTRIBUTOR_ADMIN_MENU
 export const CONTRIBUTOR_MENU: MenuRoute[] = [
   { Sno: 1, Usertype: 'Contributor', Route: '/dashboard', components: 'Dashboard.tsx' },
   { Sno: 2, Usertype: 'Contributor', Route: '/ServiceRequest', components: 'ServiceRequest.tsx' },
-  { Sno: 3, Usertype: 'Contributor', Route: '/AddEmployee', components: 'AddEmployee.tsx' },
+  { Sno: 3, Usertype: 'Contributor', Route: '/AddEmployee', components: 'ConUserAddEmployee.tsx' },
   { Sno: 6, Usertype: 'Contributor', Route: '/Termsandconditions', components: 'TermsandConditions.tsx' },
   { Sno: 7, Usertype: 'Contributor', Route: '/Privacypolicy', components: 'Privacypolicy.tsx' },
   { Sno: 8, Usertype: 'Contributor', Route: '/OtherServices', components: 'OtherServices.tsx' },
@@ -82,11 +84,13 @@ export const CONTRIBUTOR_MENU: MenuRoute[] = [
 
 // Client menu
 export const CLIENT_MENU: MenuRoute[] = [
-  { Sno: 1, Usertype: 'Client', Route: '/dashboard', components: 'CandidateVerificationForm.tsx' },
+  { Sno: 1, Usertype: 'Client', Route: '/dashboard', components: 'Dashboard.tsx' },
   { Sno: 2, Usertype: 'Client', Route: '/CandidateVerification', components: 'CandidateVerificationForm.tsx' },
-  { Sno: 3, Usertype: 'Client', Route: '/Termsandconditions', components: 'TermsandConditions.tsx' },
-  { Sno: 4, Usertype: 'Client', Route: '/Privacypolicy', components: 'Privacypolicy.tsx' },
-  { Sno: 5, Usertype: 'Client', Route: '/OtherServices', components: 'OtherServices.tsx' },
+  { Sno: 3, Usertype: 'Client', Route: '/Client', components: 'Client.tsx' },
+  { Sno: 4, Usertype: 'Client', Route: '/Invoice', components: 'Invoice.tsx' },
+  { Sno: 5, Usertype: 'Client', Route: '/Termsandconditions', components: 'TermsandConditions.tsx' },
+  { Sno: 6, Usertype: 'Client', Route: '/Privacypolicy', components: 'Privacypolicy.tsx' },
+  { Sno: 7, Usertype: 'Client', Route: '/OtherServices', components: 'OtherServices.tsx' },
 ]
 
 export type AuthContextValue = {
@@ -98,7 +102,7 @@ export type AuthContextValue = {
   isMenuLoading: boolean
   menuError: string
   error: string
-  login: (emailId: string, password: string) => Promise<void>
+  login: (emailId: string, password: string) => Promise<AuthUser | void>
   logout: () => void
 }
 

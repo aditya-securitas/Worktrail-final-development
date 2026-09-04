@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import * as XLSX from 'xlsx'
 import { useAuth } from '../useAuth'
 import {
@@ -23,7 +23,11 @@ import {
   TrendingUp,
   Wallet
 } from 'lucide-react'
-import { OrgLogo } from './CandidateVerificationForm'
+import {
+  type VerificationRecord,
+  STORAGE_KEY_VERIFICATION_RECORDS,
+  OrgLogo
+} from './CandidateVerificationForm'
 
 export interface TransactionRecord {
   id: string
@@ -45,147 +49,64 @@ export interface TransactionRecord {
   status: 'Paid' | 'Pending' | 'Refunded'
 }
 
-const INITIAL_TRANSACTIONS: TransactionRecord[] = [
-  {
-    id: 'tx-101',
-    invoiceNumber: 'WT-INV-2026-0891',
-    transactionId: 'TXN-9482019',
-    date: '2026-09-02',
-    time: '14:32:18',
-    clientName: 'Tata Consultancy Services (TCS)',
-    clientEmail: 'billing@tcs-global.com',
-    clientGstin: '27AAACT2727Q1ZW',
-    candidateName: 'Aarav Sharma',
-    employeeCode: 'EMP-1001',
-    servicePackage: 'Standard Employment & Registry Check',
-    baseAmount: 1499,
-    gstAmount: 269.82,
-    totalAmount: 1768.82,
-    paymentMethod: 'Razorpay UPI',
-    gatewayReference: 'pay_PQ8923Lk9a1',
-    status: 'Paid'
-  },
-  {
-    id: 'tx-102',
-    invoiceNumber: 'WT-INV-2026-0890',
-    transactionId: 'TXN-9482018',
-    date: '2026-09-02',
-    time: '11:15:42',
-    clientName: 'Infosys Limited',
-    clientEmail: 'vendor.payments@infosys.com',
-    clientGstin: '29AAACI4321A1ZG',
-    candidateName: 'Priya Mukherjee',
-    employeeCode: 'EMP-1002',
-    servicePackage: 'Comprehensive Executive Screening',
-    baseAmount: 2999,
-    gstAmount: 539.82,
-    totalAmount: 3538.82,
-    paymentMethod: 'Corporate NetBanking',
-    gatewayReference: 'pay_INF89123041',
-    status: 'Paid'
-  },
-  {
-    id: 'tx-103',
-    invoiceNumber: 'WT-INV-2026-0889',
-    transactionId: 'TXN-9482017',
-    date: '2026-09-01',
-    time: '17:45:10',
-    clientName: 'Securitas India',
-    clientEmail: 'accounts@securitas.in',
-    clientGstin: '07AAACS1122C1ZK',
-    candidateName: 'Rohan Deshmukh',
-    employeeCode: 'EMP-1003',
-    servicePackage: 'Physical & Digital Compliance Audit',
-    baseAmount: 1999,
-    gstAmount: 359.82,
-    totalAmount: 2358.82,
-    paymentMethod: 'Credit / Debit Card',
-    gatewayReference: 'pay_SEC98231011',
-    status: 'Paid'
-  },
-  {
-    id: 'tx-104',
-    invoiceNumber: 'WT-INV-2026-0888',
-    transactionId: 'TXN-9482016',
-    date: '2026-09-01',
-    time: '09:20:05',
-    clientName: 'Wipro Limited',
-    clientEmail: 'fin.ops@wipro.com',
-    clientGstin: '29AAACW9988D1Z4',
-    candidateName: 'Sneha Patel',
-    employeeCode: 'EMP-1004',
-    servicePackage: 'Standard Employment & Registry Check',
-    baseAmount: 1499,
-    gstAmount: 269.82,
-    totalAmount: 1768.82,
-    paymentMethod: 'Razorpay UPI',
-    gatewayReference: 'pay_WIP48291022',
-    status: 'Paid'
-  },
-  {
-    id: 'tx-105',
-    invoiceNumber: 'WT-INV-2026-0887',
-    transactionId: 'TXN-9482015',
-    date: '2026-08-31',
-    time: '16:05:30',
-    clientName: 'Accenture India',
-    clientEmail: 'billing.in@accenture.com',
-    clientGstin: '06AAACA5544E1ZL',
-    candidateName: 'Vikram Sengupta',
-    employeeCode: 'EMP-1005',
-    servicePackage: 'Comprehensive Executive Screening',
-    baseAmount: 2999,
-    gstAmount: 539.82,
-    totalAmount: 3538.82,
-    paymentMethod: 'Corporate NetBanking',
-    gatewayReference: 'pay_ACC10928374',
-    status: 'Pending'
-  },
-  {
-    id: 'tx-106',
-    invoiceNumber: 'WT-INV-2026-0886',
-    transactionId: 'TXN-9482014',
-    date: '2026-08-30',
-    time: '12:50:19',
-    clientName: 'Cognizant Technology Solutions',
-    clientEmail: 'tax.invoices@cognizant.com',
-    clientGstin: '33AAACC3322F1ZP',
-    candidateName: 'Ananya Verma',
-    employeeCode: 'EMP-1006',
-    servicePackage: 'Standard Employment & Registry Check',
-    baseAmount: 1499,
-    gstAmount: 269.82,
-    totalAmount: 1768.82,
-    paymentMethod: 'Razorpay UPI',
-    gatewayReference: 'pay_CTS50493821',
-    status: 'Paid'
-  },
-  {
-    id: 'tx-107',
-    invoiceNumber: 'WT-INV-2026-0885',
-    transactionId: 'TXN-9482013',
-    date: '2026-08-29',
-    time: '15:10:44',
-    clientName: 'HCLTech',
-    clientEmail: 'settlements@hcltech.com',
-    clientGstin: '09AAACH9876G1ZU',
-    candidateName: 'Karan Mehra',
-    employeeCode: 'EMP-1007',
-    servicePackage: 'Physical & Digital Compliance Audit',
-    baseAmount: 1999,
-    gstAmount: 359.82,
-    totalAmount: 2358.82,
-    paymentMethod: 'Direct Gateway',
-    gatewayReference: 'pay_HCL19482019',
-    status: 'Refunded'
+function parseRecordsToTransactions(): TransactionRecord[] {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY_VERIFICATION_RECORDS)
+    if (stored) {
+      const records: VerificationRecord[] = JSON.parse(stored)
+      if (Array.isArray(records)) {
+        const genuine = records.filter(
+          (r) =>
+            !r.id?.startsWith('rec-') &&
+            !r.requestId?.startsWith('VR-849') &&
+            !r.requestId?.startsWith('VR-732') &&
+            !r.requestId?.startsWith('VR-619') &&
+            !r.requestId?.startsWith('VR-502') &&
+            !r.requestId?.startsWith('VR-504') &&
+            !r.requestId?.startsWith('VR-410') &&
+            !r.requestId?.startsWith('VR-392') &&
+            !r.requestId?.startsWith('VR-281') &&
+            !r.requestId?.startsWith('VR-194')
+        )
+        if (genuine.length > 0) {
+          return genuine.map((rec, idx) => {
+            const baseAmount = rec.amount || 1499
+            const gstAmount = Number((baseAmount * 0.18).toFixed(2))
+            const totalAmount = Number((baseAmount + gstAmount).toFixed(2))
+            return {
+              id: rec.id || `tx-${idx}`,
+              invoiceNumber: `WT-INV-${rec.requestId ? rec.requestId.replace('VR-', '2026-') : `2026-${1000 + idx}`}`,
+              transactionId: rec.transactionId || `TXN-${rec.requestId ? rec.requestId.replace('VR-', '948') : `94820${idx}`}`,
+              date: rec.submittedAt ? rec.submittedAt.split('T')[0] : '2026-09-04',
+              time: '12:30:00',
+              clientName: rec.verifierName || 'Enterprise Verifier',
+              clientEmail: rec.candidateEmail || 'billing@worktrail.ai',
+              candidateName: rec.candidateName,
+              employeeCode: rec.employeeId,
+              servicePackage: rec.verificationType || 'Standard Employment Verification',
+              baseAmount,
+              gstAmount,
+              totalAmount,
+              paymentMethod: 'Direct Gateway',
+              gatewayReference: rec.orderId || `ref_${rec.requestId || idx}`,
+              status: rec.status === 'Rejected' ? 'Refunded' : 'Paid',
+            }
+          })
+        }
+      }
+    }
+  } catch {
+    // fallback
   }
-]
+  return []
+}
 
 export default function Invoice() {
   const { user } = useAuth()
   const isSuperadmin = user?.Usertype?.toLowerCase() === 'superadmin'
+  const isClient = user?.Usertype?.toLowerCase() === 'client'
 
-  const [transactions, setTransactions] = useState<TransactionRecord[]>(INITIAL_TRANSACTIONS)
+  const [transactions, setTransactions] = useState<TransactionRecord[]>(parseRecordsToTransactions)
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<'All' | 'Paid' | 'Pending' | 'Refunded'>('All')
   const [methodFilter, setMethodFilter] = useState<string>('All')
@@ -193,16 +114,23 @@ export default function Invoice() {
   const [endDate, setEndDate] = useState('')
   const [selectedInvoice, setSelectedInvoice] = useState<TransactionRecord | null>(null)
 
-  // Guard: Superadmin view only
-  if (!isSuperadmin) {
+  useEffect(() => {
+    setTransactions(parseRecordsToTransactions())
+    const handleStorage = () => setTransactions(parseRecordsToTransactions())
+    window.addEventListener('storage', handleStorage)
+    return () => window.removeEventListener('storage', handleStorage)
+  }, [])
+
+  // Guard: Superadmin & Client access permitted
+  if (!isSuperadmin && !isClient) {
     return (
       <div className="w-full max-w-4xl mx-auto mt-12 p-8 sm:p-12 bg-white rounded-3xl border border-slate-200 shadow-sm text-center">
         <div className="w-16 h-16 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto mb-4">
           <ShieldAlert className="w-8 h-8" />
         </div>
-        <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">Superadmin Access Only</h2>
+        <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">Access Restricted</h2>
         <p className="text-sm text-slate-500 mt-2 max-w-md mx-auto">
-          The Invoice and Transaction Ledger is restricted to Superadmin accounts. Please contact your organization owner if you require audit access.
+          The Invoice and Transaction Ledger is restricted to authorized accounts.
         </p>
       </div>
     )
@@ -309,13 +237,15 @@ export default function Invoice() {
         <div className="relative z-10">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md text-[11px] font-bold tracking-wider uppercase text-emerald-300 mb-3 border border-white/10">
             <Sparkles className="w-3.5 h-3.5" />
-            Superadmin Financial Ledger
+            {isClient ? 'Candidate Verification Ledger' : 'Superadmin Financial Ledger'}
           </div>
           <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-            Invoices & Transaction Reports
+            {isClient ? 'Candidate Verification Invoices & Transactions' : 'Invoices & Transaction Reports'}
           </h2>
           <p className="text-xs sm:text-sm text-slate-300 mt-1 max-w-xl">
-            Real-time corporate billing audit, gateway transaction settlements, and GST-compliant invoice telemetry.
+            {isClient
+              ? 'Real-time billing receipts, gateway transactions, and candidate verification fee records.'
+              : 'Real-time corporate billing audit, gateway transaction settlements, and GST-compliant invoice telemetry.'}
           </p>
         </div>
 

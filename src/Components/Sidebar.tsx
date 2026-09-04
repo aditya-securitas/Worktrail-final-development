@@ -46,13 +46,14 @@ function Sidebar({ state, onClose, userType, menu, isLoading, error }: SidebarPr
     const comp = item.components.toLowerCase()
     const route = item.Route.toLowerCase()
     if (route.includes('createnew')) return UserCheck
+    if (route.includes('candidateverification') || comp.includes('candidateverification')) return UserCheck
     if (comp.includes('dashboard')) return LayoutGrid
     if (comp.includes('servicerequest')) return ShieldCheck
     if (comp.includes('addemployee')) return UserPlus
     if (comp.includes('orgmaster')) return Building2
     if (comp.includes('usermaster')) return UserCog
     if (comp.includes('recyclebin')) return Trash2
-    if (comp.includes('client')) return Building
+    if (comp.includes('client')) return userType?.toLowerCase() === 'client' ? FileText : Building
     if (comp.includes('contributor')) return User
     if (comp.includes('invoice')) return Receipt
     if (comp.includes('privacypolicy')) return Lock
@@ -66,15 +67,16 @@ function Sidebar({ state, onClose, userType, menu, isLoading, error }: SidebarPr
     const comp = item.components.toLowerCase()
     const route = item.Route.toLowerCase()
     if (route.includes('createnew')) return 'Create New'
+    if (route.includes('candidateverification') || comp.includes('candidateverification')) return 'Candidate Verification'
     if (comp.includes('dashboard')) return 'Dashboard'
     if (comp.includes('servicerequest')) return 'Service Requests'
     if (comp.includes('addemployee')) return 'Add Employee'
     if (comp.includes('orgmaster')) return 'Org Master'
     if (comp.includes('usermaster')) return 'User Master'
     if (comp.includes('recyclebin')) return 'Recycle Bin'
-    if (comp.includes('client')) return 'Client'
+    if (comp.includes('client')) return userType?.toLowerCase() === 'client' ? 'Raised Requests' : 'Client'
     if (comp.includes('contributor')) return 'Contributor'
-    if (comp.includes('invoice')) return 'Invoices & Reports'
+    if (comp.includes('invoice')) return userType?.toLowerCase() === 'client' ? 'Invoice' : 'Invoices & Reports'
     if (comp.includes('privacypolicy')) return 'Privacy Policy'
     if (comp.includes('termsandconditions')) return 'Terms & Conditions'
     if (comp.includes('otherservices')) return 'Other Services'

@@ -29,126 +29,12 @@ import {
   STORAGE_KEY_VERIFICATION_RECORDS,
   OrgLogo
 } from './CandidateVerificationForm'
-
-const INITIAL_SAMPLE_RECORDS: VerificationRecord[] = [
-  {
-    id: 'rec-1',
-    requestId: 'VR-849201',
-    candidateName: 'Aarav Sharma',
-    employeeId: 'TCS-89231',
-    candidateEmail: 'aarav.sharma@tcs-alumni.com',
-    contactNumber: '+91 98234 11223',
-    verifierId: '2',
-    verifierName: 'Tata Consultancy Services (TCS)',
-    verifierCategory: 'IT & Consulting Services',
-    verifierCode: 'TCS-GLB',
-    dateOfJoining: '2021-06-15',
-    dateOfLeaving: '2024-03-31',
-    isCurrentlyEmployed: false,
-    designation: 'Senior Systems Engineer',
-    department: 'Digital Cloud Practices',
-    verificationType: 'Standard Employment Verification',
-    remarks: 'Please confirm relieving date and integrity clearance.',
-    uploadedFilesCount: 2,
-    submittedBy: 'hr.ops@clienttech.io',
-    submittedAt: '2026-08-30',
-    status: 'Pending'
-  },
-  {
-    id: 'rec-2',
-    requestId: 'VR-732049',
-    candidateName: 'Priya Mukherjee',
-    employeeId: 'INF-55829',
-    candidateEmail: 'priya.m@infosys-consult.com',
-    contactNumber: '+91 99102 33445',
-    verifierId: '3',
-    verifierName: 'Infosys Limited',
-    verifierCategory: 'Technology & Digital Services',
-    verifierCode: 'INF-CORP',
-    dateOfJoining: '2020-01-10',
-    dateOfLeaving: '2023-11-20',
-    isCurrentlyEmployed: false,
-    designation: 'Lead Business Analyst',
-    department: 'Fintech Solutions',
-    verificationType: 'Comprehensive Screening',
-    remarks: 'Candidate provided experience letter #INF/2023/88.',
-    uploadedFilesCount: 3,
-    submittedBy: 'talent@walsonspartners.com',
-    submittedAt: '2026-08-28',
-    status: 'Verified'
-  },
-  {
-    id: 'rec-3',
-    requestId: 'VR-619482',
-    candidateName: 'Rohan Deshmukh',
-    employeeId: 'SEC-40291',
-    candidateEmail: 'rohan.d@securitas-emp.in',
-    contactNumber: '+91 97654 88776',
-    verifierId: '1',
-    verifierName: 'Securitas India',
-    verifierCategory: 'Security & Facility Management',
-    verifierCode: 'SEC-IND',
-    dateOfJoining: '2022-04-01',
-    dateOfLeaving: 'Present',
-    isCurrentlyEmployed: true,
-    designation: 'Operations Supervisor',
-    department: 'Site Security Division',
-    verificationType: 'Standard Employment Verification',
-    remarks: 'Currently active employee verification check.',
-    uploadedFilesCount: 1,
-    submittedBy: 'client.verify@globalretail.com',
-    submittedAt: '2026-08-27',
-    status: 'In Progress'
-  },
-  {
-    id: 'rec-4',
-    requestId: 'VR-502918',
-    candidateName: 'Neha Verma',
-    employeeId: 'HDFC-99120',
-    candidateEmail: 'neha.verma@hdfcbank-corp.com',
-    contactNumber: '+91 98450 77112',
-    verifierId: '6',
-    verifierName: 'HDFC Bank Ltd',
-    verifierCategory: 'Banking & Financial Services',
-    verifierCode: 'HDFC-BFSI',
-    dateOfJoining: '2019-08-12',
-    dateOfLeaving: '2022-07-15',
-    isCurrentlyEmployed: false,
-    designation: 'Assistant Branch Manager',
-    department: 'Retail Banking Operations',
-    verificationType: 'Salary & Compensation Verification',
-    remarks: 'Verify last drawn compensation and conduct score.',
-    uploadedFilesCount: 2,
-    submittedBy: 'compliance@finsecure.in',
-    submittedAt: '2026-08-25',
-    status: 'Verified'
-  },
-  {
-    id: 'rec-5',
-    requestId: 'VR-410923',
-    candidateName: 'Vikramjit Singh',
-    employeeId: 'WIP-33019',
-    candidateEmail: 'vikram.singh@wipro-dev.com',
-    contactNumber: '+91 98111 22334',
-    verifierId: '5',
-    verifierName: 'Wipro Technologies',
-    verifierCategory: 'Enterprise Technology',
-    verifierCode: 'WIP-IND',
-    dateOfJoining: '2023-02-01',
-    dateOfLeaving: '2023-09-30',
-    isCurrentlyEmployed: false,
-    designation: 'Quality Assurance Engineer',
-    department: 'Testing COE',
-    verificationType: 'Relieving & Experience Check',
-    remarks: 'Discrepancy in reported relieving dates.',
-    uploadedFilesCount: 1,
-    submittedBy: 'hr.audit@clienttech.io',
-    submittedAt: '2026-08-22',
-    status: 'Rejected'
-  }
-]
+import { useAuth } from '../useAuth'
 
 function Client() {
+  const { user } = useAuth()
+  const isClient = user?.Usertype?.toLowerCase() === 'client'
+
   const [records, setRecords] = useState<VerificationRecord[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedStatus, setSelectedStatus] = useState<string>('All')
@@ -156,21 +42,38 @@ function Client() {
   const [selectedRecord, setSelectedRecord] = useState<VerificationRecord | null>(null)
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false)
 
-  // Load records from localStorage or seed initial records
+  // Load records from localStorage
   const loadRecords = () => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY_VERIFICATION_RECORDS)
       if (stored) {
         const parsed = JSON.parse(stored) as VerificationRecord[]
-        setRecords(parsed)
-      } else {
-        localStorage.setItem(STORAGE_KEY_VERIFICATION_RECORDS, JSON.stringify(INITIAL_SAMPLE_RECORDS))
-        setRecords(INITIAL_SAMPLE_RECORDS)
+        if (Array.isArray(parsed)) {
+          // Filter out any legacy dummy records from localStorage
+          const genuine = parsed.filter(
+            (r) =>
+              !r.id?.startsWith('rec-') &&
+              !r.requestId?.startsWith('VR-849') &&
+              !r.requestId?.startsWith('VR-732') &&
+              !r.requestId?.startsWith('VR-619') &&
+              !r.requestId?.startsWith('VR-502') &&
+              !r.requestId?.startsWith('VR-504') &&
+              !r.requestId?.startsWith('VR-410') &&
+              !r.requestId?.startsWith('VR-392') &&
+              !r.requestId?.startsWith('VR-281') &&
+              !r.requestId?.startsWith('VR-194')
+          )
+          if (genuine.length !== parsed.length) {
+            localStorage.setItem(STORAGE_KEY_VERIFICATION_RECORDS, JSON.stringify(genuine))
+          }
+          setRecords(genuine)
+          return
+        }
       }
     } catch (err) {
       console.error('Failed to load verification records', err)
-      setRecords(INITIAL_SAMPLE_RECORDS)
     }
+    setRecords([])
   }
 
   useEffect(() => {
@@ -268,13 +171,15 @@ function Client() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <span className="text-xs font-bold uppercase tracking-wider text-[#0680A6] block mb-1">
-            Verification Records & Compliance
+            {isClient ? 'Live Verification Tracking' : 'Verification Records & Compliance'}
           </span>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-            Client Verification Records
+            {isClient ? 'Raised Verification Requests' : 'Client Verification Records'}
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            Monitor, audit, and process candidate background verification requests submitted across client accounts.
+            {isClient
+              ? 'Review all candidate verification requests raised by your organization, track real-time verifier progress, and inspect status reports.'
+              : 'Monitor, audit, and process candidate background verification requests submitted across client accounts.'}
           </p>
         </div>
 
@@ -395,9 +300,9 @@ function Client() {
               className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:border-[#0680A6]"
             >
               <option value="All">All Companies</option>
-              {VERIFIER_COMPANIES.map((c) => (
-                <option key={c.id} value={c.name}>
-                  {c.name}
+              {Array.from(new Set(records.map((r) => r.verifierName).filter(Boolean))).map((name) => (
+                <option key={name} value={name}>
+                  {name}
                 </option>
               ))}
             </select>

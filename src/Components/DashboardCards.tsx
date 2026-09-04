@@ -15,17 +15,58 @@ interface DashboardCardsProps {
 }
 
 export function DashboardCards({ userType, stats }: DashboardCardsProps) {
-  const isContributor = userType?.toLowerCase() === 'contributor' || userType?.toLowerCase() === 'fascilator'
+  const ut = (userType || '').toLowerCase().trim().replace(/[\s_-]+/g, '')
+  const isContributor = ut.includes('contributor') || ut === 'fascilator'
+  const isClient = ut === 'client'
 
   const formatNumber = (val: number | undefined, fallback: number = 0) => {
     const num = val !== undefined ? val : fallback
     return String(num).padStart(2, '0')
   }
 
+  const clientCards = [
+    {
+      title: 'TOTAL REQUESTS',
+      value: formatNumber(stats?.totalCases, 0),
+      sub: 'All submitted requests',
+      icon: Folder,
+      colorClass: 'text-[#5850EC]',
+      barColor: 'bg-[#5850EC]',
+      iconBg: 'bg-indigo-50 text-[#5850EC]',
+    },
+    {
+      title: 'PENDING REQUESTS',
+      value: formatNumber(stats?.casePending, 0),
+      sub: 'Awaiting verifier review',
+      icon: Clock,
+      colorClass: 'text-orange-500',
+      barColor: 'bg-orange-500',
+      iconBg: 'bg-orange-50 text-orange-500',
+    },
+    {
+      title: 'REJECTED REQUESTS',
+      value: formatNumber(stats?.caseRejected, 0),
+      sub: 'Discrepancy / Rejected',
+      icon: AlertTriangle,
+      colorClass: 'text-red-500',
+      barColor: 'bg-red-500',
+      iconBg: 'bg-red-50 text-red-500',
+    },
+    {
+      title: 'VERIFIED REQUESTS',
+      value: formatNumber(stats?.caseResponded, 0),
+      sub: 'Cleared verifications',
+      icon: CheckCircle2,
+      colorClass: 'text-emerald-500',
+      barColor: 'bg-emerald-500',
+      iconBg: 'bg-emerald-50 text-emerald-500',
+    },
+  ]
+
   const cards = [
     {
       title: 'TOTAL CASES',
-      value: formatNumber(stats?.totalCases, 7),
+      value: formatNumber(stats?.totalCases, 0),
       sub: 'Database records',
       icon: Folder,
       colorClass: 'text-[#5850EC]',
@@ -34,7 +75,7 @@ export function DashboardCards({ userType, stats }: DashboardCardsProps) {
     },
     {
       title: 'CASE PENDING',
-      value: formatNumber(stats?.casePending, 2),
+      value: formatNumber(stats?.casePending, 0),
       sub: 'Active running checks',
       icon: Clock,
       colorClass: 'text-orange-500',
@@ -43,7 +84,7 @@ export function DashboardCards({ userType, stats }: DashboardCardsProps) {
     },
     {
       title: 'CASE RESPONDED',
-      value: formatNumber(stats?.caseResponded, 3),
+      value: formatNumber(stats?.caseResponded, 0),
       sub: 'Completed checks',
       icon: CheckCircle2,
       colorClass: 'text-emerald-500',
@@ -52,7 +93,7 @@ export function DashboardCards({ userType, stats }: DashboardCardsProps) {
     },
     {
       title: 'CASE REJECTED',
-      value: formatNumber(stats?.caseRejected, 2),
+      value: formatNumber(stats?.caseRejected, 0),
       sub: 'Disputed compliance',
       icon: AlertTriangle,
       colorClass: 'text-red-500',
@@ -61,7 +102,7 @@ export function DashboardCards({ userType, stats }: DashboardCardsProps) {
     },
     {
       title: 'REQUESTS PENDING',
-      value: formatNumber(stats?.requestsPending, 2),
+      value: formatNumber(stats?.requestsPending, 0),
       sub: 'Running queries',
       icon: HelpCircle,
       colorClass: 'text-blue-500',
@@ -70,7 +111,7 @@ export function DashboardCards({ userType, stats }: DashboardCardsProps) {
     },
     {
       title: 'REQUESTS RESPONDED',
-      value: formatNumber(stats?.requestsResponded, 3),
+      value: formatNumber(stats?.requestsResponded, 0),
       sub: 'Completed queries',
       icon: ThumbsUp,
       colorClass: 'text-pink-500',
@@ -79,18 +120,20 @@ export function DashboardCards({ userType, stats }: DashboardCardsProps) {
     },
   ]
 
-  const filteredCards = isContributor
-    ? cards.filter(card => card.title !== 'CASE RESPONDED' && card.title !== 'CASE REJECTED')
-    : cards;
+  const filteredCards = isClient
+    ? clientCards
+    : isContributor
+      ? cards.filter(card => card.title !== 'CASE RESPONDED' && card.title !== 'CASE REJECTED')
+      : cards;
 
-  const gridColsClass = filteredCards.length === 4 ? 'lg:grid-cols-4' : 'lg:grid-cols-6';
+  const gridColsClass = filteredCards.length === 4 ? 'grid-cols-2 lg:grid-cols-4' : 'grid-cols-2 md:grid-cols-3 lg:grid-cols-6';
   
   // Dynamic design variables based on role (Admin = small text / Contributor = large text)
-  const titleSize = isContributor ? 'text-[12px]' : 'text-[11px]';
-  const valueSize = isContributor ? 'text-4xl' : 'text-2.5xl';
-  const subSize = isContributor ? 'text-[12px]' : 'text-[11px]';
-  const cardPadding = isContributor ? 'p-6' : 'p-5';
-  const contentSpacing = isContributor ? 'mt-5' : 'mt-4';
+  const titleSize = isClient || isContributor ? 'text-[12px]' : 'text-[11px]';
+  const valueSize = isClient || isContributor ? 'text-3.5xl' : 'text-2.5xl';
+  const subSize = isClient || isContributor ? 'text-[12px]' : 'text-[11px]';
+  const cardPadding = isClient || isContributor ? 'p-6' : 'p-5';
+  const contentSpacing = isClient || isContributor ? 'mt-5' : 'mt-4';
 
   return (
     <div className={`grid grid-cols-2 md:grid-cols-3 ${gridColsClass} gap-4 mb-8`}>

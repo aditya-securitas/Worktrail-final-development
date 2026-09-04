@@ -1,7 +1,8 @@
-import { useLocation, Link } from 'react-router-dom'
+import { useLocation, Link, Navigate } from 'react-router-dom'
 import { useAuth } from './useAuth'
 import type { MenuRoute } from './auth-context'
 import { useState, useEffect, useRef } from 'react'
+import { checkClientHasRequests } from './client-utils'
 import ServiceRequest from './Components/ServiceRequest'
 import AddEmployee from './Components/AddEmployee'
 import Client from './Components/Client'
@@ -12,8 +13,8 @@ import UserMaster from './Components/Usermaster'
 import Recyclebin from './Components/Recyclebin'
 import OtherServices from './Components/OtherServices'
 import Invoice from './Components/Invoice'
-import ConAdminAddEmployee from './ContributorAdmin/ConAdminAddEmployee'
 import ConAdminUsermaster from './ContributorAdmin/ConAdminUsermaster'
+import ConUserAddEmployee from './ContributorUser/ConUserAddEmployee'
 import Navbar from './Components/Navbar'
 import Sidebar from './Components/Sidebar'
 import { flattenMenu, menuPath } from './Components/sidebar-utils'
@@ -28,7 +29,7 @@ import {
   type VerificationRecord,
   STORAGE_KEY_VERIFICATION_RECORDS
 } from './Components/CandidateVerificationForm'
-import { Search, Calendar, RefreshCw } from 'lucide-react'
+import { Search, Calendar, RefreshCw, CheckCircle2 } from 'lucide-react'
 
 const EXTERNAL_LINKS: Record<string, boolean> = {
   'Privacypolicy.tsx': true,
@@ -36,9 +37,18 @@ const EXTERNAL_LINKS: Record<string, boolean> = {
 }
 
 function MenuComponent({ item }: { item: MenuRoute | undefined }) {
+  const { user } = useAuth()
   if (!item) return null
   if (item.components === 'ServiceRequest.tsx') return <ServiceRequest />
-  if (item.components === 'AddEmployee.tsx') return <AddEmployee />
+  if (item.components === 'ConUserAddEmployee.tsx') return <ConUserAddEmployee />
+  if (item.components === 'ConAdminAddEmployee.tsx') return <ConUserAddEmployee />
+  if (item.components === 'AddEmployee.tsx') {
+    const ut = (user?.Usertype || '').toLowerCase().trim().replace(/[\s_-]+/g, '')
+    if (ut === 'contributor' || ut === 'contributoruser' || ut === 'contributoradmin' || ut === 'admincontributor') {
+      return <ConUserAddEmployee />
+    }
+    return <AddEmployee />
+  }
   if (item.components === 'Client.tsx') return <Client />
   if (item.components === 'CandidateVerificationForm.tsx') return <CandidateVerificationForm />
   if (item.components === 'Contributor.tsx') return <Contributor />
@@ -47,7 +57,6 @@ function MenuComponent({ item }: { item: MenuRoute | undefined }) {
   if (item.components === 'Recyclebin.tsx') return <Recyclebin />
   if (item.components === 'OtherServices.tsx') return <OtherServices />
   if (item.components === 'Invoice.tsx') return <Invoice />
-  if (item.components === 'ConAdminAddEmployee.tsx') return <ConAdminAddEmployee />
   if (item.components === 'ConAdminUsermaster.tsx') return <ConAdminUsermaster />
   return null
 }
@@ -56,13 +65,26 @@ function Dashboard() {
   const { user, menu, isMenuLoading, menuError } = useAuth()
   const location = useLocation()
 
-  // If user is Client, render the dedicated Candidate Verification Form (standalone, no sidebar/header)
-  if (user?.Usertype?.toLowerCase() === 'client') {
+  // If user is Client and currently on the /CandidateVerification route, render the verification form
+  if (user?.Usertype?.toLowerCase() === 'client' && location.pathname === '/CandidateVerification') {
     return <CandidateVerificationForm />
+  }
+
+  // If new client user with 0 requests visits /dashboard, redirect to Candidate Verification form
+  if (user?.Usertype?.toLowerCase() === 'client' && location.pathname === '/dashboard') {
+    const hasRequests = checkClientHasRequests(user)
+    if (!hasRequests) {
+      return <Navigate to="/CandidateVerification" replace />
+    }
   }
 
   const [sidebarState, setSidebarState] = useState<'full' | 'mini' | 'closed'>('full')
   const menuItems = flattenMenu(menu)
+
+  const userTypeNorm = (user?.Usertype || '').toLowerCase().trim().replace(/[\s_-]+/g, '')
+  const isClientUser = userTypeNorm === 'client'
+  const isContributorUser = userTypeNorm.includes('contributor')
+  const showComplianceCharts = !isClientUser && !isContributorUser
 
   const [timeframe, setTimeframe] = useState<'daily' | 'weekly' | 'monthly'>('daily')
   const [appealSearchQuery, setAppealSearchQuery] = useState('')
@@ -79,8 +101,32 @@ function Dashboard() {
       const stored = localStorage.getItem(STORAGE_KEY_VERIFICATION_RECORDS)
       if (stored) {
         const parsed = JSON.parse(stored)
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setAllRecords(parsed)
+        if (Array.isArray(parsed)) {
+          // Filter out any legacy dummy records from localStorage
+          const genuineRecords = parsed.filter(
+            (r) =>
+              !r.id?.startsWith('rec-') &&
+              !r.requestId?.startsWith('VR-849') &&
+              !r.requestId?.startsWith('VR-732') &&
+              !r.requestId?.startsWith('VR-619') &&
+              !r.requestId?.startsWith('VR-508') &&
+              !r.requestId?.startsWith('VR-381') &&
+              !r.requestId?.startsWith('VR-274') &&
+              !r.requestId?.startsWith('VR-194')
+          )
+          if (genuineRecords.length !== parsed.length) {
+            localStorage.setItem(STORAGE_KEY_VERIFICATION_RECORDS, JSON.stringify(genuineRecords))
+          }
+          if (user?.Usertype?.toLowerCase() === 'client') {
+            const ident = (user?.username || '').toLowerCase().trim()
+            const userRecords = genuineRecords.filter((r) => {
+              const sub = (r.submittedBy || '').toLowerCase().trim()
+              return !ident || sub === ident || sub.includes(ident) || ident.includes(sub)
+            })
+            setAllRecords(userRecords)
+          } else {
+            setAllRecords(genuineRecords)
+          }
           return
         }
       }
@@ -88,172 +134,7 @@ function Dashboard() {
       // ignore
     }
 
-    // Default seeded records if storage empty
-    const seed: VerificationRecord[] = [
-      {
-        id: 'rec-1',
-        requestId: 'VR-849201',
-        candidateName: 'Aarav Sharma',
-        employeeId: 'EMP-1001',
-        candidateEmail: 'aarav.sharma@tcs.com',
-        contactNumber: '+91 98234 11223',
-        verifierId: '2',
-        verifierName: 'Tata Consultancy Services (TCS)',
-        verifierCategory: 'IT & Consulting',
-        verifierCode: 'TCS-GLB',
-        dateOfJoining: '2021-06-15',
-        dateOfLeaving: '2024-03-31',
-        isCurrentlyEmployed: false,
-        designation: 'Senior Systems Engineer',
-        department: 'Digital Cloud Practices',
-        verificationType: 'Standard Employment Verification',
-        remarks: 'Confirmed relieving date.',
-        uploadedFilesCount: 2,
-        submittedBy: 'hr.ops@clienttech.io',
-        submittedAt: '2026-08-30',
-        status: 'Pending'
-      },
-      {
-        id: 'rec-2',
-        requestId: 'VR-732049',
-        candidateName: 'Priya Mukherjee',
-        employeeId: 'EMP-1002',
-        candidateEmail: 'priya.m@infosys.com',
-        contactNumber: '+91 99102 33445',
-        verifierId: '3',
-        verifierName: 'Infosys Limited',
-        verifierCategory: 'Technology Services',
-        verifierCode: 'INF-CORP',
-        dateOfJoining: '2020-01-10',
-        dateOfLeaving: '2023-11-20',
-        isCurrentlyEmployed: false,
-        designation: 'Lead Business Analyst',
-        department: 'Fintech Solutions',
-        verificationType: 'Comprehensive Screening',
-        remarks: 'Experience letter verified.',
-        uploadedFilesCount: 3,
-        submittedBy: 'talent@walsonspartners.com',
-        submittedAt: '2026-08-28',
-        status: 'Verified'
-      },
-      {
-        id: 'rec-3',
-        requestId: 'VR-619482',
-        candidateName: 'Rohan Deshmukh',
-        employeeId: 'EMP-1003',
-        candidateEmail: 'rohan.d@securitas.in',
-        contactNumber: '+91 97654 88776',
-        verifierId: '1',
-        verifierName: 'Securitas India',
-        verifierCategory: 'Security Services',
-        verifierCode: 'SEC-IND',
-        dateOfJoining: '2022-04-01',
-        dateOfLeaving: 'Present',
-        isCurrentlyEmployed: true,
-        designation: 'Operations Supervisor',
-        department: 'Site Security Division',
-        verificationType: 'Standard Employment Verification',
-        remarks: 'Active employee verification.',
-        uploadedFilesCount: 1,
-        submittedBy: 'client.verify@globalretail.com',
-        submittedAt: '2026-08-27',
-        status: 'Verified'
-      },
-      {
-        id: 'rec-4',
-        requestId: 'VR-504938',
-        candidateName: 'Sneha Patel',
-        employeeId: 'EMP-1004',
-        candidateEmail: 'sneha.patel@wipro.com',
-        contactNumber: '+91 98450 67210',
-        verifierId: '4',
-        verifierName: 'Wipro Limited',
-        verifierCategory: 'IT Infrastructure',
-        verifierCode: 'WIP-IND',
-        dateOfJoining: '2019-08-12',
-        dateOfLeaving: '2022-05-18',
-        isCurrentlyEmployed: false,
-        designation: 'Quality Assurance Lead',
-        department: 'Enterprise Applications',
-        verificationType: 'Comprehensive Screening',
-        remarks: 'Verification completed.',
-        uploadedFilesCount: 2,
-        submittedBy: 'verification@fintechcorp.org',
-        submittedAt: '2026-08-25',
-        status: 'Verified'
-      },
-      {
-        id: 'rec-5',
-        requestId: 'VR-392817',
-        candidateName: 'Vikram Sengupta',
-        employeeId: 'EMP-1005',
-        candidateEmail: 'vikram.s@accenture.com',
-        contactNumber: '+91 98112 44556',
-        verifierId: '5',
-        verifierName: 'Accenture India',
-        verifierCategory: 'Management Consulting',
-        verifierCode: 'ACC-TECH',
-        dateOfJoining: '2023-02-01',
-        dateOfLeaving: '2024-01-15',
-        isCurrentlyEmployed: false,
-        designation: 'Software Associate',
-        department: 'Cloud First Practice',
-        verificationType: 'Standard Employment Verification',
-        remarks: 'Candidate integrity disputed.',
-        uploadedFilesCount: 1,
-        submittedBy: 'recruiter@techventures.io',
-        submittedAt: '2026-08-24',
-        status: 'Rejected'
-      },
-      {
-        id: 'rec-6',
-        requestId: 'VR-281940',
-        candidateName: 'Ananya Verma',
-        employeeId: 'EMP-1006',
-        candidateEmail: 'ananya.v@cognizant.com',
-        contactNumber: '+91 97123 99887',
-        verifierId: '6',
-        verifierName: 'Cognizant Technology Solutions',
-        verifierCategory: 'IT & Digital Engineering',
-        verifierCode: 'CTS-GLB',
-        dateOfJoining: '2021-11-01',
-        dateOfLeaving: '2024-06-30',
-        isCurrentlyEmployed: false,
-        designation: 'Full Stack Developer',
-        department: 'Banking & Financial Services',
-        verificationType: 'Standard Employment Verification',
-        remarks: 'Pending HR signoff.',
-        uploadedFilesCount: 2,
-        submittedBy: 'hr.audit@globalsolutions.in',
-        submittedAt: '2026-08-29',
-        status: 'Pending'
-      },
-      {
-        id: 'rec-7',
-        requestId: 'VR-194820',
-        candidateName: 'Karan Mehra',
-        employeeId: 'EMP-1007',
-        candidateEmail: 'karan.m@hcltech.com',
-        contactNumber: '+91 99881 22334',
-        verifierId: '7',
-        verifierName: 'HCLTech',
-        verifierCategory: 'Technology Services',
-        verifierCode: 'HCL-ENG',
-        dateOfJoining: '2020-07-15',
-        dateOfLeaving: '2023-09-30',
-        isCurrentlyEmployed: false,
-        designation: 'DevOps Engineer',
-        department: 'Infrastructure Operations',
-        verificationType: 'Comprehensive Screening',
-        remarks: 'Discrepancy in exit formality.',
-        uploadedFilesCount: 1,
-        submittedBy: 'talent.check@enterpriseit.com',
-        submittedAt: '2026-08-23',
-        status: 'Rejected'
-      }
-    ]
-
-    setAllRecords(seed)
+    setAllRecords([])
   }
 
   useEffect(() => {
@@ -261,7 +142,7 @@ function Dashboard() {
     const handleStorage = () => loadRecords()
     window.addEventListener('storage', handleStorage)
     return () => window.removeEventListener('storage', handleStorage)
-  }, [])
+  }, [location.pathname])
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -441,6 +322,25 @@ function Dashboard() {
 
           {location.pathname === '/dashboard' ? (
             <>
+              {/* Success Notification Banner if just submitted */}
+              {location.state?.newRequestId && (
+                <div className="mb-6 p-4 rounded-2xl bg-emerald-50/90 border border-emerald-200 flex items-center justify-between text-emerald-900 shadow-sm animate-fade-in">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-600 shrink-0">
+                      <CheckCircle2 className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-emerald-900">
+                        Candidate Verification Request {location.state.newRequestId} Submitted!
+                      </h4>
+                      <p className="text-[11px] text-emerald-700 mt-0.5">
+                        Request for <strong>{location.state.candidateName || 'Candidate'}</strong> is now queued as <strong>'Pending'</strong> and shown in the table below.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Banner Card */}
               <div className="relative rounded-3xl overflow-hidden bg-[#031f30] text-white p-8 mb-8 shadow-sm flex flex-col items-end justify-between min-h-[220px]">
                 {/* Background Video */}
@@ -459,82 +359,111 @@ function Dashboard() {
 
                 {/* Content */}
                 <div className="relative z-10 max-w-lg mt-auto flex flex-col items-end">
-                  <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight mb-2">WORKTRAIL DASHBOARD</h2>
+                  <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight mb-2">
+                    {user?.Usertype?.toLowerCase() === 'client' ? 'CLIENT VERIFICATION PORTAL' : 'WORKTRAIL DASHBOARD'}
+                  </h2>
                   <p className="text-slate-300 text-xs sm:text-sm text-end leading-relaxed mb-6">
-                    Candidate background verification portal. Access compliance audit parameters, telemetry signals, and physical checks.
+                    {user?.Usertype?.toLowerCase() === 'client'
+                      ? 'Submit candidate verification requests and monitor live background screening progress in real-time.'
+                      : 'Candidate background verification portal. Access compliance audit parameters, telemetry signals, and physical checks.'}
                   </p>
-                  <Link to="/AddEmployee">
-                    <button className="flex items-center gap-2.5 h-11 px-6 bg-gradient-to-r from-[#10B981] to-[#5850EC] hover:brightness-110 hover:shadow-[0_4px_15px_rgba(8,33,54,0.25)] active:scale-[0.98] text-white font-bold text-xs tracking-wider uppercase rounded-full transition-all shadow-md cursor-pointer select-none">
-                      ADD CANDIDATE
-                    </button>
-                  </Link>
+                  <div className="flex flex-wrap items-center justify-end gap-3">
+                    {user?.Usertype?.toLowerCase() === 'client' && (
+                      <Link to="/Client">
+                        <button className="flex items-center gap-2 h-11 px-5 bg-white/10 hover:bg-white/20 border border-white/20 text-white font-bold text-xs tracking-wider uppercase rounded-full transition-all shadow-sm cursor-pointer select-none">
+                          VIEW RAISED REQUESTS
+                        </button>
+                      </Link>
+                    )}
+                    <Link
+                      to={
+                        isClientUser
+                          ? '/CandidateVerification'
+                          : userTypeNorm.includes('contributoradmin') || userTypeNorm === 'admincontributor'
+                          ? '/ConAdminAddEmployee'
+                          : '/AddEmployee'
+                      }
+                    >
+                      <button className="flex items-center gap-2.5 h-11 px-6 bg-gradient-to-r from-[#10B981] to-[#5850EC] hover:brightness-110 hover:shadow-[0_4px_15px_rgba(8,33,54,0.25)] active:scale-[0.98] text-white font-bold text-xs tracking-wider uppercase rounded-full transition-all shadow-md cursor-pointer select-none">
+                        {isClientUser ? 'NEW VERIFICATION REQUEST' : 'ADD CANDIDATE'}
+                      </button>
+                    </Link>
+                  </div>
                 </div>
               </div>
 
               {/* Six Metrics Cards Component */}
               <DashboardCards userType={user?.Usertype} stats={stats} />
 
-              {/* Switcher Header */}
-              <div className="flex justify-between items-center mb-6">
-                <div>
-                  <h3 className="text-lg font-extrabold text-slate-800 tracking-tight leading-none uppercase">Compliance Analytics</h3>
-                  <span className="text-[9px] text-slate-400 font-bold tracking-widest mt-1.5 block">SENTINEL TELEMETRY CHARTS</span>
-                </div>
-                <div className="bg-slate-100 rounded-full p-1 flex gap-1.5 text-xs font-bold text-slate-500">
-                  <button
-                    type="button"
-                    onClick={() => setTimeframe('daily')}
-                    className={`px-3.5 py-1.5 rounded-full uppercase cursor-pointer transition-all ${
-                      timeframe === 'daily'
-                        ? 'bg-[#031f30] text-white shadow-xs'
-                        : 'hover:text-slate-800 text-slate-500'
-                    }`}
-                  >
-                    Daily
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setTimeframe('weekly')}
-                    className={`px-3.5 py-1.5 rounded-full uppercase cursor-pointer transition-all ${
-                      timeframe === 'weekly'
-                        ? 'bg-[#031f30] text-white shadow-xs'
-                        : 'hover:text-slate-800 text-slate-500'
-                    }`}
-                  >
-                    Weekly
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setTimeframe('monthly')}
-                    className={`px-3.5 py-1.5 rounded-full uppercase cursor-pointer transition-all ${
-                      timeframe === 'monthly'
-                        ? 'bg-[#031f30] text-white shadow-xs'
-                        : 'hover:text-slate-800 text-slate-500'
-                    }`}
-                  >
-                    Monthly
-                  </button>
-                </div>
-              </div>
+              {/* Switcher Header & Charts Component - Hidden for Client and Contributor roles (Contributor User & Admin) per user request */}
+              {showComplianceCharts && (
+                <>
+                  <div className="flex justify-between items-center mb-6">
+                    <div>
+                      <h3 className="text-lg font-extrabold text-slate-800 tracking-tight leading-none uppercase">Compliance Analytics</h3>
+                      <span className="text-[9px] text-slate-400 font-bold tracking-widest mt-1.5 block">SENTINEL TELEMETRY CHARTS</span>
+                    </div>
+                    <div className="bg-slate-100 rounded-full p-1 flex gap-1.5 text-xs font-bold text-slate-500">
+                      <button
+                        type="button"
+                        onClick={() => setTimeframe('daily')}
+                        className={`px-3.5 py-1.5 rounded-full uppercase cursor-pointer transition-all ${
+                          timeframe === 'daily'
+                            ? 'bg-[#031f30] text-white shadow-xs'
+                            : 'hover:text-slate-800 text-slate-500'
+                        }`}
+                      >
+                        Daily
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTimeframe('weekly')}
+                        className={`px-3.5 py-1.5 rounded-full uppercase cursor-pointer transition-all ${
+                          timeframe === 'weekly'
+                            ? 'bg-[#031f30] text-white shadow-xs'
+                            : 'hover:text-slate-800 text-slate-500'
+                        }`}
+                      >
+                        Weekly
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTimeframe('monthly')}
+                        className={`px-3.5 py-1.5 rounded-full uppercase cursor-pointer transition-all ${
+                          timeframe === 'monthly'
+                            ? 'bg-[#031f30] text-white shadow-xs'
+                            : 'hover:text-slate-800 text-slate-500'
+                        }`}
+                      >
+                        Monthly
+                      </button>
+                    </div>
+                  </div>
 
-              {/* Two Column Charts Component */}
-              <DashboardCharts
-                timeframe={timeframe}
-                progressionData={progressionData}
-                distribution={distribution}
-              />
+                  {/* Two Column Charts Component */}
+                  <DashboardCharts
+                    timeframe={timeframe}
+                    progressionData={progressionData}
+                    distribution={distribution}
+                  />
 
-              {/* Superadmin Exclusive: Full-Width Transaction & Revenue Telemetry Chart Under Compliance Analytics */}
-              {user?.Usertype?.toLowerCase() === 'superadmin' && (
-                <div className="mt-8">
-                  <TransactionTelemetryChart timeframe={timeframe} />
-                </div>
+                  {/* Superadmin Exclusive: Full-Width Transaction & Revenue Telemetry Chart Under Compliance Analytics */}
+                  {userTypeNorm === 'superadmin' && (
+                    <div className="mt-8">
+                      <TransactionTelemetryChart timeframe={timeframe} />
+                    </div>
+                  )}
+                </>
               )}
 
               {/* Recent Appeals Title & Subtitle */}
               <div className="flex flex-col gap-1 mb-6 mt-8 select-none">
-                <h3 className="text-lg font-extrabold text-slate-800 tracking-tight leading-none uppercase">Recent Appeals</h3>
-                <span className="text-[9px] text-slate-400 font-bold tracking-widest mt-1.5 block">VERIFICATION LOGS & APPEALS ACTION</span>
+                <h3 className="text-lg font-extrabold text-slate-800 tracking-tight leading-none uppercase">
+                  {user?.Usertype?.toLowerCase() === 'client' ? 'Candidate Verification Requests' : 'Recent Appeals'}
+                </h3>
+                <span className="text-[9px] text-slate-400 font-bold tracking-widest mt-1.5 block">
+                  {user?.Usertype?.toLowerCase() === 'client' ? 'LIVE VERIFICATION STATUS & CANDIDATE LOGS' : 'VERIFICATION LOGS & APPEALS ACTION'}
+                </span>
               </div>
 
               {/* Filters Container Card */}
@@ -721,7 +650,9 @@ function Dashboard() {
                         <tr>
                           <td colSpan={6} className="px-5 py-12 text-center text-slate-400 bg-white select-none">
                             <Calendar className="w-10 h-10 mx-auto text-slate-300 mb-3" />
-                            <p className="font-semibold text-xs text-slate-500">No verification appeals found</p>
+                            <p className="font-semibold text-xs text-slate-500">
+                              {user?.Usertype?.toLowerCase() === 'client' ? 'No candidate verification requests found' : 'No verification appeals found'}
+                            </p>
                             <p className="text-[11px] text-slate-400 mt-1">Try resetting the filters or date range.</p>
                           </td>
                         </tr>

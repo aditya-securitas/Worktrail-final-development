@@ -135,49 +135,10 @@ export default function ConAdminUserMaster() {
       if (res.ok && data && Array.isArray(data.data)) {
         setAdminData(data.data);
       } else {
-        // Fallback seed
-        setAdminData([
-          {
-            id: 1,
-            username: "rohit.verma",
-            EmailID: "rohit.verma@securitas.in",
-            Usertype: "ContributorAdmin",
-            activestatus: "1"
-          },
-          {
-            id: 2,
-            username: "deepak.sharma",
-            EmailID: "deepak.s@securitas.in",
-            Usertype: "ContributorUser",
-            activestatus: "1"
-          },
-          {
-            id: 3,
-            username: "anita.desai",
-            EmailID: "anita.d@securitas.in",
-            Usertype: "ContributorUser",
-            activestatus: "1"
-          }
-        ]);
+        setAdminData([]);
       }
     } catch {
-      // Fallback seed
-      setAdminData([
-        {
-          id: 1,
-          username: "rohit.verma",
-          EmailID: "rohit.verma@securitas.in",
-          Usertype: "ContributorAdmin",
-          activestatus: "1"
-        },
-        {
-          id: 2,
-          username: "deepak.sharma",
-          EmailID: "deepak.s@securitas.in",
-          Usertype: "ContributorUser",
-          activestatus: "1"
-        }
-      ]);
+      setAdminData([]);
     } finally {
       setLoading(false);
     }

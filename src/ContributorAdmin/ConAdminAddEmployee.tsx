@@ -110,73 +110,10 @@ export default function ConAdminAddEmployee() {
       } else if (res.ok && data && data.data && typeof data.data === "object") {
         setEmployeeResults([data.data]);
       } else {
-        // Fallback seed data
-        setEmployeeResults([
-          {
-            EmployeeCode: "EMP-1001",
-            FirstName: "Siddharth",
-            LastName: "Malhotra",
-            Email: "siddharth.m@securitas.in",
-            MobileNo: "+91 98112 00445",
-            Department: "Security Operations",
-            LastPositionHeld: "Operations Specialist",
-            DateOfJoining: "2021-04-10",
-            DateOfLeaving: "Present",
-            Contributor: companyVal
-          },
-          {
-            EmployeeCode: "EMP-1002",
-            FirstName: "Radhika",
-            LastName: "Kulkarni",
-            Email: "radhika.k@securitas.in",
-            MobileNo: "+91 97654 11229",
-            Department: "Risk Management",
-            LastPositionHeld: "Surveillance Auditor",
-            DateOfJoining: "2019-11-01",
-            DateOfLeaving: "2024-02-15",
-            Contributor: companyVal
-          },
-          {
-            EmployeeCode: "EMP-1003",
-            FirstName: "Aman",
-            LastName: "Choudhary",
-            Email: "aman.c@securitas.in",
-            MobileNo: "+91 99887 66554",
-            Department: "Field Patrol",
-            LastPositionHeld: "Lead Inspector",
-            DateOfJoining: "2022-01-15",
-            DateOfLeaving: "Present",
-            Contributor: companyVal
-          }
-        ]);
+        setEmployeeResults([]);
       }
     } catch {
-      setEmployeeResults([
-        {
-          EmployeeCode: "EMP-1001",
-          FirstName: "Siddharth",
-          LastName: "Malhotra",
-          Email: "siddharth.m@securitas.in",
-          MobileNo: "+91 98112 00445",
-          Department: "Security Operations",
-          LastPositionHeld: "Operations Specialist",
-          DateOfJoining: "2021-04-10",
-          DateOfLeaving: "Present",
-          Contributor: user?.CompanyName || "Securitas India"
-        },
-        {
-          EmployeeCode: "EMP-1002",
-          FirstName: "Radhika",
-          LastName: "Kulkarni",
-          Email: "radhika.k@securitas.in",
-          MobileNo: "+91 97654 11229",
-          Department: "Risk Management",
-          LastPositionHeld: "Surveillance Auditor",
-          DateOfJoining: "2019-11-01",
-          DateOfLeaving: "2024-02-15",
-          Contributor: user?.CompanyName || "Securitas India"
-        }
-      ]);
+      setEmployeeResults([]);
     } finally {
       setSearchLoading(false);
     }
@@ -289,6 +226,56 @@ export default function ConAdminAddEmployee() {
       Contributor: row.Contributor || user?.CompanyName || "Securitas India"
     });
     setActivePanel("edit");
+  };
+
+  const handleInputChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
+  ) => {
+    const { name, value } = e.target;
+    setForm((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const renderFormField = (
+    name: keyof typeof form,
+    label: string,
+    placeholder: string,
+    type: string = "text",
+    required: boolean = false,
+    options?: string[]
+  ) => {
+    return (
+      <div className="flex flex-col gap-1.5 text-left">
+        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+          {label} {required && <span className="text-rose-500">*</span>}
+        </label>
+        {options ? (
+          <select
+            name={name}
+            value={form[name] || ""}
+            onChange={handleInputChange}
+            className="w-full h-10 border border-slate-200 rounded-lg px-3 text-sm text-slate-800 bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 focus:outline-none transition-all"
+            required={required}
+          >
+            <option value="" disabled hidden>{placeholder}</option>
+            {options.map((opt) => (
+              <option key={opt} value={opt} className="bg-white text-slate-800">
+                {opt}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <input
+            name={name}
+            type={type}
+            placeholder={placeholder}
+            value={form[name] || ""}
+            onChange={handleInputChange}
+            className="w-full h-10 border border-slate-200 rounded-lg px-3 text-sm text-slate-800 bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 focus:outline-none transition-all"
+            required={required}
+          />
+        )}
+      </div>
+    );
   };
 
   const filteredEmployees = employeeResults.filter((emp) => {
@@ -456,6 +443,7 @@ export default function ConAdminAddEmployee() {
                     <th className="px-5 py-4">Official Contact</th>
                     <th className="px-5 py-4">Tenure (DOJ - DOL)</th>
                     <th className="px-5 py-4">Organization</th>
+                    <th className="px-5 py-4 text-center">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-[13px] font-semibold">
@@ -499,11 +487,21 @@ export default function ConAdminAddEmployee() {
                         <td className="px-5 py-4 font-semibold text-slate-700">
                           {emp.Contributor || user?.CompanyName || "Securitas India"}
                         </td>
+                        <td className="px-5 py-4 text-center">
+                          <button
+                            type="button"
+                            onClick={() => handleEditRow(emp)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-600 text-indigo-600 hover:text-white font-semibold text-xs transition-all duration-150 active:scale-95 cursor-pointer border border-indigo-200/60"
+                          >
+                            <Pencil className="w-3.5 h-3.5 shrink-0" />
+                            <span>Edit</span>
+                          </button>
+                        </td>
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={7} className="px-5 py-12 text-center text-slate-400">
+                      <td colSpan={8} className="px-5 py-12 text-center text-slate-400">
                         <Users className="w-10 h-10 mx-auto text-slate-300 mb-3" />
                         <p className="font-semibold text-xs text-slate-500">No employee records found</p>
                         <p className="text-[11px] text-slate-400 mt-1">Try searching with an employee code or add a new record.</p>
@@ -517,299 +515,102 @@ export default function ConAdminAddEmployee() {
         </div>
       )}
 
-      {/* VIEW: Single Add Employee Form */}
-      {activePanel === "new" && (
-        <div className="bg-white rounded-3xl p-6 sm:p-10 shadow-sm border border-slate-200/80">
-          <div className="mb-8 pb-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <div>
-              <span className="text-xs font-bold uppercase tracking-wider text-[#0680A6] block mb-1">
-                New Employee Registration
-              </span>
-              <h2 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-                <UserPlus className="w-5 h-5 text-[#0680A6]" />
-                Create New Employee Record
-              </h2>
+      {/* Back Button */}
+      {(activePanel === "new" || activePanel === "edit") && (
+        <button
+          type="button"
+          className="min-h-[38px] min-w-[92px] px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold border-0 rounded-lg cursor-pointer z-10 active:scale-95 transition-all text-sm flex items-center justify-center gap-1.5 self-start"
+          onClick={() => setActivePanel("directory")}
+        >
+          &larr; Back
+        </button>
+      )}
+
+      {/* VIEW: Add / Edit Employee Form matching AddEmployee.tsx */}
+      {(activePanel === "new" || activePanel === "edit") && (
+        <div className="w-full mx-auto p-0 box-border relative">
+          <form
+            className="w-full flex flex-col items-stretch bg-transparent box-border"
+            autoComplete="off"
+            onSubmit={handleFormSubmit}
+          >
+            <h3 className="m-0 text-xl font-bold text-slate-800 text-left mb-1">
+              {activePanel === "edit" ? "Update Employee Details" : "Create New Employee"}
+            </h3>
+            <p className="m-0 text-[13px] text-slate-500 text-left mb-6">
+              {activePanel === "edit"
+                ? "Edit candidate records for verification and registry compliance."
+                : "Input candidate records for verification and registry compliance."}
+            </p>
+
+            <div className="w-full py-2.5">
+              {/* Personal Details Section */}
+              <div className="bg-white rounded-xl border border-slate-100 p-6 mb-5 shadow-sm box-border">
+                <div className="text-[12.5px] font-extrabold tracking-wider uppercase text-slate-500 mb-5 pb-2.5 border-b border-slate-100 flex items-center box-border text-left">
+                  <span className="inline-block w-2.5 h-2.5 rounded-full mr-2 bg-emerald-500"></span>
+                  Personal Details
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {renderFormField("FirstName", "First Name", "First Name", "text", true)}
+                  {renderFormField("MiddleName", "Middle Name", "Middle Name", "text", false)}
+                  {renderFormField("LastName", "Last Name", "Last Name", "text", true)}
+                  {renderFormField("Email", "Email ID", "Email ID", "email", true)}
+                  {renderFormField("MobileNo", "Mobile No", "Mobile No", "text", true)}
+                </div>
+              </div>
+
+              {/* Employment Details Section */}
+              <div className="bg-white rounded-xl border border-slate-100 p-6 mb-5 shadow-sm box-border">
+                <div className="text-[12.5px] font-extrabold tracking-wider uppercase text-slate-500 mb-5 pb-2.5 border-b border-slate-100 flex items-center box-border text-left">
+                  <span className="inline-block w-2.5 h-2.5 rounded-full mr-2 bg-blue-500"></span>
+                  Employment Details
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {renderFormField("EmployeeCode", "Employee Code", "Employee Code", "text", true)}
+                  {renderFormField("Department", "Department", "Department", "text", true)}
+                  {renderFormField("LastPositionHeld", "Last Position Held", "Last Position Held", "text", false)}
+                  {renderFormField("DateOfJoining", "Date of Joining", "Date of Joining", "date", true)}
+                  {renderFormField("DateOfLeaving", "Date of Leaving", "Date of Leaving", "date", false)}
+                  {renderFormField("LastSalaryAnnual", "Last Salary Annual (₹)", "Last Salary Annual", "number", true)}
+                  {renderFormField("EmploymentType", "Employment Type", "Employment Type", "text", true, ["Full-Time", "Part-Time", "Intern", "Contract"])}
+                </div>
+              </div>
+
+              {/* Compliance & Conduct Section */}
+              <div className="bg-white rounded-xl border border-slate-100 p-6 mb-5 shadow-sm box-border">
+                <div className="text-[12.5px] font-extrabold tracking-wider uppercase text-slate-500 mb-5 pb-2.5 border-b border-slate-100 flex items-center box-border text-left">
+                  <span className="inline-block w-2.5 h-2.5 rounded-full mr-2 bg-amber-500"></span>
+                  Compliance & Conduct
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {renderFormField("ExitFormalities", "Exit Formalities", "Exit Formalities", "text", true, ["Completed", "Pending", "Ongoing"])}
+                  {renderFormField("AnyBehaviourIssue", "Any Behavior Issues", "Any Behavior Issues", "text", false)}
+                  {renderFormField("EligibilityToRehire", "Eligibility to Rehire", "Eligibility to Rehire", "text", true, ["Yes", "No"])}
+
+                  <div className="flex flex-col gap-1.5 text-left">
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                      Company (Client) <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      name="Contributor"
+                      value={form.Contributor}
+                      readOnly
+                      className="w-full h-10 border border-slate-200 rounded-lg px-3 text-sm text-slate-400 bg-slate-50 cursor-not-allowed border-slate-300"
+                      tabIndex={-1}
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
+
             <button
-              type="button"
-              onClick={() => setActivePanel("directory")}
-              className="text-xs font-bold text-slate-400 hover:text-slate-700 flex items-center gap-1 cursor-pointer"
+              type="submit"
+              className={`${primaryBtnClass} self-center mx-auto mt-3`}
+              disabled={submitting}
             >
-              <X className="w-4 h-4" /> Cancel
+              {submitting ? (activePanel === "edit" ? "Updating..." : "Submitting...") : (activePanel === "edit" ? "Update Employee" : "Submit")}
             </button>
-          </div>
-
-          <form onSubmit={handleFormSubmit} className="space-y-8">
-            {/* Section 1: Candidate Identity */}
-            <div className="space-y-4">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600 flex items-center gap-2 pb-2 border-b border-slate-100">
-                <Users className="w-4 h-4 text-[#0680A6]" />
-                1. Candidate Identity & Contact
-              </h3>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                {/* First Name */}
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-2">
-                    First Name <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Siddharth"
-                    value={form.FirstName}
-                    onChange={(e) => setForm({ ...form, FirstName: e.target.value })}
-                    className={inputClass}
-                  />
-                </div>
-
-                {/* Middle Name */}
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-2">
-                    Middle Name
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Optional"
-                    value={form.MiddleName}
-                    onChange={(e) => setForm({ ...form, MiddleName: e.target.value })}
-                    className={inputClass}
-                  />
-                </div>
-
-                {/* Last Name */}
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-2">
-                    Last Name <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Malhotra"
-                    value={form.LastName}
-                    onChange={(e) => setForm({ ...form, LastName: e.target.value })}
-                    className={inputClass}
-                  />
-                </div>
-
-                {/* Employee Code */}
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-2">
-                    Employee Code <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. SEC-EMP-8821"
-                    value={form.EmployeeCode}
-                    onChange={(e) => setForm({ ...form, EmployeeCode: e.target.value })}
-                    className={`${inputClass} font-mono`}
-                  />
-                </div>
-
-                {/* Email */}
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-2">
-                    Official Email
-                  </label>
-                  <input
-                    type="email"
-                    placeholder="e.g. name@securitas.in"
-                    value={form.Email}
-                    onChange={(e) => setForm({ ...form, Email: e.target.value })}
-                    className={inputClass}
-                  />
-                </div>
-
-                {/* Mobile No */}
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-2">
-                    Mobile Number
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. +91 98112 00445"
-                    value={form.MobileNo}
-                    onChange={(e) => setForm({ ...form, MobileNo: e.target.value })}
-                    className={`${inputClass} font-mono`}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Section 2: Department & Employment Details */}
-            <div className="space-y-4">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600 flex items-center gap-2 pb-2 border-b border-slate-100">
-                <Briefcase className="w-4 h-4 text-[#0680A6]" />
-                2. Department & Employment Profile
-              </h3>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                {/* Department */}
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-2">
-                    Department
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Security Operations"
-                    value={form.Department}
-                    onChange={(e) => setForm({ ...form, Department: e.target.value })}
-                    className={inputClass}
-                  />
-                </div>
-
-                {/* Last Position Held */}
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-2">
-                    Last Position Held
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Operations Specialist"
-                    value={form.LastPositionHeld}
-                    onChange={(e) => setForm({ ...form, LastPositionHeld: e.target.value })}
-                    className={inputClass}
-                  />
-                </div>
-
-                {/* Last Salary Annual */}
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-2">
-                    Last Annual Salary (₹)
-                  </label>
-                  <input
-                    type="number"
-                    placeholder="e.g. 750000"
-                    value={form.LastSalaryAnnual}
-                    onChange={(e) => setForm({ ...form, LastSalaryAnnual: e.target.value })}
-                    className={`${inputClass} font-mono`}
-                  />
-                </div>
-
-                {/* Date of Joining */}
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-2">
-                    Date of Joining
-                  </label>
-                  <input
-                    type="date"
-                    value={form.DateOfJoining}
-                    onChange={(e) => setForm({ ...form, DateOfJoining: e.target.value })}
-                    className={inputClass}
-                  />
-                </div>
-
-                {/* Date of Leaving */}
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-2">
-                    Date of Leaving
-                  </label>
-                  <input
-                    type="date"
-                    value={form.DateOfLeaving}
-                    onChange={(e) => setForm({ ...form, DateOfLeaving: e.target.value })}
-                    className={inputClass}
-                  />
-                </div>
-
-                {/* Employment Type */}
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-2">
-                    Employment Type
-                  </label>
-                  <select
-                    value={form.EmploymentType}
-                    onChange={(e) => setForm({ ...form, EmploymentType: e.target.value })}
-                    className={selectClass}
-                  >
-                    <option value="">Select Type</option>
-                    <option value="Full Time">Full Time</option>
-                    <option value="Contractual">Contractual</option>
-                    <option value="Part Time">Part Time</option>
-                    <option value="Consultant">Consultant</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            {/* Section 3: Exit Verification & Rehire Eligibility */}
-            <div className="space-y-4">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600 flex items-center gap-2 pb-2 border-b border-slate-100">
-                <ShieldCheck className="w-4 h-4 text-[#0680A6]" />
-                3. Exit Verification & Rehire Compliance
-              </h3>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                {/* Exit Formalities */}
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-2">
-                    Exit Formalities
-                  </label>
-                  <select
-                    value={form.ExitFormalities}
-                    onChange={(e) => setForm({ ...form, ExitFormalities: e.target.value })}
-                    className={selectClass}
-                  >
-                    <option value="">Select Status</option>
-                    <option value="Completed">Completed</option>
-                    <option value="Pending">Pending</option>
-                    <option value="Absconded">Absconded</option>
-                  </select>
-                </div>
-
-                {/* Behaviour Issue */}
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-2">
-                    Any Behaviour Issue
-                  </label>
-                  <select
-                    value={form.AnyBehaviourIssue}
-                    onChange={(e) => setForm({ ...form, AnyBehaviourIssue: e.target.value })}
-                    className={selectClass}
-                  >
-                    <option value="">Select</option>
-                    <option value="No">No</option>
-                    <option value="Yes">Yes</option>
-                  </select>
-                </div>
-
-                {/* Eligibility to Rehire */}
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-2">
-                    Eligibility to Rehire
-                  </label>
-                  <select
-                    value={form.EligibilityToRehire}
-                    onChange={(e) => setForm({ ...form, EligibilityToRehire: e.target.value })}
-                    className={selectClass}
-                  >
-                    <option value="">Select</option>
-                    <option value="Yes">Yes</option>
-                    <option value="No">No</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="pt-6 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setActivePanel("directory")}
-                className={secondaryBtnClass}
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={submitting}
-                className={primaryBtnClass}
-              >
-                <Check className="w-4 h-4" />
-                {submitting ? "Saving Record..." : "Save Employee Record"}
-              </button>
-            </div>
           </form>
         </div>
       )}

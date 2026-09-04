@@ -3,6 +3,7 @@ import { useAuth } from './useAuth'
 import { Link, useNavigate } from 'react-router-dom'
 import { Mail, Lock, Eye, EyeOff, AlertCircle, ArrowRight, ShieldCheck } from 'lucide-react'
 import securitasLogo from './assets/Img/logo_b.png'
+import { checkClientHasRequests } from './client-utils'
 
 type LoginProps = {
   onRegister?: () => void
@@ -18,8 +19,26 @@ function Login({ onRegister }: LoginProps) {
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     try {
-      await login(emailId, password)
-      navigate('/dashboard', { replace: true })
+      const loggedUser = await login(emailId, password)
+      const currentUser = loggedUser || (() => {
+        try {
+          const stored = localStorage.getItem('worktrail_user')
+          return stored ? JSON.parse(stored) : null
+        } catch {
+          return null
+        }
+      })()
+
+      if (currentUser?.Usertype?.toLowerCase() === 'client') {
+        const hasRequests = checkClientHasRequests(currentUser, emailId)
+        if (hasRequests) {
+          navigate('/dashboard', { replace: true })
+        } else {
+          navigate('/CandidateVerification', { replace: true })
+        }
+      } else {
+        navigate('/dashboard', { replace: true })
+      }
     } catch { }
   }
 

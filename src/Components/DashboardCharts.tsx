@@ -1,3 +1,5 @@
+import { useState, useEffect } from 'react'
+
 export interface ProgressionPoint {
   day?: string
   label?: string
@@ -24,13 +26,13 @@ export function DashboardCharts({
   distribution
 }: DashboardChartsProps) {
   const defaultDailyData: ProgressionPoint[] = [
-    { label: 'Mon', logged: 4, completed: 3 },
-    { label: 'Tue', logged: 6, completed: 4 },
-    { label: 'Wed', logged: 3, completed: 2 },
-    { label: 'Thu', logged: 7, completed: 5 },
-    { label: 'Fri', logged: 5, completed: 4 },
-    { label: 'Sat', logged: 2, completed: 2 },
-    { label: 'Sun', logged: 1, completed: 1 },
+    { label: 'Mon', logged: 0, completed: 0 },
+    { label: 'Tue', logged: 0, completed: 0 },
+    { label: 'Wed', logged: 0, completed: 0 },
+    { label: 'Thu', logged: 0, completed: 0 },
+    { label: 'Fri', logged: 0, completed: 0 },
+    { label: 'Sat', logged: 0, completed: 0 },
+    { label: 'Sun', logged: 0, completed: 0 },
   ]
 
   const chartData = progressionData && progressionData.length > 0
@@ -48,10 +50,10 @@ export function DashboardCharts({
 
   // Distribution calculations
   const dist = distribution || {
-    total: 15,
-    pending: 4,
-    responded: 9,
-    rejected: 2
+    total: 0,
+    pending: 0,
+    responded: 0,
+    rejected: 0
   }
 
   const total = Math.max(dist.total, dist.pending + dist.responded + dist.rejected, 1)
@@ -258,40 +260,109 @@ interface TransactionTelemetryChartProps {
   timeframe?: 'daily' | 'weekly' | 'monthly'
 }
 
+function computeTelemetryData(timeframe: 'daily' | 'weekly' | 'monthly'): TransactionDataPoint[] {
+  let records: any[] = []
+  try {
+    const stored = localStorage.getItem('worktrail_verification_records')
+    if (stored) {
+      const parsed = JSON.parse(stored)
+      if (Array.isArray(parsed)) {
+        records = parsed.filter(
+          (r) =>
+            !r.id?.startsWith('rec-') &&
+            !r.requestId?.startsWith('VR-849') &&
+            !r.requestId?.startsWith('VR-732') &&
+            !r.requestId?.startsWith('VR-619')
+        )
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  if (timeframe === 'daily') {
+    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+    const map: Record<string, { revenue: number; count: number; paid: number }> = {}
+    days.forEach((d) => { map[d] = { revenue: 0, count: 0, paid: 0 } })
+
+    records.forEach((r) => {
+      const d = new Date(r.submittedAt || Date.now())
+      const dayIdx = (d.getDay() + 6) % 7
+      const dayName = days[dayIdx]
+      const amt = r.amount || 1499
+      if (map[dayName]) {
+        map[dayName].count += 1
+        map[dayName].revenue += amt
+        if (r.status !== 'Rejected') map[dayName].paid += 1
+      }
+    })
+
+    return days.map((label) => ({
+      label,
+      revenue: map[label].revenue,
+      count: map[label].count,
+      paid: map[label].paid
+    }))
+  } else if (timeframe === 'weekly') {
+    const weeks = ['Week 1', 'Week 2', 'Week 3', 'Week 4']
+    const map: Record<string, { revenue: number; count: number; paid: number }> = {}
+    weeks.forEach((w) => { map[w] = { revenue: 0, count: 0, paid: 0 } })
+
+    records.forEach((r) => {
+      const d = new Date(r.submittedAt || Date.now())
+      const weekIdx = Math.min(Math.floor((d.getDate() - 1) / 7), 3)
+      const weekName = weeks[weekIdx]
+      const amt = r.amount || 1499
+      if (map[weekName]) {
+        map[weekName].count += 1
+        map[weekName].revenue += amt
+        if (r.status !== 'Rejected') map[weekName].paid += 1
+      }
+    })
+
+    return weeks.map((label) => ({
+      label,
+      revenue: map[label].revenue,
+      count: map[label].count,
+      paid: map[label].paid
+    }))
+  } else {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    const map: Record<string, { revenue: number; count: number; paid: number }> = {}
+    months.forEach((m) => { map[m] = { revenue: 0, count: 0, paid: 0 } })
+
+    records.forEach((r) => {
+      const d = new Date(r.submittedAt || Date.now())
+      const mIdx = d.getMonth()
+      const mName = months[mIdx]
+      const amt = r.amount || 1499
+      if (map[mName]) {
+        map[mName].count += 1
+        map[mName].revenue += amt
+        if (r.status !== 'Rejected') map[mName].paid += 1
+      }
+    })
+
+    return months.map((label) => ({
+      label,
+      revenue: map[label].revenue,
+      count: map[label].count,
+      paid: map[label].paid
+    }))
+  }
+}
+
 export function TransactionTelemetryChart({ timeframe = 'daily' }: TransactionTelemetryChartProps) {
-  const dailyData: TransactionDataPoint[] = [
-    { label: 'Mon', revenue: 24500, count: 14, paid: 13 },
-    { label: 'Tue', revenue: 42000, count: 22, paid: 21 },
-    { label: 'Wed', revenue: 18500, count: 11, paid: 10 },
-    { label: 'Thu', revenue: 56000, count: 29, paid: 28 },
-    { label: 'Fri', revenue: 48500, count: 25, paid: 24 },
-    { label: 'Sat', revenue: 16000, count: 9, paid: 9 },
-    { label: 'Sun', revenue: 12500, count: 7, paid: 7 },
-  ]
+  const [currentData, setCurrentData] = useState<TransactionDataPoint[]>(() => {
+    return computeTelemetryData(timeframe)
+  })
 
-  const weeklyData: TransactionDataPoint[] = [
-    { label: 'Week 1', revenue: 78500, count: 42, paid: 40 },
-    { label: 'Week 2', revenue: 94200, count: 51, paid: 49 },
-    { label: 'Week 3', revenue: 62800, count: 34, paid: 33 },
-    { label: 'Week 4', revenue: 107350, count: 58, paid: 56 },
-  ]
-
-  const monthlyData: TransactionDataPoint[] = [
-    { label: 'Jan', revenue: 285000, count: 154, paid: 149 },
-    { label: 'Feb', revenue: 312000, count: 168, paid: 162 },
-    { label: 'Mar', revenue: 345000, count: 185, paid: 180 },
-    { label: 'Apr', revenue: 298000, count: 160, paid: 155 },
-    { label: 'May', revenue: 360000, count: 195, paid: 190 },
-    { label: 'Jun', revenue: 390000, count: 210, paid: 205 },
-    { label: 'Jul', revenue: 415000, count: 224, paid: 218 },
-    { label: 'Aug', revenue: 435000, count: 236, paid: 230 },
-    { label: 'Sep', revenue: 462000, count: 250, paid: 245 },
-    { label: 'Oct', revenue: 480000, count: 260, paid: 255 },
-    { label: 'Nov', revenue: 510000, count: 275, paid: 270 },
-    { label: 'Dec', revenue: 540000, count: 290, paid: 285 },
-  ]
-
-  const currentData = timeframe === 'daily' ? dailyData : timeframe === 'weekly' ? weeklyData : monthlyData
+  useEffect(() => {
+    setCurrentData(computeTelemetryData(timeframe))
+    const handleStorage = () => setCurrentData(computeTelemetryData(timeframe))
+    window.addEventListener('storage', handleStorage)
+    return () => window.removeEventListener('storage', handleStorage)
+  }, [timeframe])
   const maxRevenue = Math.max(...currentData.map(d => d.revenue), 1)
   const totalRevenue = currentData.reduce((acc, d) => acc + d.revenue, 0)
   const totalTransactions = currentData.reduce((acc, d) => acc + d.count, 0)
