@@ -22,13 +22,13 @@ import {
 // Custom button style matching AddEmployee design system
 const btnClass = "inline-flex items-center justify-center h-9 px-5 bg-gradient-to-r from-emerald-500 to-indigo-600 hover:brightness-110 active:scale-[0.98] text-white font-bold text-[11px] tracking-wider uppercase rounded-full shadow-md hover:shadow-lg transition-all duration-200 cursor-pointer select-none outline-none disabled:grayscale disabled:opacity-50 disabled:cursor-not-allowed";
 
-const API_URL = "http://10.80.0.83:3000/ContributorData";
+const API_URL = "https://worktrail.ai/api/ContributorData";
 const API_HEADERS = {
     APIKEY: "Securitas@#!1234",
     "Content-Type": "application/json"
 };
 
-const SEARCH_API_URL = "http://10.80.0.83:3000/ContributorEmpSearch";
+const SEARCH_API_URL = "https://worktrail.ai/api/ContributorEmpSearch";
 const SEARCH_API_HEADERS = {
     APIKEY: "Securitas@#!1234",
     "Content-Type": "application/json"
@@ -309,8 +309,9 @@ export default function ConUserAddEmployee() {
         setSearchLoading(true);
         try {
             const bodyPayload: any = { EmployeeCode: searchEmployeeCode.trim() };
-            if (user?.CompanyName) {
-                bodyPayload.Contributor = user.CompanyName;
+            const contributorVal = user?.CompanyName || initialCompany || company;
+            if (contributorVal) {
+                bodyPayload.Contributor = contributorVal;
             }
 
             const response = await fetch(SEARCH_API_URL, {
@@ -319,7 +320,14 @@ export default function ConUserAddEmployee() {
                 body: JSON.stringify(bodyPayload)
             });
 
-            const data = await response.json();
+            const resText = await response.text();
+            let data: any = null;
+            try {
+                data = JSON.parse(resText);
+            } catch {
+                data = null;
+            }
+
             if (response.ok && data) {
                 const results = Array.isArray(data.data)
                     ? data.data
@@ -334,7 +342,10 @@ export default function ConUserAddEmployee() {
             } else {
                 setSearchResults([]);
                 setActiveTable("search");
-                showToast(data?.message || "Employee not found.", "error");
+                const errorMsg = (data && typeof data === "object" && (data.message || data.error))
+                    ? (data.message || data.error)
+                    : `Employee not found (${response.status || 404}).`;
+                showToast(errorMsg, "error");
             }
         } catch (err: any) {
             showToast(err?.message || "Failed to search employee.", "error");
@@ -352,10 +363,10 @@ export default function ConUserAddEmployee() {
         }
         setAllEmployeesLoading(true);
         try {
-            const bodyPayload: any = {};
-            if (user?.CompanyName) {
-                bodyPayload.Contributor = user.CompanyName;
-            }
+            const contributorVal = user?.CompanyName || initialCompany || company || "Securitas India";
+            const bodyPayload: any = {
+                Contributor: contributorVal
+            };
 
             const response = await fetch(SEARCH_API_URL, {
                 method: "POST",
@@ -363,22 +374,61 @@ export default function ConUserAddEmployee() {
                 body: JSON.stringify(bodyPayload)
             });
 
-            const data = await response.json();
+            const resText = await response.text();
+            let data: any = null;
+            try {
+                data = JSON.parse(resText);
+            } catch {
+                data = null;
+            }
+
             if (response.ok && data) {
-                const results = Array.isArray(data.data)
+                let results = Array.isArray(data.data)
                     ? data.data
                     : data.data && typeof data.data === "object"
                     ? [data.data]
                     : [];
+
+                // Fallback attempt: if 0 records and primary was "Securitas India" (or default), try "Securitas"
+                if (results.length === 0 && (!user?.CompanyName || contributorVal === "Securitas India")) {
+                    try {
+                        const fallbackRes = await fetch(SEARCH_API_URL, {
+                            method: "POST",
+                            headers: SEARCH_API_HEADERS,
+                            body: JSON.stringify({ Contributor: "Securitas" })
+                        });
+                        const fallbackText = await fallbackRes.text();
+                        let fallbackData: any = null;
+                        try { fallbackData = JSON.parse(fallbackText); } catch { fallbackData = null; }
+                        if (fallbackRes.ok && fallbackData && Array.isArray(fallbackData.data) && fallbackData.data.length > 0) {
+                            results = fallbackData.data;
+                        }
+                    } catch {
+                        // ignore fallback error
+                    }
+                }
+
                 setAllEmployeesResults(results);
                 setActiveTable("all");
-                showToast(`Retrieved ${results.length} employee records.`, "success");
+                if (results.length > 0) {
+                    showToast(`Retrieved ${results.length} employee record${results.length === 1 ? "" : "s"}.`, "success");
+                } else {
+                    showToast(`No employee records found for ${contributorVal}.`, "info");
+                }
             } else {
                 setAllEmployeesResults([]);
                 setActiveTable("all");
+                const errorMsg = (data && typeof data === "object" && (data.message || data.error))
+                    ? (data.message || data.error)
+                    : response.status >= 500
+                    ? "Server error while fetching employee data. Please try again later."
+                    : response.status === 404
+                    ? "Employee search endpoint not found."
+                    : `Failed to load employees (${response.status || "Error"}).`;
+                showToast(errorMsg, "error");
             }
         } catch (err: any) {
-            showToast(err?.message || "Failed to load employees.", "error");
+            showToast(err?.message || "Failed to load employees. Please check your network connection.", "error");
             setAllEmployeesResults([]);
             setActiveTable("all");
         } finally {
@@ -958,7 +1008,30 @@ export default function ConUserAddEmployee() {
                     </div>
 
                     {activeTable === "search" && searchResults && searchResults.length > 0 && renderTable(searchResults, "Search Results")}
+                    {activeTable === "search" && searchResults && searchResults.length === 0 && (
+                        <div className="w-full bg-white rounded-3xl p-10 border border-slate-200/80 shadow-sm text-center flex flex-col items-center justify-center gap-3 animate-fade-in">
+                            <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400">
+                                <Search className="w-7 h-7" />
+                            </div>
+                            <h4 className="text-base font-bold text-slate-800">No Matching Employee Records</h4>
+                            <p className="text-xs text-slate-500 max-w-sm">
+                                No employee was found matching code "{searchEmployeeCode}". Please verify the employee code and try again.
+                            </p>
+                        </div>
+                    )}
+
                     {canEdit && activeTable === "all" && allEmployeesResults && allEmployeesResults.length > 0 && renderTable(allEmployeesResults, "All Employee Records")}
+                    {canEdit && activeTable === "all" && allEmployeesResults && allEmployeesResults.length === 0 && (
+                        <div className="w-full bg-white rounded-3xl p-10 border border-slate-200/80 shadow-sm text-center flex flex-col items-center justify-center gap-3 animate-fade-in">
+                            <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400">
+                                <Users className="w-7 h-7" />
+                            </div>
+                            <h4 className="text-base font-bold text-slate-800">No Employee Records Found</h4>
+                            <p className="text-xs text-slate-500 max-w-sm">
+                                No employee records were found registered under "{user?.CompanyName || initialCompany || "Securitas India"}". You can onboard candidates using "Create New" or "Bulk Upload".
+                            </p>
+                        </div>
+                    )}
                 </>
             )}
 
@@ -1238,31 +1311,7 @@ export default function ConUserAddEmployee() {
 
                                         {showContributorField && (
                                             <div className="flex flex-col gap-1.5 text-left">
-                                                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                                                    Company (Client) <span className="text-rose-500">*</span>
-                                                </label>
-                                                {showCompanyDropdown ? (
-                                                    <select
-                                                        name="Contributor"
-                                                        value={form.Contributor}
-                                                        onChange={handleInputChange}
-                                                        className="w-full h-10 border border-slate-200 rounded-lg px-3 text-sm text-slate-800 bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 focus:outline-none transition-all"
-                                                        required
-                                                    >
-                                                        <option value="Contributor">Contributor</option>
-                                                        <option value="TCS">TCS</option>
-                                                        <option value="Securitas">Securitas</option>
-                                                    </select>
-                                                ) : (
-                                                    <input
-                                                        type="text"
-                                                        name="Contributor"
-                                                        value={form.Contributor}
-                                                        readOnly
-                                                        className="w-full h-10 border border-slate-200 rounded-lg px-3 text-sm text-slate-400 bg-slate-50 cursor-not-allowed border-slate-300"
-                                                        tabIndex={-1}
-                                                    />
-                                                )}
+                                               
                                             </div>
                                         )}
                                     </div>

@@ -817,7 +817,9 @@ function AddEmployee() {
         const contributorValue =
             user && user.CompanyName
                 ? user.CompanyName
-                : (user && user.Usertype === "Contributor" ? "Contributor" : "");
+                : (user && (user.Usertype === "Contributor" || user.Usertype === "ContributorAdmin" || user.Usertype === "ContributorUser")
+                    ? "Securitas India"
+                    : "");
 
         if (!contributorValue) {
             toast.error("Contributor not found for AllEmployeeData.");

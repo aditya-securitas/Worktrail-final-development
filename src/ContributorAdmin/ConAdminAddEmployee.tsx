@@ -98,13 +98,19 @@ export default function ConAdminAddEmployee() {
   const fetchContributorRecords = async () => {
     setSearchLoading(true);
     try {
-      const companyVal = user?.CompanyName || "Securitas India";
+      const companyVal = user?.CompanyName || initialCompany || "Securitas India";
       const res = await fetch(SEARCH_API_URL, {
         method: "POST",
         headers: SEARCH_API_HEADERS,
         body: JSON.stringify({ Contributor: companyVal })
       });
-      const data = await res.json();
+      const resText = await res.text();
+      let data: any = null;
+      try {
+        data = JSON.parse(resText);
+      } catch {
+        data = null;
+      }
       if (res.ok && data && Array.isArray(data.data)) {
         setEmployeeResults(data.data);
       } else if (res.ok && data && data.data && typeof data.data === "object") {
@@ -131,7 +137,13 @@ export default function ConAdminAddEmployee() {
         headers: SEARCH_API_HEADERS,
         body: JSON.stringify({ EmployeeCode: searchEmployeeCode.trim() })
       });
-      const data = await res.json();
+      const resText = await res.text();
+      let data: any = null;
+      try {
+        data = JSON.parse(resText);
+      } catch {
+        data = null;
+      }
       if (res.ok && data && Array.isArray(data.data)) {
         setEmployeeResults(data.data);
       } else if (res.ok && data && data.data && typeof data.data === "object") {
