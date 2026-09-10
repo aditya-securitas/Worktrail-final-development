@@ -30,21 +30,21 @@ import {
 // Custom button style
 const btnClass = "inline-flex items-center justify-center h-9 px-5 bg-gradient-to-r from-emerald-500 to-indigo-600 hover:brightness-110 active:scale-[0.98] text-white font-bold text-[11px] tracking-wider uppercase rounded-full shadow-md hover:shadow-lg transition-all duration-200 cursor-pointer select-none outline-none disabled:grayscale disabled:opacity-50 disabled:cursor-not-allowed";
 
-const API_URL = "http://10.80.0.83:3000/ContributorData";
+const API_URL = "https://worktrail.ai/api/ContributorData";
 const API_HEADERS = {
     "APIKEY": "Securitas@#!1234",
     "Content-Type": "application/json"
 };
 
 // For Employee Search
-const SEARCH_API_URL = "http://10.80.0.83:3000/ContributorEmpSearch";
+const SEARCH_API_URL = "https://worktrail.ai/api/ContributorEmpSearch";
 const SEARCH_API_HEADERS = {
     "APIKEY": "Securitas@#!1234",
     "Content-Type": "application/json"
 };
 
 // AllEmployeeData API endpoint (assume similar API style)
-const ALL_EMPLOYEE_API_URL = "http://10.80.0.83:3000/ContributorEmpSearch";
+const ALL_EMPLOYEE_API_URL = "https://worktrail.ai/api/ContributorEmpSearch";
 const ALL_EMPLOYEE_API_HEADERS = {
     "APIKEY": "Securitas@#!1234",
     "Content-Type": "application/json"
@@ -111,8 +111,7 @@ export const SAMPLE_BULK_ROWS = [
         "Employment Type": "Full-Time",
         "Exit Formalities": "Completed",
         "Any Behaviour Issue": "None",
-        "Eligibility to Rehire": "Yes",
-        "Contributor": "Securitas"
+        "Eligibility to Rehire": "Yes"
     },
     {
         "First Name": "Priya",
@@ -129,8 +128,7 @@ export const SAMPLE_BULK_ROWS = [
         "Employment Type": "Full-Time",
         "Exit Formalities": "Completed",
         "Any Behaviour Issue": "None",
-        "Eligibility to Rehire": "Yes",
-        "Contributor": "Securitas"
+        "Eligibility to Rehire": "Yes"
     }
 ];
 function formatDateValue(val: any): string {
@@ -235,9 +233,10 @@ function normalizeBulkRow(row: any, company: string): any {
                 break;
             case "Contributor":
                 normalized[apiField] =
-                    value !== undefined && value !== null && String(value).trim() !== ""
+                    company ||
+                    (value !== undefined && value !== null && String(value).trim() !== ""
                         ? String(value).trim()
-                        : company;
+                        : "Contributor");
                 break;
             default:
                 normalized[apiField] = value;
@@ -298,11 +297,11 @@ function AddEmployee() {
     const initialCompany = React.useMemo(() => {
         if (
             user &&
-            (user.Usertype === "Contributor" || user.Usertype === "Client")
+            (user.Usertype === "Contributor" || user.Usertype === "Client" || user.Usertype === "ContributorAdmin" || user.Usertype === "ContributorUser" || user.CompanyName)
         ) {
             return user.CompanyName || "";
         } else {
-            return "Contributor";
+            return user?.CompanyName || "Contributor";
         }
     }, [user]);
 
@@ -313,6 +312,34 @@ function AddEmployee() {
     React.useEffect(() => {
         setCompany(initialCompany);
     }, [initialCompany]);
+
+    const [organizationsList, setOrganizationsList] = React.useState<string[]>([
+        "Securitas",
+        "Securitas India",
+        "TCS"
+    ]);
+
+    React.useEffect(() => {
+        const fetchOrgs = async () => {
+            try {
+                const res = await fetch("https://worktrail.ai/api/OrgmasterData", {
+                    method: "GET",
+                    headers: { "APIKEY": "Securitas@#!1234" }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data && Array.isArray(data.data)) {
+                        const names = data.data.map((o: any) => o.OrganizationName).filter(Boolean);
+                        const merged = Array.from(new Set(["Securitas", "Securitas India", "TCS", ...names]));
+                        setOrganizationsList(merged);
+                    }
+                }
+            } catch {
+                // Keep default fallback list
+            }
+        };
+        fetchOrgs();
+    }, []);
 
     const [uploading, setUploading] = React.useState(false);
 
@@ -471,8 +498,7 @@ function AddEmployee() {
                 { wch: 18 }, // Employment Type
                 { wch: 18 }, // Exit Formalities
                 { wch: 22 }, // Any Behaviour Issue
-                { wch: 22 }, // Eligibility to Rehire
-                { wch: 20 }  // Contributor
+                { wch: 22 }  // Eligibility to Rehire
             ];
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, 'Sample_Employees');
@@ -813,16 +839,16 @@ function AddEmployee() {
     // --- ALL EMPLOYEE DATA (BY Contributor) LOGIC ---
 
     const handleAllEmployees = async () => {
-        // Use the contributor from useAuth always
+        const isFascilatorOrAdmin =
+            user && (user.Usertype === "Fascilator" || user.Usertype === "Superadmin" || user.Usertype === "Admin");
+
         const contributorValue =
-            user && user.CompanyName
-                ? user.CompanyName
-                : (user && (user.Usertype === "Contributor" || user.Usertype === "ContributorAdmin" || user.Usertype === "ContributorUser")
-                    ? "Securitas India"
-                    : "");
+            (company && company !== "Contributor" ? company : "") ||
+            user?.CompanyName ||
+            (isFascilatorOrAdmin ? (company && company !== "Contributor" ? company : "Securitas") : "Securitas India");
 
         if (!contributorValue) {
-            toast.error("Contributor not found for AllEmployeeData.");
+            toast.error("Please select a Contributor to view employee data.");
             return;
         }
         setAllEmployeesLoading(true);
@@ -845,10 +871,30 @@ function AddEmployee() {
                 json = {};
             }
             if (result.ok && json && Array.isArray(json.data)) {
-                setAllEmployeesResults(json.data);
+                let list = json.data;
+                // Fallback attempt: if 0 records and was Securitas, try Securitas India
+                if (list.length === 0 && contributorValue === "Securitas") {
+                    try {
+                        const fb = await fetch(ALL_EMPLOYEE_API_URL, {
+                            method: "POST",
+                            headers: ALL_EMPLOYEE_API_HEADERS,
+                            body: JSON.stringify({ Contributor: "Securitas India" }),
+                        });
+                        const fbText = await fb.text();
+                        const fbData = JSON.parse(fbText);
+                        if (fbData && Array.isArray(fbData.data) && fbData.data.length > 0) {
+                            list = fbData.data;
+                        }
+                    } catch {
+                        // ignore fallback error
+                    }
+                }
+                setAllEmployeesResults(list);
                 setActiveTable('all'); // Only show all employees table
-                if (json.data.length === 0) {
-                    toast.warn("No employee data found for this Contributor.");
+                if (list.length === 0) {
+                    toast.warn(`No employee data found for ${contributorValue}.`);
+                } else {
+                    toast.success(`Found ${list.length} records for ${contributorValue}!`);
                 }
             } else if(result.ok && json && json.data && typeof json.data === 'object') {
                 setAllEmployeesResults([json.data]);
@@ -1362,8 +1408,7 @@ function AddEmployee() {
                                                     "Employment Type",
                                                     "Exit Formalities",
                                                     "Any Behaviour Issue",
-                                                    "Eligibility to Rehire",
-                                                    "Contributor"
+                                                    "Eligibility to Rehire"
                                                 ].map((col, idx) => (
                                                     <span
                                                         key={idx}
@@ -1483,9 +1528,12 @@ function AddEmployee() {
                                                             className="w-full h-11 border border-slate-200 rounded-xl px-3.5 text-xs sm:text-sm text-slate-800 bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 outline-none"
                                                             required
                                                         >
-                                                            <option value="Contributor">Contributor</option>
-                                                            <option value="TCS">TCS</option>
-                                                            <option value="Securitas">Securitas</option>
+                                                            <option value="Contributor">Select Contributor</option>
+                                                            {organizationsList.map((org) => (
+                                                                <option key={org} value={org}>
+                                                                    {org}
+                                                                </option>
+                                                            ))}
                                                         </select>
                                                     ) : (
                                                         <input
@@ -1623,9 +1671,12 @@ function AddEmployee() {
                                                         className="w-full h-10 border border-slate-200 rounded-lg px-3 text-sm text-slate-800 bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 focus:outline-none transition-all"
                                                         required
                                                     >
-                                                        <option value="Contributor">Contributor</option>
-                                                        <option value="TCS">TCS</option>
-                                                        <option value="Securitas">Securitas</option>
+                                                        <option value="Contributor">Select Contributor</option>
+                                                        {organizationsList.map((org) => (
+                                                            <option key={org} value={org}>
+                                                                {org}
+                                                            </option>
+                                                        ))}
                                                     </select>
                                                 ) : (
                                                     <input
@@ -1722,9 +1773,12 @@ function AddEmployee() {
                                                         className="w-full h-[38px] border-[1.5px] border-slate-200 rounded-lg px-3 text-sm text-slate-900 bg-white focus:border-[#5850EC] focus:ring-[3px] focus:ring-[#5850EC]/10 outline-none transition-all box-border"
                                                         required
                                                     >
-                                                        <option value="Contributor">Contributor</option>
-                                                        <option value="TCS">TCS</option>
-                                                        <option value="Securitas">Securitas</option>
+                                                        <option value="Contributor">Select Contributor</option>
+                                                        {organizationsList.map((org) => (
+                                                            <option key={org} value={org}>
+                                                                {org}
+                                                            </option>
+                                                        ))}
                                                     </select>
                                                 ) : (
                                                     <input

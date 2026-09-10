@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react'
 import * as XLSX from 'xlsx'
 import { useAuth } from '../useAuth'
+import { API_ENDPOINTS } from '../endpoint'
 import {
   Receipt,
   Search,
@@ -23,11 +24,8 @@ import {
   TrendingUp,
   Wallet
 } from 'lucide-react'
-import {
-  type VerificationRecord,
-  STORAGE_KEY_VERIFICATION_RECORDS,
-  OrgLogo
-} from './CandidateVerificationForm'
+import { type VerificationRecord } from './CandidateVerificationForm'
+import { OrgLogo } from './OrgLogo'
 
 export interface TransactionRecord {
   id: string
@@ -49,64 +47,13 @@ export interface TransactionRecord {
   status: 'Paid' | 'Pending' | 'Refunded'
 }
 
-function parseRecordsToTransactions(): TransactionRecord[] {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY_VERIFICATION_RECORDS)
-    if (stored) {
-      const records: VerificationRecord[] = JSON.parse(stored)
-      if (Array.isArray(records)) {
-        const genuine = records.filter(
-          (r) =>
-            !r.id?.startsWith('rec-') &&
-            !r.requestId?.startsWith('VR-849') &&
-            !r.requestId?.startsWith('VR-732') &&
-            !r.requestId?.startsWith('VR-619') &&
-            !r.requestId?.startsWith('VR-502') &&
-            !r.requestId?.startsWith('VR-504') &&
-            !r.requestId?.startsWith('VR-410') &&
-            !r.requestId?.startsWith('VR-392') &&
-            !r.requestId?.startsWith('VR-281') &&
-            !r.requestId?.startsWith('VR-194')
-        )
-        if (genuine.length > 0) {
-          return genuine.map((rec, idx) => {
-            const baseAmount = rec.amount || 1499
-            const gstAmount = Number((baseAmount * 0.18).toFixed(2))
-            const totalAmount = Number((baseAmount + gstAmount).toFixed(2))
-            return {
-              id: rec.id || `tx-${idx}`,
-              invoiceNumber: `WT-INV-${rec.requestId ? rec.requestId.replace('VR-', '2026-') : `2026-${1000 + idx}`}`,
-              transactionId: rec.transactionId || `TXN-${rec.requestId ? rec.requestId.replace('VR-', '948') : `94820${idx}`}`,
-              date: rec.submittedAt ? rec.submittedAt.split('T')[0] : '2026-09-04',
-              time: '12:30:00',
-              clientName: rec.verifierName || 'Enterprise Verifier',
-              clientEmail: rec.candidateEmail || 'billing@worktrail.ai',
-              candidateName: rec.candidateName,
-              employeeCode: rec.employeeId,
-              servicePackage: rec.verificationType || 'Standard Employment Verification',
-              baseAmount,
-              gstAmount,
-              totalAmount,
-              paymentMethod: 'Direct Gateway',
-              gatewayReference: rec.orderId || `ref_${rec.requestId || idx}`,
-              status: rec.status === 'Rejected' ? 'Refunded' : 'Paid',
-            }
-          })
-        }
-      }
-    }
-  } catch {
-    // fallback
-  }
-  return []
-}
-
 export default function Invoice() {
   const { user } = useAuth()
   const isSuperadmin = user?.Usertype?.toLowerCase() === 'superadmin'
   const isClient = user?.Usertype?.toLowerCase() === 'client'
 
-  const [transactions, setTransactions] = useState<TransactionRecord[]>(parseRecordsToTransactions)
+  const [transactions, setTransactions] = useState<TransactionRecord[]>([])
+  const [loading, setLoading] = useState<boolean>(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<'All' | 'Paid' | 'Pending' | 'Refunded'>('All')
   const [methodFilter, setMethodFilter] = useState<string>('All')
@@ -115,11 +62,95 @@ export default function Invoice() {
   const [selectedInvoice, setSelectedInvoice] = useState<TransactionRecord | null>(null)
 
   useEffect(() => {
-    setTransactions(parseRecordsToTransactions())
-    const handleStorage = () => setTransactions(parseRecordsToTransactions())
-    window.addEventListener('storage', handleStorage)
-    return () => window.removeEventListener('storage', handleStorage)
-  }, [])
+    let isCancelled = false
+
+    const loadInvoices = async () => {
+      setLoading(true)
+      const clientEmail = (user?.email || user?.Email || user?.username || '').trim()
+      const targetUrl = API_ENDPOINTS.clientEmpData || 'https://worktrail.ai/api/ClientEmpData'
+      let clientEmpList: any[] = []
+
+      try {
+        const res = await fetch(targetUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            APIKEY: 'Securitas@#!1234',
+          },
+          body: JSON.stringify({
+            Clientemail: clientEmail,
+            email: clientEmail,
+          }),
+        })
+        if (res.ok) {
+          const data = await res.json()
+          clientEmpList = Array.isArray(data) ? data : data?.data || data?.candidates || []
+        }
+      } catch (err) {
+        console.warn('ClientEmpData POST fetch notice in Invoice:', err)
+      }
+
+      if (!clientEmpList || clientEmpList.length === 0) {
+        try {
+          const getRes = await fetch(targetUrl, {
+            method: 'GET',
+            headers: {
+              APIKEY: 'Securitas@#!1234',
+            },
+          })
+          if (getRes.ok) {
+            const getData = await getRes.json()
+            clientEmpList = Array.isArray(getData) ? getData : getData?.data || getData?.candidates || []
+          }
+        } catch (getErr) {
+          console.warn('ClientEmpData GET fetch notice in Invoice:', getErr)
+        }
+      }
+
+      if (Array.isArray(clientEmpList) && clientEmpList.length > 0 && !isCancelled) {
+        const parsedTxns: TransactionRecord[] = clientEmpList.map((rec: any, idx: number) => {
+          const candName =
+            [rec.FirstName, rec.MiddleName, rec.LastName].filter(Boolean).join(' ') ||
+            rec.candidateName ||
+            rec.CandidateName ||
+            'Candidate'
+          const baseAmount = Number(rec.Amount || rec.amount || 1499)
+          const gstAmount = Number((baseAmount * 0.18).toFixed(2))
+          const totalAmount = Number((baseAmount + gstAmount).toFixed(2))
+          const reqId = rec.RequestId || rec.requestId || `VR-${1000 + idx}`
+          return {
+            id: rec.id ? String(rec.id) : `tx-${idx}`,
+            invoiceNumber: `WT-INV-${reqId ? String(reqId).replace('VR-', '2026-') : `2026-${1000 + idx}`}`,
+            transactionId: rec.TransactionId || rec.transactionId || `TXN-${reqId ? String(reqId).replace('VR-', '948') : `94820${idx}`}`,
+            date: rec.created_at ? rec.created_at.split('T')[0] : (rec.submittedAt ? rec.submittedAt.split('T')[0] : '2026-09-09'),
+            time: '12:30:00',
+            clientName: rec.Contributor || rec.verifierName || 'Enterprise Verifier',
+            clientEmail: rec.Clientemail || rec.Email || rec.candidateEmail || 'billing@worktrail.ai',
+            candidateName: candName,
+            employeeCode: rec.EmployeeCode || rec.employeeId || '—',
+            servicePackage: rec.verificationType || 'Standard Employment Verification',
+            baseAmount,
+            gstAmount,
+            totalAmount,
+            paymentMethod: 'Direct Gateway',
+            gatewayReference: rec.OrderId || rec.orderId || rec.PaymentId || `ref_${idx}`,
+            status: rec.status === 'Rejected' ? 'Refunded' : 'Paid',
+          }
+        })
+        setTransactions(parsedTxns)
+      } else if (!isCancelled) {
+        setTransactions([])
+      }
+
+      if (!isCancelled) setLoading(false)
+    }
+
+    loadInvoices()
+
+    return () => {
+      isCancelled = true
+    }
+  }, [user])
 
   // Guard: Superadmin & Client access permitted
   if (!isSuperadmin && !isClient) {

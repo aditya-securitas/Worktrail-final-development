@@ -1,12 +1,12 @@
 /**
- * Zero-dependency Axios-compatible HTTP client & API Endpoints.
- * Works natively with browser fetch — no external npm package installation required.
+ * Lightweight Axios-compatible HTTP client & API Endpoints.
+ * Pure fetch implementation with zero external dependencies.
  */
 
 export interface AxiosRequestConfig {
   baseURL?: string
   headers?: Record<string, string>
-  params?: Record<string, string | number | boolean | undefined | null>
+  params?: Record<string, any>
   data?: any
   timeout?: number
   [key: string]: any
@@ -20,163 +20,71 @@ export interface AxiosResponse<T = any> {
   config: AxiosRequestConfig
 }
 
-type RequestInterceptor = (config: AxiosRequestConfig) => AxiosRequestConfig | Promise<AxiosRequestConfig>
-type ResponseInterceptor = (response: AxiosResponse) => AxiosResponse | Promise<AxiosResponse>
-type ErrorInterceptor = (error: any) => any
-
 export class AxiosClient {
   public defaults: AxiosRequestConfig
   public interceptors = {
-    request: {
-      use: (onFulfilled: RequestInterceptor, onRejected?: ErrorInterceptor) => {
-        this.requestInterceptors.push({ onFulfilled, onRejected })
-      }
-    },
-    response: {
-      use: (onFulfilled: ResponseInterceptor, onRejected?: ErrorInterceptor) => {
-        this.responseInterceptors.push({ onFulfilled, onRejected })
-      }
-    }
+    request: { use: (fn: (c: AxiosRequestConfig) => any) => { this.reqInterceptors.push(fn) } },
+    response: { use: (fn: (r: AxiosResponse) => any) => { this.resInterceptors.push(fn) } },
   }
-
-  private requestInterceptors: Array<{ onFulfilled: RequestInterceptor; onRejected?: ErrorInterceptor }> = []
-  private responseInterceptors: Array<{ onFulfilled: ResponseInterceptor; onRejected?: ErrorInterceptor }> = []
+  private reqInterceptors: Array<(c: AxiosRequestConfig) => any> = []
+  private resInterceptors: Array<(r: AxiosResponse) => any> = []
 
   constructor(defaults: AxiosRequestConfig = {}) {
-    this.defaults = {
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      ...defaults,
-    }
+    this.defaults = { headers: { 'Content-Type': 'application/json' }, ...defaults }
   }
 
-  public async request<T = any>(
-    config: AxiosRequestConfig & { url?: string; method?: string; data?: any }
-  ): Promise<AxiosResponse<T>> {
-    let mergedConfig: AxiosRequestConfig & { url?: string; method?: string; data?: any } = {
+  async request<T = any>(cfg: AxiosRequestConfig & { url?: string; method?: string }): Promise<AxiosResponse<T>> {
+    let conf: AxiosRequestConfig = {
       ...this.defaults,
-      ...config,
-      headers: {
-        ...this.defaults.headers,
-        ...config.headers,
-      }
+      ...cfg,
+      headers: { ...this.defaults.headers, ...cfg.headers },
+    }
+    for (const fn of this.reqInterceptors) conf = (await fn(conf)) || conf
+
+    let url = conf.url || ''
+    if (!/^https?:\/\//i.test(url) && conf.baseURL) {
+      url = `${conf.baseURL.replace(/\/+$/, '')}/${url.replace(/^\/+/, '')}`
     }
 
-    for (const interceptor of this.requestInterceptors) {
-      try {
-        mergedConfig = await interceptor.onFulfilled(mergedConfig)
-      } catch (err) {
-        if (interceptor.onRejected) return interceptor.onRejected(err)
-        throw err
-      }
+    if (conf.params) {
+      const q = new URLSearchParams()
+      Object.entries(conf.params).forEach(([k, v]) => v != null && q.append(k, String(v)))
+      const qs = q.toString()
+      if (qs) url += (url.includes('?') ? '&' : '?') + qs
     }
 
-    let fullUrl = mergedConfig.url || ''
-    if (!/^https?:\/\//i.test(fullUrl) && mergedConfig.baseURL) {
-      const base = mergedConfig.baseURL.replace(/\/+$/, '')
-      const path = fullUrl.replace(/^\/+/, '')
-      fullUrl = `${base}/${path}`
+    const isJson = conf.data && typeof conf.data === 'object' && !(conf.data instanceof FormData || conf.data instanceof Blob)
+    const res = await fetch(url, {
+      method: (conf.method || 'GET').toUpperCase(),
+      headers: conf.headers,
+      body: isJson ? JSON.stringify(conf.data) : conf.data,
+    })
+
+    const ct = res.headers.get('content-type') || ''
+    const data = ct.includes('application/json') ? await res.json().catch(() => null) : await res.text().catch(() => '')
+    let axiosRes: AxiosResponse<T> = { data, status: res.status, statusText: res.statusText, headers: res.headers, config: conf }
+
+    if (!res.ok) {
+      const err: any = new Error(data?.message || `Request failed with status code ${res.status}`)
+      err.response = axiosRes
+      err.config = conf
+      err.status = res.status
+      throw err
     }
 
-    if (mergedConfig.params) {
-      const query = new URLSearchParams()
-      for (const [k, v] of Object.entries(mergedConfig.params)) {
-        if (v !== undefined && v !== null) query.append(k, String(v))
-      }
-      const qs = query.toString()
-      if (qs) {
-        fullUrl += (fullUrl.includes('?') ? '&' : '?') + qs
-      }
-    }
-
-    const fetchOptions: RequestInit = {
-      method: (mergedConfig.method || 'GET').toUpperCase(),
-      headers: mergedConfig.headers,
-    }
-
-    if (mergedConfig.data !== undefined) {
-      if (
-        typeof mergedConfig.data === 'string' ||
-        mergedConfig.data instanceof FormData ||
-        mergedConfig.data instanceof Blob
-      ) {
-        fetchOptions.body = mergedConfig.data
-      } else {
-        fetchOptions.body = JSON.stringify(mergedConfig.data)
-      }
-    }
-
-    const response = await fetch(fullUrl, fetchOptions)
-    const contentType = response.headers.get('content-type') || ''
-    let responseData: any = null
-
-    if (contentType.includes('application/json')) {
-      responseData = await response.json().catch(() => null)
-    } else {
-      responseData = await response.text().catch(() => '')
-    }
-
-    let axiosResponse: AxiosResponse<T> = {
-      data: responseData,
-      status: response.status,
-      statusText: response.statusText,
-      headers: response.headers,
-      config: mergedConfig,
-    }
-
-    if (!response.ok) {
-      const error: any = new Error(
-        responseData?.message || `Request failed with status code ${response.status}`
-      )
-      error.response = axiosResponse
-      error.config = mergedConfig
-      error.status = response.status
-
-      for (const interceptor of this.responseInterceptors) {
-        if (interceptor.onRejected) {
-          return interceptor.onRejected(error)
-        }
-      }
-      throw error
-    }
-
-    for (const interceptor of this.responseInterceptors) {
-      try {
-        axiosResponse = await interceptor.onFulfilled(axiosResponse)
-      } catch (err) {
-        if (interceptor.onRejected) return interceptor.onRejected(err)
-        throw err
-      }
-    }
-
-    return axiosResponse
+    for (const fn of this.resInterceptors) axiosRes = (await fn(axiosRes)) || axiosRes
+    return axiosRes
   }
 
-  public get<T = any>(url: string, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> {
-    return this.request<T>({ ...config, url, method: 'GET' })
-  }
-
-  public post<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> {
-    return this.request<T>({ ...config, url, data, method: 'POST' })
-  }
-
-  public put<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> {
-    return this.request<T>({ ...config, url, data, method: 'PUT' })
-  }
-
-  public delete<T = any>(url: string, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> {
-    return this.request<T>({ ...config, url, method: 'DELETE' })
-  }
-
-  public patch<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> {
-    return this.request<T>({ ...config, url, data, method: 'PATCH' })
-  }
+  get = <T = any>(url: string, c?: AxiosRequestConfig) => this.request<T>({ ...c, url, method: 'GET' })
+  post = <T = any>(url: string, data?: any, c?: AxiosRequestConfig) => this.request<T>({ ...c, url, data, method: 'POST' })
+  put = <T = any>(url: string, data?: any, c?: AxiosRequestConfig) => this.request<T>({ ...c, url, data, method: 'PUT' })
+  delete = <T = any>(url: string, c?: AxiosRequestConfig) => this.request<T>({ ...c, url, method: 'DELETE' })
+  patch = <T = any>(url: string, data?: any, c?: AxiosRequestConfig) => this.request<T>({ ...c, url, data, method: 'PATCH' })
 }
 
 export const BASE_URL = 'https://worktrail.ai/api'
 
-// Configured Axios-compatible instance for Worktrail API
 export const apiClient = new AxiosClient({
   baseURL: BASE_URL,
   headers: {
@@ -185,12 +93,10 @@ export const apiClient = new AxiosClient({
   },
 })
 
-// Automatically attach JWT token from localStorage
 apiClient.interceptors.request.use((config) => {
   const token = localStorage.getItem('worktrail_token')
   if (token) {
-    config.headers = config.headers || {}
-    config.headers.Authorization = `Bearer ${token}`
+    config.headers = { ...config.headers, Authorization: `Bearer ${token}` }
   }
   return config
 })
@@ -210,6 +116,10 @@ export const API_ENDPOINTS = {
     register: `${BASE_URL}/Register`,
     logout: `${BASE_URL}/auth/logout`,
     me: `${BASE_URL}/auth/me`,
+    verifyLoginOtp: `${BASE_URL}/VerifyLoginOtp`,
+    verifyRegistrationOtp: `${BASE_URL}/VerifyRegistrationOtp`,
+    requestPasswordReset: `${BASE_URL}/RequestPasswordReset`,
+    updatePassword: `${BASE_URL}/Auth/UpdatePassword`,
   },
   menu: `${BASE_URL}/Menu`,
   payments: {
@@ -217,6 +127,10 @@ export const API_ENDPOINTS = {
     verify: `${BASE_URL}/Payment/Verify`,
     transaction: (orderId: string) => `${BASE_URL}/Payment/Transaction/${encodeURIComponent(orderId)}`,
   },
+  clientEmpData: `${BASE_URL}/ClientEmpData`,
+  clientEmpStatus: `${BASE_URL}/ClientEmpStatus`,
+  reviewClientData: `${BASE_URL}/ReviewClientData`,
+  clientDocumentUpdate: `${BASE_URL}/ClientDocumentUpdate`,
   users: {
     profile: `${BASE_URL}/users/profile`,
   },
@@ -224,6 +138,3 @@ export const API_ENDPOINTS = {
 
 export type ApiEndpoint =
   (typeof API_ENDPOINTS)[keyof typeof API_ENDPOINTS][keyof (typeof API_ENDPOINTS)[keyof typeof API_ENDPOINTS]]
-
-export const api = apiClient
-export default apiClient

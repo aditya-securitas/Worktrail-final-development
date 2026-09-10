@@ -17,7 +17,8 @@ import {
   ChevronDown,
   FileText,
   Globe,
-  Receipt
+  Receipt,
+  X
 } from 'lucide-react'
 import securitasLogo from '../assets/Img/logo_w.png'
 
@@ -102,15 +103,26 @@ function Sidebar({ state, onClose, userType, menu, isLoading, error }: SidebarPr
       >
         {/* Top Fixed Header Section */}
         <div className="flex flex-col shrink-0">
-          {/* Securitas Brand Logo */}
-          <div className={`flex flex-col mb-3 shrink-0 ${state === 'mini' ? 'items-center' : 'items-start'}`}>
-            <div className=" flex items-center justify-center">
+          {/* Securitas Brand Logo & Mobile Close */}
+          <div className={`flex items-center justify-between mb-3 shrink-0 ${state === 'mini' ? 'justify-center' : ''}`}>
+            <div className="flex items-center">
               <img
                 src={securitasLogo}
                 alt="Securitas"
-                className={`${state === 'mini' ? 'h-5 w-5 object-contain' : 'h-6 object-contain'}`}
+                className={`${state === 'mini' ? 'h-11 w-11 object-contain' : 'h-6 object-contain'}`}
               />
             </div>
+            {state !== 'mini' && onClose && (
+              <button
+                type="button"
+                onClick={onClose}
+                className="md:hidden p-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white/80 hover:text-white transition-colors cursor-pointer"
+                title="Close sidebar"
+                aria-label="Close sidebar"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
           </div>
 
           {/* Separator line */}
@@ -134,7 +146,9 @@ function Sidebar({ state, onClose, userType, menu, isLoading, error }: SidebarPr
             <nav className="flex flex-col gap-1 pb-2">
               {menuItems.map((item) => {
                 const path = menuPath(item.Route)
-                const isActive = location.pathname === path
+                const isActive =
+                  location.pathname === path ||
+                  (path === '/ServiceRequest' && location.pathname.startsWith('/ServiceRequestReview'))
                 const Icon = getIconForComponent(item)
                 const label = getLabelForComponent(item)
                 const isServiceRequests = item.components.toLowerCase().includes('servicerequest')

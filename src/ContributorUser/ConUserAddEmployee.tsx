@@ -50,8 +50,7 @@ export const SAMPLE_BULK_ROWS = [
         "Employment Type": "Full-Time",
         "Exit Formalities": "Completed",
         "Any Behaviour Issue": "None",
-        "Eligibility to Rehire": "Yes",
-        "Contributor": "Securitas"
+        "Eligibility to Rehire": "Yes"
     },
     {
         "First Name": "Priya",
@@ -68,8 +67,7 @@ export const SAMPLE_BULK_ROWS = [
         "Employment Type": "Full-Time",
         "Exit Formalities": "Completed",
         "Any Behaviour Issue": "None",
-        "Eligibility to Rehire": "Yes",
-        "Contributor": "Securitas"
+        "Eligibility to Rehire": "Yes"
     }
 ];
 
@@ -188,7 +186,8 @@ function normalizeBulkRow(row: any, company: string): any {
                 }
                 break;
             case "Contributor":
-                normalized[apiField] = value !== undefined && value !== null && String(value).trim() !== "" ? String(value).trim() : company;
+                // Every contributor uploads their own data
+                normalized[apiField] = company || (value !== undefined && value !== null && String(value).trim() !== "" ? String(value).trim() : "Contributor");
                 break;
             default:
                 normalized[apiField] = value;
@@ -464,8 +463,7 @@ export default function ConUserAddEmployee() {
                 { wch: 18 },
                 { wch: 18 },
                 { wch: 22 },
-                { wch: 22 },
-                { wch: 20 }
+                { wch: 22 }
             ];
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, "Sample_Employees");
@@ -1111,8 +1109,7 @@ export default function ConUserAddEmployee() {
                                                     "Employment Type",
                                                     "Exit Formalities",
                                                     "Behavior Issues",
-                                                    "Rehire Eligible",
-                                                    "Contributor"
+                                                    "Rehire Eligible"
                                                 ].map((col) => (
                                                     <span
                                                         key={col}

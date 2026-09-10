@@ -39,13 +39,13 @@ const inputClass =
 const selectClass =
   "w-full h-11 px-4 bg-slate-50/60 hover:bg-slate-50 border border-slate-200/80 rounded-2xl text-xs font-bold text-slate-700 focus:outline-none focus:border-[#42638C] focus:bg-white transition-all cursor-pointer";
 
-const API_URL = "http://10.80.0.83:3000/ContributorData";
+const API_URL = "https://worktrail.ai/api/ContributorData";
 const API_HEADERS = {
   APIKEY: "Securitas@#!1234",
   "Content-Type": "application/json"
 };
 
-const SEARCH_API_URL = "http://10.80.0.83:3000/ContributorEmpSearch";
+const SEARCH_API_URL = "https://worktrail.ai/api/ContributorEmpSearch";
 const SEARCH_API_HEADERS = {
   APIKEY: "Securitas@#!1234",
   "Content-Type": "application/json"

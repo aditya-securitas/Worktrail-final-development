@@ -1,5 +1,5 @@
-import { useState, type FormEvent } from 'react'
-import { Link } from 'react-router-dom'
+import { useState, useEffect, type FormEvent } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { API_ENDPOINTS } from './endpoint'
 import { 
   Mail, 
@@ -9,12 +9,16 @@ import {
   MapPin, 
   Globe, 
   CreditCard, 
-  Hash,
-  Eye,
-  EyeOff,
-  CheckCircle2,
-  AlertCircle,
-  ArrowRight
+  Hash, 
+  Eye, 
+  EyeOff, 
+  CheckCircle2, 
+  AlertCircle, 
+  ArrowRight,
+  ShieldCheck,
+  KeyRound,
+  RefreshCw,
+  ArrowLeft
 } from 'lucide-react'
 import securitasLogo from './assets/Img/logo_b.png'
 
@@ -53,6 +57,7 @@ const emptyForm: RegisterForm = {
 }
 
 function Register({ onLogin }: RegisterProps) {
+  const navigate = useNavigate()
   const [accountType, setAccountType] = useState<AccountType>('Contributor')
   const [form, setForm] = useState<RegisterForm>(emptyForm)
   const [isLoading, setIsLoading] = useState(false)
@@ -60,6 +65,24 @@ function Register({ onLogin }: RegisterProps) {
   const [success, setSuccess] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+
+  // Registration OTP States
+  const [awaitingOtp, setAwaitingOtp] = useState(false)
+  const [regOtp, setRegOtp] = useState('')
+  const [registeredEmail, setRegisteredEmail] = useState('')
+  const [otpLoading, setOtpLoading] = useState(false)
+  const [otpError, setOtpError] = useState('')
+  const [otpSuccess, setOtpSuccess] = useState('')
+  const [isVerified, setIsVerified] = useState(false)
+  const [otpCountdown, setOtpCountdown] = useState(0)
+
+  // Countdown timer for Registration OTP resend
+  useEffect(() => {
+    if (otpCountdown > 0) {
+      const timer = setTimeout(() => setOtpCountdown((c) => c - 1), 1000)
+      return () => clearTimeout(timer)
+    }
+  }, [otpCountdown])
 
   const updateField = (field: keyof RegisterForm, value: string) => 
     setForm((current) => ({ ...current, [field]: value }))
@@ -84,9 +107,10 @@ function Register({ onLogin }: RegisterProps) {
       username,
       password: form.password,
       UserType: accountType,
-      EmailID: form.email,
-      FirstName: form.firstName,
-      LastName: form.lastName,
+      EmailID: form.email.trim(),
+      email: form.email.trim(),
+      FirstName: form.firstName.trim(),
+      LastName: form.lastName.trim(),
       CompanyName: accountType === 'Contributor' ? form.companyName : null,
       CompanyCode: accountType === 'Contributor' ? form.companyCode : null,
       GSTNumber: accountType === 'Contributor' ? form.gstNo : null,
@@ -98,7 +122,7 @@ function Register({ onLogin }: RegisterProps) {
     }
     
     try {
-      const result = await fetch(API_ENDPOINTS.auth.register, { 
+      let result = await fetch(API_ENDPOINTS.auth.register, { 
         method: 'POST', 
         headers: { 
           APIKEY: 'Securitas@#!1234', 
@@ -106,14 +130,128 @@ function Register({ onLogin }: RegisterProps) {
         }, 
         body: JSON.stringify(payload) 
       })
-      const data = await result.json().catch(() => ({})) as { message?: string }
+      if (result.status === 404 && (API_ENDPOINTS.auth as any).registerLegacy) {
+        result = await fetch((API_ENDPOINTS.auth as any).registerLegacy, {
+          method: 'POST',
+          headers: {
+            APIKEY: 'Securitas@#!1234',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        })
+      }
+      const text = await result.text()
+      let data: any
+      try {
+        data = JSON.parse(text)
+      } catch {
+        data = { message: text }
+      }
       if (!result.ok) throw new Error(data.message || `Registration failed (${result.status})`)
-      setSuccess(data.message || `${accountType} account created successfully!`)
-      setForm(emptyForm)
+      
+      // Successfully registered initial profile; transition to OTP verification
+      setRegisteredEmail(form.email.trim())
+      setAwaitingOtp(true)
+      setOtpCountdown(45)
+      setOtpSuccess(data.message || `Verification code sent to ${form.email.trim()}`)
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Unable to connect to registration service.')
     } finally { 
       setIsLoading(false) 
+    }
+  }
+
+  const handleVerifyRegistrationOtp = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!regOtp.trim() || regOtp.trim().length < 4) {
+      setOtpError('Please enter a valid verification code.')
+      return
+    }
+    setOtpLoading(true)
+    setOtpError('')
+    setOtpSuccess('')
+
+    try {
+      const payload = {
+        EmailID: registeredEmail.trim(),
+        OTP: regOtp.trim(),
+      }
+      const response = await fetch(API_ENDPOINTS.auth.verifyRegistrationOtp, {
+        method: 'POST',
+        headers: {
+          APIKEY: 'Securitas@#!1234',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      })
+      const text = await response.text()
+      let data: any
+      try {
+        data = JSON.parse(text)
+      } catch {
+        data = { message: text }
+      }
+      if (!response.ok) {
+        throw new Error(data.message || `Invalid or expired verification code (${response.status})`)
+      }
+
+      setIsVerified(true)
+      setForm(emptyForm)
+    } catch (err) {
+      setOtpError(err instanceof Error ? err.message : 'Failed to verify registration code.')
+    } finally {
+      setOtpLoading(false)
+    }
+  }
+
+  const handleResendRegistrationOtp = async () => {
+    if (otpCountdown > 0 || otpLoading) return
+    setOtpLoading(true)
+    setOtpError('')
+    setOtpSuccess('')
+
+    try {
+      // Re-trigger registration or OTP dispatch
+      const username = `${form.firstName}_${form.lastName}`.trim().replace(/\s+/g, '_').toLowerCase()
+      const payload = {
+        username,
+        password: form.password,
+        UserType: accountType,
+        EmailID: registeredEmail.trim(),
+        FirstName: form.firstName,
+        LastName: form.lastName,
+      }
+      let response = await fetch(API_ENDPOINTS.auth.register, {
+        method: 'POST',
+        headers: {
+          APIKEY: 'Securitas@#!1234',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      })
+      if (response.status === 404 && (API_ENDPOINTS.auth as any).registerLegacy) {
+        response = await fetch((API_ENDPOINTS.auth as any).registerLegacy, {
+          method: 'POST',
+          headers: {
+            APIKEY: 'Securitas@#!1234',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+        })
+      }
+      const text = await response.text()
+      let data: any
+      try {
+        data = JSON.parse(text)
+      } catch {
+        data = { message: text }
+      }
+      setOtpSuccess(data.message || `A fresh code has been sent to ${registeredEmail}`)
+      setOtpCountdown(45)
+    } catch (err) {
+      setOtpError(err instanceof Error ? err.message : 'Unable to resend code.')
+    } finally {
+      setOtpLoading(false)
     }
   }
 
@@ -177,6 +315,142 @@ function Register({ onLogin }: RegisterProps) {
               {isShowing ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             </button>
           )}
+        </div>
+      </div>
+    )
+  }
+
+  // --- RENDER: Account Verified Success View ---
+  if (isVerified) {
+    return (
+      <div className="flex flex-col items-center text-center w-full font-securitas select-text animate-fade-in py-4">
+        <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center mb-5 text-emerald-600 shadow-sm border border-emerald-200">
+          <CheckCircle2 className="w-9 h-9" />
+        </div>
+
+        <h2 className="text-2xl sm:text-3xl font-extrabold text-[#082136] tracking-tight leading-tight mb-2">
+          Account Verified!
+        </h2>
+        <p className="text-slate-500 text-xs sm:text-sm font-medium max-w-sm mb-6">
+          Your <span className="font-semibold text-slate-700">{accountType}</span> account has been successfully verified and activated.
+        </p>
+
+        <Link
+          to="/login"
+          onClick={onLogin}
+          className="w-full h-[50px] rounded-full text-white text-xs sm:text-[13px] font-bold tracking-wider uppercase bg-gradient-to-r from-[#10B981] to-[#5850EC] hover:brightness-110 hover:shadow-[0_8px_25px_rgba(16,185,129,0.3)] active:scale-[0.98] transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer select-none shadow-md"
+        >
+          <span>Proceed to Sign In</span>
+          <ArrowRight className="w-4 h-4" />
+        </Link>
+      </div>
+    )
+  }
+
+  // --- RENDER: Registration OTP Verification View ---
+  if (awaitingOtp) {
+    return (
+      <div className="flex flex-col w-full font-securitas select-text animate-fade-in">
+        {/* Brand Header */}
+        <div className="flex items-center justify-between gap-2 mb-6">
+          <img src={securitasLogo} alt="Securitas" className="h-7 sm:h-8 object-contain" />
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <ShieldCheck className="w-3.5 h-3.5" /> Email Verification
+          </span>
+        </div>
+
+        {/* Headings */}
+        <div className="mb-5 select-none text-left">
+          <h2 className="text-2xl sm:text-3xl font-extrabold text-[#082136] tracking-tight leading-tight mb-1">
+            Verify Your Email
+          </h2>
+          <p className="text-slate-500 text-xs sm:text-sm font-medium">
+            Enter the 6-digit verification code sent to{' '}
+            <span className="font-semibold text-slate-700">{registeredEmail}</span>
+          </p>
+        </div>
+
+        {/* Feedback Messages */}
+        {otpSuccess && (
+          <div className="flex items-center gap-2 p-3 mb-4 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 font-medium animate-fade-in">
+            <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+            <span>{otpSuccess}</span>
+          </div>
+        )}
+        {otpError && (
+          <div className="flex items-center gap-2 p-3 mb-4 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-700 font-bold animate-fade-in" role="alert">
+            <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+            <span>{otpError}</span>
+          </div>
+        )}
+
+        {/* OTP Input Form */}
+        <form onSubmit={handleVerifyRegistrationOtp} className="flex flex-col gap-4 w-full">
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[10px] sm:text-[11px] font-bold tracking-wider text-slate-500 uppercase select-none">
+              6-Digit Verification Code
+            </label>
+            <div className="flex items-center gap-3 h-[52px] px-4 bg-slate-50/70 hover:bg-slate-50 focus-within:bg-white border border-slate-200/90 focus-within:border-[#42638C] focus-within:ring-2 focus-within:ring-slate-100 rounded-2xl transition-all shadow-2xs">
+              <KeyRound className="w-5 h-5 text-slate-400 shrink-0" />
+              <input
+                type="text"
+                maxLength={6}
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                autoFocus
+                value={regOtp}
+                onChange={(e) => setRegOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                placeholder="• • • • • •"
+                className="w-full text-slate-800 placeholder-slate-400 outline-none text-base sm:text-lg tracking-[0.4em] text-center font-bold bg-transparent"
+                required
+              />
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            disabled={otpLoading || regOtp.length < 4}
+            className="w-full h-[50px] rounded-full text-white text-xs sm:text-[13px] font-bold tracking-wider uppercase bg-gradient-to-r from-[#10B981] to-[#5850EC] hover:brightness-110 hover:shadow-[0_8px_25px_rgba(16,185,129,0.3)] active:scale-[0.98] transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer select-none shadow-md disabled:grayscale disabled:opacity-50 mt-1"
+          >
+            <span>{otpLoading ? 'Activating Account...' : 'Verify & Activate Account'}</span>
+            {!otpLoading && <ArrowRight className="w-4 h-4" />}
+          </button>
+
+          <div className="flex items-center justify-between text-xs pt-2">
+            <button
+              type="button"
+              onClick={handleResendRegistrationOtp}
+              disabled={otpCountdown > 0 || otpLoading}
+              className="font-bold text-[#0680A6] hover:text-[#082136] disabled:text-slate-400 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5 cursor-pointer"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${otpLoading ? 'animate-spin' : ''}`} />
+              {otpCountdown > 0 ? `Resend Code in ${otpCountdown}s` : 'Resend Code'}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAwaitingOtp(false)
+                setRegOtp('')
+                setOtpError('')
+                setOtpSuccess('')
+              }}
+              className="font-bold text-slate-500 hover:text-slate-700 transition-colors cursor-pointer"
+            >
+              Edit Details
+            </button>
+          </div>
+        </form>
+
+        {/* Separator */}
+        <div className="w-full border-t border-slate-200/80 my-5"></div>
+
+        {/* Telemetry Warning Footer */}
+        <div className="flex flex-col items-center justify-center gap-1 select-none text-center">
+          <p className="text-[9px] sm:text-[10px] leading-relaxed text-slate-400 font-bold tracking-wider uppercase">
+            Securitas Cryptographic Account Activation.
+            <br className="hidden sm:inline" />
+            IP Logging and Telemetry Tracking Active.
+          </p>
         </div>
       </div>
     )

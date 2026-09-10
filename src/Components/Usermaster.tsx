@@ -104,7 +104,7 @@ const UserMaster: React.FC = () => {
     setOrgLoading(true);
     setOrgError(null);
     try {
-      const response = await fetch("http://10.80.0.83:3000/OrgmasterData", {
+      const response = await fetch("https://worktrail.ai/api/OrgmasterData", {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
@@ -138,7 +138,7 @@ const UserMaster: React.FC = () => {
   const fetchContributorAdmins = () => {
     setAdminLoading(true);
     setAdminError(null);
-    fetch("http://10.80.0.83:3000/ContributorAdminData", {
+    fetch("https://worktrail.ai/api/ContributorAdminData", {
       method: "GET",
       headers: {
         "APIKEY": "Securitas@#!1234",
@@ -301,7 +301,7 @@ const UserMaster: React.FC = () => {
         usermasterid: pendingChange.to === "ContributorUser" ? "3" : "2",
       };
 
-      const res = await fetch("http://10.80.0.83:3000/ContributorUpdate", {
+      const res = await fetch("https://worktrail.ai/api/ContributorUpdate", {
         method: "POST",
         headers: {
           "APIKEY": "Securitas@#!1234",

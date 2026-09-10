@@ -71,7 +71,7 @@ const OrgMaster: React.FC = () => {
     setOrgsError(null);
     setTableMessage(null);
     try {
-      const res = await fetch("http://10.80.0.83:3000/OrgmasterData", {
+      const res = await fetch("https://worktrail.ai/api/OrgmasterData", {
         method: "GET",
         headers: {
           "APIKEY": "Securitas@#!1234",
@@ -109,7 +109,7 @@ const OrgMaster: React.FC = () => {
 
     setIsSubmitting(true);
     try {
-      const res = await fetch("http://10.80.0.83:3000/Orgmastermanage", {
+      const res = await fetch("https://worktrail.ai/api/Orgmastermanage", {
         method: "POST",
         headers: API_HEADERS,
         body: JSON.stringify({
@@ -158,7 +158,7 @@ const OrgMaster: React.FC = () => {
     setEditLoadingId(org.OrganizationID);
     setTableMessage(null);
     try {
-      const res = await fetch("http://10.80.0.83:3000/OrgmasterNameUpdate", {
+      const res = await fetch("https://worktrail.ai/api/OrgmasterNameUpdate", {
         method: "POST",
         headers: API_HEADERS,
         body: JSON.stringify({
@@ -193,7 +193,7 @@ const OrgMaster: React.FC = () => {
     setDeleteModalOrg(null);
 
     try {
-      const res = await fetch("http://10.80.0.83:3000/OrgmasterDelete", {
+      const res = await fetch("https://worktrail.ai/api/OrgmasterDelete", {
         method: "POST",
         headers: API_HEADERS,
         body: JSON.stringify({

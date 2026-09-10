@@ -3,14 +3,23 @@ import { createContext } from 'react'
 export type AuthUser = {
   id?: number
   username?: string
+  Username?: string
   FirstName?: string
   LastName?: string
   CompanyName?: string
+  Email?: string
+  email?: string
+  Mobile?: string
+  MobileNo?: string
+  EmployeeCode?: string
+  EmployeeId?: string
   password?: string
-  created_at: string
-  activestatus: string
-  Usertype: string
+  created_at?: string
+  activestatus?: string
+  Usertype?: string
+  [key: string]: any
 }
+
 
 export type MenuRoute = {
   Sno?: number
@@ -93,6 +102,12 @@ export const CLIENT_MENU: MenuRoute[] = [
   { Sno: 7, Usertype: 'Client', Route: '/OtherServices', components: 'OtherServices.tsx' },
 ]
 
+export type LoginResult = {
+  user?: AuthUser
+  otpRequired?: boolean
+  message?: string
+}
+
 export type AuthContextValue = {
   user: AuthUser | null
   token: string | null
@@ -102,7 +117,8 @@ export type AuthContextValue = {
   isMenuLoading: boolean
   menuError: string
   error: string
-  login: (emailId: string, password: string) => Promise<AuthUser | void>
+  login: (emailId: string, password: string) => Promise<LoginResult | AuthUser | void>
+  verifyOtp: (emailId: string, otp: string, password?: string) => Promise<AuthUser>
   logout: () => void
 }
 

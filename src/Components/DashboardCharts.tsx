@@ -258,27 +258,11 @@ export interface TransactionDataPoint {
 
 interface TransactionTelemetryChartProps {
   timeframe?: 'daily' | 'weekly' | 'monthly'
+  records?: any[]
 }
 
-function computeTelemetryData(timeframe: 'daily' | 'weekly' | 'monthly'): TransactionDataPoint[] {
-  let records: any[] = []
-  try {
-    const stored = localStorage.getItem('worktrail_verification_records')
-    if (stored) {
-      const parsed = JSON.parse(stored)
-      if (Array.isArray(parsed)) {
-        records = parsed.filter(
-          (r) =>
-            !r.id?.startsWith('rec-') &&
-            !r.requestId?.startsWith('VR-849') &&
-            !r.requestId?.startsWith('VR-732') &&
-            !r.requestId?.startsWith('VR-619')
-        )
-      }
-    }
-  } catch {
-    // ignore
-  }
+function computeTelemetryData(timeframe: 'daily' | 'weekly' | 'monthly', passedRecords?: any[]): TransactionDataPoint[] {
+  const records: any[] = passedRecords || []
 
   if (timeframe === 'daily') {
     const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
@@ -352,17 +336,14 @@ function computeTelemetryData(timeframe: 'daily' | 'weekly' | 'monthly'): Transa
   }
 }
 
-export function TransactionTelemetryChart({ timeframe = 'daily' }: TransactionTelemetryChartProps) {
+export function TransactionTelemetryChart({ timeframe = 'daily', records }: TransactionTelemetryChartProps) {
   const [currentData, setCurrentData] = useState<TransactionDataPoint[]>(() => {
-    return computeTelemetryData(timeframe)
+    return computeTelemetryData(timeframe, records)
   })
 
   useEffect(() => {
-    setCurrentData(computeTelemetryData(timeframe))
-    const handleStorage = () => setCurrentData(computeTelemetryData(timeframe))
-    window.addEventListener('storage', handleStorage)
-    return () => window.removeEventListener('storage', handleStorage)
-  }, [timeframe])
+    setCurrentData(computeTelemetryData(timeframe, records))
+  }, [timeframe, records])
   const maxRevenue = Math.max(...currentData.map(d => d.revenue), 1)
   const totalRevenue = currentData.reduce((acc, d) => acc + d.revenue, 0)
   const totalTransactions = currentData.reduce((acc, d) => acc + d.count, 0)

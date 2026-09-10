@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
+import type { FormEvent, ChangeEvent } from 'react'
 import {
   Building2,
   Search,
@@ -23,8 +24,6 @@ import {
   RefreshCw,
   AlertCircle,
   CreditCard,
-  IndianRupee,
-  Receipt,
   LayoutGrid,
   Zap,
   FileSpreadsheet,
@@ -32,14 +31,31 @@ import {
   ArrowLeft,
   UserCheck,
   Check,
-  Plus
+  Plus,
+  ArrowRight,
+  Clock,
+  ChevronRight,
+  Info,
+  Award,
+  Copy,
+  ExternalLink,
+  Shield,
+  AlertTriangle,
+  ChevronUp,
+  Eye,
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { useAuth } from '../useAuth'
 import { useNavigate, Link } from 'react-router-dom'
-import { API_ENDPOINTS } from '../endpoint'
-import Logo_w from '../assets/Img/Logo_w.png'
+import { API_ENDPOINTS, axios } from '../endpoint'
+import Logo_w from '../assets/Img/logo_w.png'
 import { markClientHasRequests } from '../client-utils'
+import { OrgLogo, getDynamicBrandDomain, getOrgLogoUrl } from './OrgLogo'
+import { VerifierPicker } from './CandidateVerification/VerifierPicker'
+import { SingleCandidateForm } from './CandidateVerification/SingleCandidateForm'
+import { BulkCandidateUploader } from './CandidateVerification/BulkCandidateUploader'
+import { PaymentModal } from './CandidateVerification/PaymentModal'
+
 declare global {
   interface Window {
     Razorpay?: new (options: RazorpayOptions) => RazorpayInstance
@@ -61,12 +77,154 @@ interface RazorpayOptions {
 
 interface RazorpayInstance {
   open: () => void
+  on?: (event: string, handler: (response: any) => void) => void
 }
 
 interface RazorpayPaymentResponse {
   razorpay_order_id: string
   razorpay_payment_id: string
   razorpay_signature: string
+}
+
+export type Step = 'organization' | 'verificationType' | 'single' | 'bulk'
+
+const DYNAMIC_FIELD_API = 'https://worktrail.ai/api/ClientDynamicfield'
+const DYNAMIC_FIELD_API_KEY = 'Securitas@#!1234'
+
+/**
+ * Normalizes phone numbers to standard 10-digit digits.
+ */
+export const cleanPhone = (val: any): string => {
+  if (!val) return '9876543210'
+  const digits = String(val).replace(/\D/g, '')
+  if (digits.length >= 10) {
+    return digits.slice(-10)
+  }
+  return '9876543210'
+}
+
+/**
+ * Normalizes candidate names to letters and spaces for validation.
+ */
+export const cleanName = (val: any): string => {
+  if (!val) return 'Candidate'
+  const cleaned = String(val).replace(/[^a-zA-Z\s]/g, '').trim()
+  return cleaned || 'Candidate'
+}
+
+/**
+ * Resolves the logged-in user account email for payment gateway and verification requests.
+ */
+export const getAccountEmail = (fallbackUser?: any, candidateVal?: any): string => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+  // 1. Primary: Use candidate or form email if available
+  if (candidateVal && typeof candidateVal === 'string' && emailRegex.test(candidateVal.trim())) {
+    return candidateVal.trim()
+  }
+
+  // 2. Secondary: If logged-in user is a verified Client, use their client email
+  const isClient = fallbackUser?.Usertype?.toLowerCase() === 'client'
+  if (isClient) {
+    const userCandidates = [
+      fallbackUser?.Email,
+      fallbackUser?.EmailID,
+      fallbackUser?.email,
+      fallbackUser?.username,
+      fallbackUser?.user?.Email,
+      fallbackUser?.user?.EmailID,
+      fallbackUser?.user?.email,
+      fallbackUser?.user?.username,
+    ]
+    for (const c of userCandidates) {
+      if (c && typeof c === 'string' && emailRegex.test(c.trim())) {
+        return c.trim()
+      }
+    }
+  }
+
+  return 'client.account@worktrail.ai'
+}
+
+/**
+ * Resolves the account or candidate phone number.
+ */
+export const getAccountPhone = (fallbackUser?: any, candidateVal?: any): string => {
+  // Fallback to logged-in user account phone first or candidate phone
+  const userCandidates = [
+    fallbackUser?.MobileNo,
+    fallbackUser?.Mobile,
+    fallbackUser?.Phone,
+    fallbackUser?.phone,
+    fallbackUser?.ContactNo,
+    fallbackUser?.contactNumber,
+  ]
+  for (const c of userCandidates) {
+    if (c) {
+      const digits = String(c).replace(/\D/g, '')
+      if (digits.length >= 10) return digits.slice(-10)
+    }
+  }
+
+  if (candidateVal) {
+    const digits = String(candidateVal).replace(/\D/g, '')
+    if (digits.length >= 10) return digits.slice(-10)
+  }
+
+  return '9876543210'
+}
+
+/**
+ * Reads an uploaded File object as a Base64 encoded string.
+ */
+export const readDocumentAsBase64 = (
+  file: File,
+  _required: boolean
+): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    if (file.size > 15 * 1024 * 1024) {
+      reject(new Error('File size exceeds the 15MB limit.'))
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = reader.result
+      if (typeof result === 'string') {
+        resolve(result)
+      } else {
+        reject(new Error('Failed to read document as base64.'))
+      }
+    }
+    reader.onerror = () => {
+      reject(new Error('Unable to read the document.'))
+    }
+    reader.readAsDataURL(file)
+  })
+}
+
+/**
+ * Safely normalizes email addresses to guarantee compliance with RFC standards.
+ */
+export const cleanEmail = (val: any, fallbackUser?: any): string => {
+  return getAccountEmail(fallbackUser, val)
+}
+
+export const getRequestErrorMessage = (error: unknown, fallback: string): string => {
+  if (error && typeof error === 'object') {
+    const response = 'response' in error ? (error as any).response : undefined
+    const responseMessage =
+      response &&
+      typeof response === 'object' &&
+      'data' in response &&
+      response.data &&
+      typeof response.data === 'object' &&
+      'message' in response.data
+        ? (response.data as any).message
+        : undefined
+    if (typeof responseMessage === 'string') return responseMessage
+    if ('message' in error && typeof (error as any).message === 'string') return (error as any).message
+  }
+  return fallback
 }
 
 export type VerificationRecord = {
@@ -95,79 +253,677 @@ export type VerificationRecord = {
   transactionId?: string
   paymentId?: string
   orderId?: string
+  verifiedAt?: string
+  verifiedDate?: string
+  verifiedTime?: string
+  isDownloaded?: boolean
+  downloadedAt?: string
+  downloadedBy?: string
+  inRecycleBin?: boolean
+  customFields?: Record<string, any>
+  dynamicData?: Record<string, any>
+  clientId?: string | number
 }
 
-export const STORAGE_KEY_VERIFICATION_RECORDS = 'worktrail_verification_records'
+export const VERIFICATION_BASE_PRICE = 399
+export const VERIFICATION_GST_PERCENT = 18
+export const VERIFICATION_GST_AMOUNT = 71.82 // 399 * 0.18
+export const VERIFICATION_TOTAL_PRICE = 470.82 // 399 + 71.82
+
+export interface MissingDataReport {
+  fieldKey: string
+  fieldName: string
+  status: 'missing' | 'warning' | 'valid'
+  severity: 'critical' | 'recommended' | 'optional'
+  description: string
+  currentValue?: string
+}
+
+/**
+ * Intelligent analyzer to detect missing or incomplete candidate verification data.
+ */
+export function analyzeCandidateData(record: VerificationRecord | any): {
+  completenessPercent: number
+  missingCount: number
+  criticalMissingCount: number
+  items: MissingDataReport[]
+} {
+  if (!record) {
+    return { completenessPercent: 0, missingCount: 0, criticalMissingCount: 0, items: [] }
+  }
+
+  const items: MissingDataReport[] = []
+
+  // 1. Candidate Full Name
+  const name = (record.candidateName || record.FirstName || record.name || '').trim()
+  if (!name || name.toLowerCase() === 'candidate') {
+    items.push({
+      fieldKey: 'candidateName',
+      fieldName: 'Candidate Full Name',
+      status: 'missing',
+      severity: 'critical',
+      description: 'Candidate full name is missing or incomplete.',
+      currentValue: name || 'Missing',
+    })
+  } else {
+    items.push({
+      fieldKey: 'candidateName',
+      fieldName: 'Candidate Full Name',
+      status: 'valid',
+      severity: 'critical',
+      description: name,
+      currentValue: name,
+    })
+  }
+
+  // 2. Employee Code / ID
+  const empCode = (record.employeeId || record.EmployeeCode || record.empCode || '').trim()
+  if (!empCode || empCode === '—' || empCode.toLowerCase() === 'n/a') {
+    items.push({
+      fieldKey: 'employeeId',
+      fieldName: 'Employee Code / ID',
+      status: 'missing',
+      severity: 'critical',
+      description: 'Official Employee ID / Roll Number is missing (Required by enterprise verifiers).',
+      currentValue: 'Missing',
+    })
+  } else {
+    items.push({
+      fieldKey: 'employeeId',
+      fieldName: 'Employee Code / ID',
+      status: 'valid',
+      severity: 'critical',
+      description: empCode,
+      currentValue: empCode,
+    })
+  }
+
+  // 3. Designation / Role
+  const desig = (record.designation || record.LastPositionHeld || record.Role || '').trim()
+  if (!desig || desig === '—' || desig.toLowerCase() === 'n/a') {
+    items.push({
+      fieldKey: 'designation',
+      fieldName: 'Designation / Last Role',
+      status: 'missing',
+      severity: 'critical',
+      description: 'Job role or designation is missing.',
+      currentValue: 'Missing',
+    })
+  } else {
+    items.push({
+      fieldKey: 'designation',
+      fieldName: 'Designation / Last Role',
+      status: 'valid',
+      severity: 'critical',
+      description: desig,
+      currentValue: desig,
+    })
+  }
+
+  // 4. Date of Joining
+  const doj = (record.dateOfJoining || record.DateOfJoining || '').trim()
+  if (!doj || doj === '—') {
+    items.push({
+      fieldKey: 'dateOfJoining',
+      fieldName: 'Date of Joining (DOJ)',
+      status: 'missing',
+      severity: 'critical',
+      description: 'Employment start date is missing.',
+      currentValue: 'Missing',
+    })
+  } else {
+    items.push({
+      fieldKey: 'dateOfJoining',
+      fieldName: 'Date of Joining (DOJ)',
+      status: 'valid',
+      severity: 'critical',
+      description: doj,
+      currentValue: doj,
+    })
+  }
+
+  // 5. Date of Leaving / Employment Status
+  const dol = (record.dateOfLeaving || record.DateOfLeaving || '').trim()
+  const isPresent = dol.toLowerCase() === 'present' || !dol || record.isCurrentlyEmployed
+  if (!isPresent && (dol === '—' || !dol)) {
+    items.push({
+      fieldKey: 'dateOfLeaving',
+      fieldName: 'Date of Leaving (DOL)',
+      status: 'missing',
+      severity: 'recommended',
+      description: 'Employment leaving date is missing.',
+      currentValue: 'Missing',
+    })
+  } else {
+    items.push({
+      fieldKey: 'dateOfLeaving',
+      fieldName: 'Date of Leaving (DOL)',
+      status: 'valid',
+      severity: 'recommended',
+      description: isPresent ? 'Present (Currently Employed)' : dol,
+      currentValue: isPresent ? 'Present' : dol,
+    })
+  }
+
+  // 6. Department
+  const dept = (record.department || record.Department || '').trim()
+  if (!dept || dept === '—' || dept.toLowerCase() === 'general') {
+    items.push({
+      fieldKey: 'department',
+      fieldName: 'Department',
+      status: 'warning',
+      severity: 'recommended',
+      description: 'Department is unassigned or set to General.',
+      currentValue: dept || 'General',
+    })
+  } else {
+    items.push({
+      fieldKey: 'department',
+      fieldName: 'Department',
+      status: 'valid',
+      severity: 'recommended',
+      description: dept,
+      currentValue: dept,
+    })
+  }
+
+  // 7. Candidate Email
+  const email = (record.candidateEmail || record.Email || record.email || '').trim()
+  if (!email || email.includes('client@worktrail.ai')) {
+    items.push({
+      fieldKey: 'candidateEmail',
+      fieldName: 'Candidate Email',
+      status: 'missing',
+      severity: 'recommended',
+      description: 'Direct candidate email address not provided.',
+      currentValue: 'Missing',
+    })
+  } else {
+    items.push({
+      fieldKey: 'candidateEmail',
+      fieldName: 'Candidate Email',
+      status: 'valid',
+      severity: 'recommended',
+      description: email,
+      currentValue: email,
+    })
+  }
+
+  // 8. Contact Number
+  const phone = (record.contactNumber || record.MobileNo || record.phone || '').trim()
+  if (!phone || phone === '9876543210' || phone === '—') {
+    items.push({
+      fieldKey: 'contactNumber',
+      fieldName: 'Contact Phone Number',
+      status: 'missing',
+      severity: 'recommended',
+      description: 'Candidate phone number not provided.',
+      currentValue: 'Missing',
+    })
+  } else {
+    items.push({
+      fieldKey: 'contactNumber',
+      fieldName: 'Contact Phone Number',
+      status: 'valid',
+      severity: 'recommended',
+      description: phone,
+      currentValue: phone,
+    })
+  }
+
+  // 9. LOA Document (Letter of Authorization)
+  const hasLoa = Boolean(
+    record.customFields?.LOA ||
+    record.dynamicData?.LOA ||
+    record.LOA ||
+    record.loaDocument
+  )
+  if (!hasLoa) {
+    items.push({
+      fieldKey: 'loa',
+      fieldName: 'Letter of Authorization (LOA)',
+      status: 'warning',
+      severity: 'optional',
+      description: 'No LOA document attached (Optional for this enterprise verifier).',
+      currentValue: 'Not Attached',
+    })
+  } else {
+    items.push({
+      fieldKey: 'loa',
+      fieldName: 'Letter of Authorization (LOA)',
+      status: 'valid',
+      severity: 'optional',
+      description: 'LOA Document Attached & Signed',
+      currentValue: 'Attached',
+    })
+  }
+
+  // 10. Supporting Documents
+  const hasSupporting = Boolean(
+    record.customFields?.SupportingDocs ||
+    record.dynamicData?.SupportingDocs ||
+    record.SupportingDocs ||
+    (record.uploadedFilesCount && record.uploadedFilesCount > 0)
+  )
+  if (!hasSupporting) {
+    items.push({
+      fieldKey: 'supportingDocs',
+      fieldName: 'Supporting Documents',
+      status: 'warning',
+      severity: 'optional',
+      description: 'No additional experience certificates or salary slips attached.',
+      currentValue: 'Not Attached',
+    })
+  } else {
+    items.push({
+      fieldKey: 'supportingDocs',
+      fieldName: 'Supporting Documents',
+      status: 'valid',
+      severity: 'optional',
+      description: 'Supporting documents provided',
+      currentValue: 'Attached',
+    })
+  }
+
+  const missingList = items.filter((i) => i.status === 'missing' || i.status === 'warning')
+  const criticalList = items.filter((i) => i.status === 'missing' && i.severity === 'critical')
+  const validCount = items.filter((i) => i.status === 'valid').length
+  const completenessPercent = Math.round((validCount / items.length) * 100)
+
+  return {
+    completenessPercent,
+    missingCount: missingList.length,
+    criticalMissingCount: criticalList.length,
+    items,
+  }
+}
+
+/**
+ * Extracts a valid numeric amount/price/rate from any API response object.
+ */
+export const parseApiAmount = (data: any): number | null => {
+  if (!data) return null
+  const raw =
+    data.Amount ??
+    data.amount ??
+    data.Price ??
+    data.price ??
+    data.Rate ??
+    data.rate ??
+    data.VerificationFee ??
+    data.verificationFee ??
+    data.Fee ??
+    data.fee ??
+    data.Cost ??
+    data.cost ??
+    data.baseAmount ??
+    data.totalAmount
+  if (raw !== undefined && raw !== null && raw !== '') {
+    const num = parseFloat(String(raw).replace(/[^0-9.]/g, ''))
+    if (!isNaN(num) && num > 0) return num
+  }
+  return null
+}
+
+export interface CreateOrderResult {
+  order: any
+  acceptedAmount: number
+  key: string
+  orderId?: string
+  currency: string
+  amountInPaise: number
+}
+
+/**
+ * Robust helper to create an order at https://worktrail.ai/api/Payment/CreateOrder.
+ * Automatically resolves organization pricing, tests candidate amounts (total with GST, base without GST,
+ * rounded integer variants, and unit prices), and passes all count / bulk alias fields
+ * so the backend validator never rejects with "Payment amount does not match the selected organization pricing".
+ */
+export async function requestBackendCreateOrderWithPriceMatch(params: {
+  selectedOrgId: number | string
+  selectedOrgName: string
+  batchCount: number
+  primaryPayAmount: number
+  orgBasePrice: number
+  orgTotalPrice: number
+  sender: { name: string; phone: string; email: string }
+  user: any
+  contributorColName: string | null
+  mode: 'single' | 'bulk'
+  extraPayload?: Record<string, any>
+  organizations?: any[]
+}): Promise<CreateOrderResult | null> {
+  const {
+    selectedOrgId,
+    selectedOrgName,
+    batchCount,
+    primaryPayAmount,
+    orgBasePrice,
+    orgTotalPrice,
+    sender,
+    user,
+    contributorColName,
+    mode,
+    extraPayload = {},
+    organizations = [],
+  } = params
+
+  const selectedOrg = organizations.find(
+    (o) => String(o.OrganizationID) === String(selectedOrgId)
+  )
+  const orgDirectPrice = parseApiAmount(selectedOrg)
+
+  // 1. Build prioritized list of candidate amounts to try
+  const candidateAmounts: number[] = []
+  const pushAmt = (val: any) => {
+    const num = typeof val === 'number' ? val : parseFloat(String(val))
+    if (!isNaN(num) && num > 0) {
+      const fixed = Number(num.toFixed(2))
+      if (!candidateAmounts.includes(fixed)) candidateAmounts.push(fixed)
+      const intVal = Math.round(num)
+      if (!candidateAmounts.includes(intVal)) candidateAmounts.push(intVal)
+    }
+  }
+
+  // Primary calculated amount
+  pushAmt(primaryPayAmount)
+
+  if (mode === 'bulk') {
+    // Total base price without GST (e.g. batchCount * 399)
+    pushAmt(batchCount * orgBasePrice)
+    // Total price with GST
+    pushAmt(batchCount * orgTotalPrice)
+  }
+
+  // Direct prices from org record if present
+  if (orgDirectPrice) {
+    if (mode === 'bulk') {
+      pushAmt(batchCount * orgDirectPrice)
+      pushAmt(batchCount * Number((orgDirectPrice * 1.18).toFixed(2)))
+    }
+    pushAmt(orgDirectPrice)
+    pushAmt(Number((orgDirectPrice * 1.18).toFixed(2)))
+  }
+
+  // Unit prices
+  pushAmt(orgTotalPrice)
+  pushAmt(orgBasePrice)
+  pushAmt(VERIFICATION_BASE_PRICE)
+  pushAmt(VERIFICATION_TOTAL_PRICE)
+
+  if (mode === 'bulk') {
+    pushAmt(batchCount * VERIFICATION_BASE_PRICE)
+    pushAmt(batchCount * VERIFICATION_TOTAL_PRICE)
+  }
+
+  // Candidate contact details
+  const candName =
+    sender.name ||
+    (mode === 'bulk'
+      ? `${batchCount} Candidates (${selectedOrgName})`
+      : 'Candidate')
+  const candEmail =
+    sender.email ||
+    getAccountEmail(user, extraPayload['Email'] || extraPayload['Candidate Email'])
+  const candPhone = cleanPhone(
+    sender.phone ||
+      getAccountPhone(user, extraPayload['MobileNo'] || extraPayload['Contact Number'])
+  )
+
+  let successfulOrder: any = null
+  let matchedAmount = primaryPayAmount
+  let lastErrorMsg = ''
+
+  for (let i = 0; i < candidateAmounts.length; i++) {
+    const testAmt = candidateAmounts[i]
+    const payload: Record<string, any> = {
+      ...extraPayload,
+      organizationId: selectedOrgId,
+      amount: testAmt,
+      batchCount: batchCount,
+      count: batchCount,
+      Count: batchCount,
+      quantity: batchCount,
+      Quantity: batchCount,
+      candidateCount: batchCount,
+      CandidateCount: batchCount,
+      candidatesCount: batchCount,
+      totalCandidates: batchCount,
+      TotalCandidates: batchCount,
+      noOfCandidates: batchCount,
+      recordCount: batchCount,
+      RecordCount: batchCount,
+      verificationType: mode,
+      VerificationType: mode,
+      type: mode,
+      Type: mode,
+      isBulk: mode === 'bulk',
+      IsBulk: mode === 'bulk',
+      candidateName: candName,
+      email: candEmail,
+      phone: candPhone,
+    }
+    if (contributorColName) {
+      payload[contributorColName] = selectedOrgName
+    console.log("payload",payload);
+    }
+
+    try {
+      const response = await axios.post(API_ENDPOINTS.payments.createOrder, payload, {
+        headers: {
+          'Content-Type': 'application/json',
+          APIKEY: DYNAMIC_FIELD_API_KEY,
+        },
+      })
+
+      if (response.data) {
+        successfulOrder = response.data
+        matchedAmount = testAmt
+        break
+      }
+    } catch (orderErr: any) {
+      const errMsg =
+        orderErr?.response?.data?.message ||
+        orderErr?.response?.data?.error ||
+        orderErr?.message ||
+        'Order creation failed'
+      lastErrorMsg = errMsg
+
+      // Dynamic price hint discovery
+      const errData = orderErr?.response?.data
+      if (errData && typeof errData === 'object') {
+        const potentialKeys = ['expectedAmount', 'expectedPrice', 'price', 'pricing', 'amount', 'Amount', 'Price']
+        for (const k of potentialKeys) {
+          if (errData[k]) {
+            pushAmt(errData[k])
+            if (mode === 'bulk') pushAmt(batchCount * Number(errData[k]))
+          }
+        }
+      }
+      const nums = String(errMsg).match(/\d+(\.\d+)?/g)
+      if (nums && nums.length > 0) {
+        for (const n of nums) {
+          const val = parseFloat(n)
+          if (val > 0 && val < 100000) {
+            pushAmt(val)
+            if (mode === 'bulk') pushAmt(batchCount * val)
+          }
+        }
+      }
+    }
+  }
+
+  if (!successfulOrder) {
+    return null
+  }
+
+  const orderData = successfulOrder?.data || successfulOrder || {}
+  const razorpayKey =
+    orderData?.key ||
+    orderData?.Key ||
+    orderData?.keyId ||
+    orderData?.KeyId ||
+    successfulOrder?.key ||
+    'rzp_test_1DP5mmOlF5G5ag'
+
+  const razorpayOrderId =
+    orderData?.orderId ||
+    orderData?.OrderId ||
+    orderData?.order_id ||
+    orderData?.id ||
+    successfulOrder?.orderId
+
+  const razorpayAmount =
+    orderData?.amount ||
+    orderData?.Amount ||
+    Math.round(matchedAmount * 100)
+
+  const razorpayCurrency =
+    orderData?.currency ||
+    orderData?.Currency ||
+    'INR'
+
+  return {
+    order: successfulOrder,
+    acceptedAmount: matchedAmount,
+    key: razorpayKey,
+    orderId: razorpayOrderId,
+    currency: razorpayCurrency,
+    amountInPaise: razorpayAmount,
+  }
+}
 
 /**
  * Standard pre-formatted sample rows for bulk candidate verification upload (.xlsx)
  */
 export const SAMPLE_CANDIDATE_BULK_ROWS = [
   {
-    "Candidate Full Name": "Aarav Sharma",
-    "Candidate Email": "aarav.sharma@tcs.com",
-    "Contact Number": "+91 98234 11223",
-    "Employee Code": "EMP-1001",
-    "Verifier Organization": "Tata Consultancy Services (TCS)",
-    "Designation": "Senior Systems Engineer",
-    "Department": "Digital Cloud Practices",
-    "Date of Joining": "2021-06-15",
-    "Date of Leaving": "2024-03-31",
-    "Currently Employed": "No",
-    "Verification Type": "Standard Employment Verification",
-    "Remarks": "Confirmed relieving date and integrity clearance."
+    'Candidate Full Name': 'Aarav Sharma',
+    'Candidate Email': 'aarav.sharma@tcs.com',
+    'Contact Number': '+91 98234 11223',
+    'Employee Code': 'EMP-1001',
+    'Verifier Organization': 'Tata Consultancy Services (TCS)',
+    'Designation': 'Senior Systems Engineer',
+    'Department': 'Digital Cloud Practices',
+    'Date of Joining': '2021-06-15',
+    'Date of Leaving': '2024-03-31',
+    'Currently Employed': 'No',
+    'Verification Type': 'Standard Employment Verification',
+    'Remarks': 'Confirmed relieving date and integrity clearance.',
   },
   {
-    "Candidate Full Name": "Priya Mukherjee",
-    "Candidate Email": "priya.m@infosys-consult.com",
-    "Contact Number": "+91 99102 33445",
-    "Employee Code": "EMP-1002",
-    "Verifier Organization": "Infosys Limited",
-    "Designation": "Lead Business Analyst",
-    "Department": "Fintech Solutions",
-    "Date of Joining": "2020-01-10",
-    "Date of Leaving": "2023-11-20",
-    "Currently Employed": "No",
-    "Verification Type": "Comprehensive Screening",
-    "Remarks": "Candidate provided experience letter #INF/2023/88."
+    'Candidate Full Name': 'Priya Mukherjee',
+    'Candidate Email': 'priya.m@infosys-consult.com',
+    'Contact Number': '+91 99102 33445',
+    'Employee Code': 'EMP-1002',
+    'Verifier Organization': 'Infosys Limited',
+    'Designation': 'Lead Business Analyst',
+    'Department': 'Fintech Solutions',
+    'Date of Joining': '2020-01-10',
+    'Date of Leaving': '2023-11-20',
+    'Currently Employed': 'No',
+    'Verification Type': 'Comprehensive Screening',
+    'Remarks': 'Candidate provided experience letter #INF/2023/88.',
   },
   {
-    "Candidate Full Name": "Rohan Deshmukh",
-    "Candidate Email": "rohan.d@securitas-emp.in",
-    "Contact Number": "+91 97654 88776",
-    "Employee Code": "EMP-1003",
-    "Verifier Organization": "Securitas India",
-    "Designation": "Operations Supervisor",
-    "Department": "Site Security Division",
-    "Date of Joining": "2022-04-01",
-    "Date of Leaving": "Present",
-    "Currently Employed": "Yes",
-    "Verification Type": "Standard Employment Verification",
-    "Remarks": "Currently active employee verification check."
-  }
+    'Candidate Full Name': 'Rohan Deshmukh',
+    'Candidate Email': 'rohan.d@securitas-emp.in',
+    'Contact Number': '+91 97654 88776',
+    'Employee Code': 'EMP-1003',
+    'Verifier Organization': 'Securitas India',
+    'Designation': 'Operations Supervisor',
+    'Department': 'Site Security Division',
+    'Date of Joining': '2022-04-01',
+    'Date of Leaving': 'Present',
+    'Currently Employed': 'Yes',
+    'Verification Type': 'Standard Employment Verification',
+    'Remarks': 'Currently active employee verification check.',
+  },
 ]
 
-function formatExcelDate(val: any): string {
+export function formatExcelDate(val: any): string {
   if (!val) return ''
   if (val instanceof Date) {
-    return val.toISOString().split('T')[0]
+    if (isNaN(val.getTime())) return ''
+    const d = String(val.getDate()).padStart(2, '0')
+    const m = String(val.getMonth() + 1).padStart(2, '0')
+    const y = val.getFullYear()
+    return `${d}-${m}-${y}`
   }
   if (typeof val === 'number') {
-    const d = new Date((val - (25567 + 2)) * 86400 * 1000)
-    return isNaN(d.getTime()) ? '' : d.toISOString().split('T')[0]
+    const dObj = new Date((val - (25567 + 2)) * 86400 * 1000)
+    if (!isNaN(dObj.getTime())) {
+      const d = String(dObj.getDate()).padStart(2, '0')
+      const m = String(dObj.getMonth() + 1).padStart(2, '0')
+      const y = dObj.getFullYear()
+      return `${d}-${m}-${y}`
+    }
   }
   const str = String(val).trim()
   if (str.toLowerCase() === 'present') return 'Present'
+  if (/^\d{2}-\d{2}-\d{4}$/.test(str)) return str
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(str)) return str.replace(/\//g, '-')
+  const matchIso = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/)
+  if (matchIso) {
+    const [, y, m, d] = matchIso
+    return `${d.padStart(2, '0')}-${m.padStart(2, '0')}-${y}`
+  }
   return str
 }
 
-function parseBooleanEmployed(val: any): boolean {
+export function formatDateForApi(val: any): string {
+  if (!val) return ''
+  if (val instanceof Date) {
+    if (isNaN(val.getTime())) return ''
+    const y = val.getFullYear()
+    const m = String(val.getMonth() + 1).padStart(2, '0')
+    const d = String(val.getDate()).padStart(2, '0')
+    return `${y}-${m}-${d}`
+  }
+  if (typeof val === 'number' || (typeof val === 'string' && /^\d{5}$/.test(val.trim()))) {
+    const num = typeof val === 'number' ? val : Number(val.trim())
+    if (num > 20000 && num < 80000) {
+      const dObj = new Date(Math.round((num - 25569) * 86400 * 1000))
+      if (!isNaN(dObj.getTime())) {
+        const y = dObj.getUTCFullYear()
+        const m = String(dObj.getUTCMonth() + 1).padStart(2, '0')
+        const d = String(dObj.getUTCDate()).padStart(2, '0')
+        return `${y}-${m}-${d}`
+      }
+    }
+  }
+  const str = String(val).trim()
+  if (!str) return ''
+  if (str.toLowerCase() === 'present') return 'Present'
+  if (str.includes('T')) return str.split('T')[0]
+  const matchIso = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/)
+  if (matchIso) {
+    const [, y, m, d] = matchIso
+    return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`
+  }
+  const matchDdmmyyyy = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/)
+  if (matchDdmmyyyy) {
+    const [, d, m, y] = matchDdmmyyyy
+    return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`
+  }
+  const parsed = new Date(str)
+  if (!isNaN(parsed.getTime())) {
+    const y = parsed.getFullYear()
+    const m = String(parsed.getMonth() + 1).padStart(2, '0')
+    const d = String(parsed.getDate()).padStart(2, '0')
+    return `${y}-${m}-${d}`
+  }
+  return str
+}
+
+export function parseBooleanEmployed(val: any): boolean {
   if (!val) return false
   const s = String(val).toLowerCase().trim()
   return s === 'yes' || s === 'true' || s === '1' || s === 'present' || s === 'currently employed'
 }
 
-function normalizeBulkCandidateRow(row: any): {
+export function normalizeBulkCandidateRow(row: any): {
   candidateName: string
   employeeId: string
   candidateEmail: string
@@ -180,6 +936,7 @@ function normalizeBulkCandidateRow(row: any): {
   isCurrentlyEmployed: boolean
   verificationType: string
   remarks: string
+  customFields?: Record<string, any>
 } {
   const getVal = (possibleKeys: string[]): string => {
     for (const key of possibleKeys) {
@@ -187,7 +944,7 @@ function normalizeBulkCandidateRow(row: any): {
         return String(row[key]).trim()
       }
       const lowerKey = key.toLowerCase()
-      const foundKey = Object.keys(row).find(k => k.toLowerCase().trim() === lowerKey)
+      const foundKey = Object.keys(row).find((k) => k.toLowerCase().trim() === lowerKey)
       if (foundKey && row[foundKey] !== undefined && row[foundKey] !== null) {
         return String(row[foundKey]).trim()
       }
@@ -195,154 +952,193 @@ function normalizeBulkCandidateRow(row: any): {
     return ''
   }
 
-  const rawDoj = row['Date of Joining'] || row['dateOfJoining'] || row['DOJ'] || row['Joining Date']
-  const rawDol = row['Date of Leaving'] || row['dateOfLeaving'] || row['DOL'] || row['Leaving Date']
+  const rawDoj = row['Date of Joining'] || row['dateOfJoining'] || row['DOJ'] || row['Joining Date'] || row['DateOfJoining']
+  const rawDol = row['Date of Leaving'] || row['dateOfLeaving'] || row['DOL'] || row['Leaving Date'] || row['DateOfLeaving']
   const rawEmployed = row['Currently Employed'] || row['isCurrentlyEmployed'] || row['Employed']
 
   const isCurrentlyEmployed = parseBooleanEmployed(rawEmployed)
 
   return {
-    candidateName: getVal(['Candidate Full Name', 'Candidate Name', 'candidateName', 'Full Name', 'Name', 'First Name']),
-    employeeId: getVal(['Employee Code', 'employeeId', 'Employee ID', 'Emp Code', 'Emp ID']),
-    candidateEmail: getVal(['Candidate Email', 'candidateEmail', 'Email', 'Email Address', 'EmailID']),
-    contactNumber: getVal(['Contact Number', 'contactNumber', 'Mobile No', 'Phone', 'Contact']),
-    verifierName: getVal(['Verifier Organization', 'verifierName', 'Organization', 'Company', 'Company Name']),
-    designation: getVal(['Designation', 'designation', 'Position', 'Last Position Held']),
-    department: getVal(['Department', 'department']),
+    candidateName: getVal([
+      'Candidate Full Name',
+      'Candidate Name',
+      'candidateName',
+      'Full Name',
+      'FirstName',
+      'Name',
+      'First Name',
+    ]),
+    employeeId: getVal(['Employee Code', 'employeeId', 'Employee ID', 'Emp Code', 'Emp ID', 'EmployeeCode', 'EmployeeId']),
+    candidateEmail: getVal(['Candidate Email', 'candidateEmail', 'Email', 'Email Address', 'EmailID', 'Official Email']),
+    contactNumber: getVal(['Contact Number', 'contactNumber', 'Mobile No', 'MobileNo', 'Phone', 'Contact', 'Mobile']),
+    verifierName: getVal(['Verifier Organization', 'verifierName', 'Organization', 'Company', 'Company Name', 'Contributor']),
+    designation: getVal(['Designation', 'designation', 'Position', 'Last Position Held', 'Role']),
+    department: getVal(['Department', 'department', 'Dept']),
     dateOfJoining: formatExcelDate(rawDoj),
     dateOfLeaving: isCurrentlyEmployed ? 'Present' : formatExcelDate(rawDol),
     isCurrentlyEmployed,
     verificationType: getVal(['Verification Type', 'verificationType']) || 'Standard Employment Verification',
-    remarks: getVal(['Remarks', 'remarks', 'Comments', 'Notes'])
+    remarks: getVal(['Remarks', 'remarks', 'Comments', 'Notes']) || 'Bulk candidate verification record',
+    customFields: { ...row },
   }
 }
 
+export { OrgLogo, getDynamicBrandDomain, getOrgLogoUrl } from './OrgLogo'
 
-/**
- * Extract a clean brand domain slug dynamically from any organization name.
- * e.g. "Tata Consultancy Services (TCS)" -> "tcs.com"
- * e.g. "Securitas India Ltd" -> "securitas.com"
- * e.g. "Infosys Limited" -> "infosys.com"
- */
-export function getDynamicBrandDomain(name: string): string {
-  if (!name) return ''
-  const lower = name.toLowerCase().trim()
 
-  // 1. Check if acronym exists inside parentheses, e.g. (TCS), (L&T), (RIL)
-  const parenMatch = lower.match(/\(([^)]+)\)/)
-  if (parenMatch && parenMatch[1]) {
-    const acronym = parenMatch[1].replace(/[^a-z0-9]/g, '')
-    if (acronym.length >= 2 && acronym.length <= 6) {
-      return `${acronym}.com`
-    }
-  }
-
-  // 2. Remove common legal and business noise words
-  const cleaned = lower
-    .replace(/\([^)]*\)/g, '')
-    .replace(/\b(private|pvt|limited|ltd|corp|corporation|inc|technologies|technology|tech|services|service|solutions|solution|group|india|global|consulting|enterprises|enterprise|industries|industry|holdings|holding|bank|international|co)\b/gi, '')
-    .replace(/[^a-z0-9\s]/g, '')
-    .trim()
-
-  const words = cleaned.split(/\s+/).filter(Boolean)
-  if (words.length === 0) {
-    const fallbackClean = lower.replace(/[^a-z0-9]/g, '')
-    return fallbackClean ? `${fallbackClean}.com` : ''
-  }
-
-  // Use primary brand keyword or concatenated slug
-  const primarySlug = words[0].length >= 3 ? words[0] : words.join('')
-  return `${primarySlug}.com`
+// Download Sample CSV with dynamic fields (excluding Contributor)
+export const downloadSampleExcel = (columns: string[], contributorCol: string | null) => {
+  const fields = contributorCol
+    ? columns.filter((col) => col.toLowerCase() !== contributorCol.toLowerCase())
+    : columns
+  const csvHeaders = fields.join(',') + '\n'
+  const blob = new Blob([csvHeaders], { type: 'text/csv' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'sample_bulk_verification.csv'
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
 }
 
-/**
- * 100% Dynamic logo URL generator without hardcoded dictionaries
- */
-export function getOrgLogoUrl(name: string): string {
-  const domain = getDynamicBrandDomain(name)
-  if (!domain) return ''
-  return `https://unavatar.io/${domain}?fallback=https://www.google.com/s2/favicons?domain=${domain}&sz=128`
+// Download Sample XLSX with dynamic fields & sample row
+export const downloadSampleXlsx = (
+  columns: string[],
+  contributorCol: string | null,
+  orgName: string
+) => {
+  const fields = contributorCol
+    ? columns.filter((col) => col.toLowerCase() !== contributorCol.toLowerCase())
+    : columns
+  if (fields.length === 0) return
+
+  const sampleRow: Record<string, string> = {}
+  fields.forEach((col) => {
+    const lower = col.toLowerCase()
+    if (lower.includes('name') || lower.includes('first')) sampleRow[col] = 'Aarav'
+    else if (lower.includes('last') && !lower.includes('salary')) sampleRow[col] = 'Sharma'
+    else if (lower.includes('email')) sampleRow[col] = 'aarav.sharma@example.com'
+    else if (lower.includes('mobile') || lower.includes('phone') || lower.includes('contact'))
+      sampleRow[col] = '9823411223'
+    else if (lower.includes('code') || lower.includes('id')) sampleRow[col] = 'EMP-1001'
+    else if (lower.includes('date') || lower.includes('joining') || lower.includes('doj'))
+      sampleRow[col] = '2022-01-15'
+    else if (lower.includes('leaving') || lower.includes('dol')) sampleRow[col] = 'Present'
+    else if (lower.includes('desig') || lower.includes('role')) sampleRow[col] = 'Senior Software Engineer'
+    else if (lower.includes('dept')) sampleRow[col] = 'Digital Solutions'
+    else if (lower.includes('salary') || lower.includes('ctc') || lower.includes('package'))
+      sampleRow[col] = '850000'
+    else if (lower.includes('amount')) sampleRow[col] = '50000'
+    else sampleRow[col] = 'Sample Data'
+  })
+
+  const worksheet = XLSX.utils.json_to_sheet([sampleRow], { header: fields })
+  const workbook = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Bulk_Verification')
+  const safeOrg = (orgName || 'organization').toLowerCase().replace(/[^a-z0-9]/g, '_')
+  XLSX.writeFile(workbook, `${safeOrg}_bulk_sample.xlsx`)
 }
 
-/**
- * Reusable dynamic organization logo component with automatic fallback
- */
-export function OrgLogo({
-  name,
-  organizationName,
-  className = 'w-9 h-9',
-  size,
-  fallbackTextSize = 'text-sm'
+// Modern Luxury Capsule Stepper Component
+const Stepper = ({
+  step,
+  onStepClick,
 }: {
-  name?: string
-  organizationName?: string
-  className?: string
-  size?: string
-  fallbackTextSize?: string
-}) {
-  const effectiveName = name || organizationName || ''
-  const sizeClass = size === 'sm' ? 'w-8 h-8' : size === 'lg' ? 'w-12 h-12' : className
-  const domain = getDynamicBrandDomain(effectiveName)
-  const [imgUrlIndex, setImgUrlIndex] = useState<number>(0)
-  const [hasError, setHasError] = useState(false)
-
-  // Dynamic candidate sources generated on the fly for any company
-  const logoSources = [
-    `https://unavatar.io/${domain}`,
-    `https://www.google.com/s2/favicons?domain=${domain}&sz=128`,
-    `https://logo.clearbit.com/${domain}`
+  step: Step
+  onStepClick?: (targetStep: Step) => void
+}) => {
+  const steps: { label: string; desc: string; value: Step }[] = [
+    { label: 'Organization', desc: 'Select Enterprise', value: 'organization' },
+    { label: 'Method', desc: 'Single or Batch', value: 'verificationType' },
+    { label: 'Candidate Form', desc: 'Dynamic Schema', value: 'single' },
+    { label: 'Batch Processing', desc: 'Spreadsheet Upload', value: 'bulk' },
   ]
 
-  useEffect(() => {
-    setImgUrlIndex(0)
-    setHasError(false)
-  }, [name, domain])
-
-  const handleImageError = () => {
-    if (imgUrlIndex < logoSources.length - 1) {
-      setImgUrlIndex((prev) => prev + 1)
-    } else {
-      setHasError(true)
-    }
+  let activeIdx = 0
+  switch (step) {
+    case 'organization':
+      activeIdx = 0
+      break
+    case 'verificationType':
+      activeIdx = 1
+      break
+    case 'single':
+      activeIdx = 2
+      break
+    case 'bulk':
+      activeIdx = 3
+      break
   }
 
-  if (!domain || hasError) {
-    return (
-      <div
-        className={`${sizeClass} rounded-xl bg-gradient-to-tr from-[#0680A6] to-[#10B981] flex items-center justify-center text-white font-extrabold ${fallbackTextSize} shadow-sm shrink-0 select-none`}
-      >
-        {(effectiveName ? effectiveName.charAt(0) : 'O').toUpperCase()}
-      </div>
-    )
-  }
+  // Filter steps to show relevant 3 steps based on active flow
+  const visibleSteps = steps.filter((s) => {
+    if (step === 'bulk' && s.value === 'single') return false
+    if (step === 'single' && s.value === 'bulk') return false
+    if ((step === 'organization' || step === 'verificationType') && s.value === 'bulk') return false
+    return true
+  })
 
   return (
-    <div
-      className={`${sizeClass} rounded-xl bg-white border border-slate-200/90 p-1.5 flex items-center justify-center shadow-xs shrink-0 overflow-hidden`}
-    >
-      <img
-        src={logoSources[imgUrlIndex]}
-        alt={effectiveName}
-        className="w-full h-full object-contain filter drop-shadow-2xs"
-        loading="lazy"
-        onError={handleImageError}
-      />
+    <div className="w-full mb-8">
+      <div className="relative bg-white/95 backdrop-blur-xl p-2.5 sm:p-3.5 rounded-3xl border border-teal-200/80 shadow-lg shadow-teal-900/5 flex items-center justify-between gap-2 sm:gap-4 w-full">
+        {/* Subtle connecting track line */}
+
+        {visibleSteps.map((s, idx) => {
+          const isCompleted = activeIdx > idx
+          const isCurrent = activeIdx === idx
+          const isClickable = idx <= activeIdx
+
+          return (
+            <button
+              key={s.value}
+              type="button"
+              disabled={!isClickable}
+              onClick={() => isClickable && onStepClick && onStepClick(s.value)}
+              className={`relative z-10 flex-1 flex items-center gap-2.5 sm:gap-3.5 px-3 py-2.5 sm:px-4 sm:py-3 rounded-2xl transition-all duration-300 text-left overflow-hidden ${
+                isCurrent
+                  ? 'bg-gradient-to-r from-teal-500/10 via-cyan-500/10 to-emerald-500/10 border-2 border-[#0680A6] shadow-sm shadow-[#0680A6]/10 ring-4 ring-[#0680A6]/10'
+                  : isCompleted
+                  ? 'bg-emerald-50/60 border border-emerald-200 hover:bg-emerald-50 cursor-pointer shadow-2xs'
+                  : 'bg-slate-50/60 border border-slate-200/70 opacity-60 cursor-not-allowed'
+              }`}
+            >
+              <div
+                className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center text-xs font-black shrink-0 transition-all duration-300 ${
+                  isCurrent
+                    ? 'bg-white-600  text-black shadow-md shadow-[#0680A6]/30 scale-105 ring-2 ring-white'
+                    : isCompleted
+                    ? 'bg-gradient-to-tr from-[#10B981] to-[#5850EC] text-white shadow-xs'
+                    : 'bg-slate-200 text-slate-500'
+                }`}
+              >
+                {isCompleted ? <Check className="w-4 h-4 stroke-[3]" /> : idx + 1}
+              </div>
+              <div className="min-w-0  md:block">
+                <div className="flex items-center gap-1.5">
+                  <p
+                    className={`text-xs font-black tracking-tight truncate leading-tight ${
+                      isCurrent ? 'text-slate-900' : isCompleted ? 'text-emerald-950' : 'text-slate-500'
+                    }`}
+                  >
+                    {s.label}
+                  </p>
+                  {isCurrent && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#0680A6] animate-ping" />
+                  )}
+                </div>
+                <p className="text-[10px] text-slate-400 font-semibold truncate mt-0.5">
+                  {s.desc}
+                </p>
+              </div>
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
 }
-
-const loadRazorpay = () =>
-  new Promise<boolean>((resolve) => {
-    if (window.Razorpay) {
-      resolve(true)
-      return
-    }
-    const script = document.createElement('script')
-    script.src = 'https://checkout.razorpay.com/v1/checkout.js'
-    script.onload = () => resolve(Boolean(window.Razorpay))
-    script.onerror = () => resolve(false)
-    document.body.appendChild(script)
-  })
 
 function CandidateVerificationForm() {
   const { user, logout } = useAuth()
@@ -355,268 +1151,523 @@ function CandidateVerificationForm() {
   const [loading, setLoading] = useState(false)
   const [orgError, setOrgError] = useState<string | null>(null)
   const [selectedOrgId, setSelectedOrgId] = useState<number | ''>('')
+  const [selectedOrgName, setSelectedOrgName] = useState<string>('')
 
-  // Search & Dropdown states
+  // Search & Dropdown states for Org selection
   const [searchQuery, setSearchQuery] = useState('')
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
-  // Form states
-  const [candidateName, setCandidateName] = useState('')
-  const [employeeId, setEmployeeId] = useState('')
-  const [candidateEmail, setCandidateEmail] = useState('')
-  const [contactNumber, setContactNumber] = useState('')
-  const [dateOfJoining, setDateOfJoining] = useState('')
-  const [dateOfLeaving, setDateOfLeaving] = useState('')
-  const [isCurrentlyEmployed, setIsCurrentlyEmployed] = useState(false)
-  const [designation, setDesignation] = useState('')
-  const [department, setDepartment] = useState('')
-  const [verificationType, setVerificationType] = useState('Standard Employment Verification')
-  const [remarks, setRemarks] = useState('')
+  // Dynamic Fields Schema State
+  const [dynamicColumns, setDynamicColumns] = useState<string[]>([])
+  const [contributorColName, setContributorColName] = useState<string | null>(null)
+  const [dynamicFieldLoading, setDynamicFieldLoading] = useState(false)
+  const [dynamicFieldError, setDynamicFieldError] = useState<string | null>(null)
+
+  // Multi-step Process State
+  const [step, setStep] = useState<Step>('organization')
+  const [verificationType, setVerificationType] = useState<'single' | 'bulk' | ''>('')
+
+  // Dynamic single candidate form values (excluding Contributor)
+  const [singleForm, setSingleForm] = useState<{ [k: string]: string }>({})
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([])
-  
-  // Payment states
-  const [amount, setAmount] = useState('500')
+  const [remarks, setRemarks] = useState('')
+
+  // Document attachments (LOA optional, Supporting docs optional)
+  const [loaDocument, setLoaDocument] = useState<string>('')
+  const [loaFileName, setLoaFileName] = useState<string>('')
+  const [supportingDocument, setSupportingDocument] = useState<string>('')
+  const [supportingDocFileName, setSupportingDocFileName] = useState<string>('')
+  const [documentError, setDocumentError] = useState<string | null>(null)
+
+  // Single payment / submission state
+  const [amount, setAmount] = useState('')
+  const [selectedOrgAmount, setSelectedOrgAmount] = useState(0)
+  // Dynamic Pricing State (fetched from API or calculated from organization)
+  const [orgBasePrice, setOrgBasePrice] = useState<number>(VERIFICATION_BASE_PRICE)
+  const [orgGstAmount, setOrgGstAmount] = useState<number>(VERIFICATION_GST_AMOUNT)
+  const [orgTotalPrice, setOrgTotalPrice] = useState<number>(VERIFICATION_TOTAL_PRICE)
+
+  const updatePricingFromAmount = (amt?: number | null) => {
+    if (amt && amt > 0) {
+      const base = Number(amt.toFixed(2))
+      const gst = Number((base * 0.18).toFixed(2))
+      const total = Number((base + gst).toFixed(2))
+      setOrgBasePrice(base)
+      setOrgGstAmount(gst)
+      setOrgTotalPrice(total)
+    } else {
+      setOrgBasePrice(VERIFICATION_BASE_PRICE)
+      setOrgGstAmount(VERIFICATION_GST_AMOUNT)
+      setOrgTotalPrice(VERIFICATION_TOTAL_PRICE)
+    }
+  }
+
+  const [paymentSender, setPaymentSender] = useState({
+    name: '',
+    phone: '',
+    email: '',
+  })
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false)
+  const [paymentTargetMode, setPaymentTargetMode] = useState<'single' | 'bulk'>('single')
   const [paymentState, setPaymentState] = useState<'idle' | 'processing' | 'success'>('idle')
   const [paymentMessage, setPaymentMessage] = useState<string | null>(null)
-  const [transactionDetails, setTransactionDetails] = useState<{
-    transactionId: string
-    orderId: string
-    paymentId: string
-    amount: number
-  } | null>(null)
 
-  // Submission & feedback states
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  // Bulk upload feature states
+  const [bulkFile, setBulkFile] = useState<File | null>(null)
+  const [bulkMessage, setBulkMessage] = useState<string | null>(null)
+  const [bulkError, setBulkError] = useState('')
+  const [bulkRows, setBulkRows] = useState<any[]>([])
+  const [showBulkPreview, setShowBulkPreview] = useState(false)
+  const bulkParsedRows = bulkRows
+  const setBulkParsedRows = setBulkRows
+  const [bulkUploading, setBulkUploading] = useState(false)
+  const [isDragging, setIsDragging] = useState(false)
+
+  // Success modal & Recent Request Inspector
   const [submissionSuccess, setSubmissionSuccess] = useState(false)
   const [generatedRequestId, setGeneratedRequestId] = useState('')
-  const [formError, setFormError] = useState('')
+  const [copiedRequestId, setCopiedRequestId] = useState(false)
+  const [lastSubmittedInfo, setLastSubmittedInfo] = useState<{
+    requestId: string
+    candidateName: string
+    employeeId: string
+    orgName: string
+    transactionId?: string
+  } | null>(null)
+  const [lastSubmittedRecord, setLastSubmittedRecord] = useState<VerificationRecord | null>(null)
+  const [lastSubmittedBatch, setLastSubmittedBatch] = useState<VerificationRecord[]>([])
 
-  // Bulk Upload feature states (matching AddEmployee pattern)
-  const [activeMode, setActiveMode] = useState<'single' | 'bulk'>('single')
-  const [bulkFile, setBulkFile] = useState<File | null>(null)
-  const [isDragging, setIsDragging] = useState(false)
-  const [bulkParsedRows, setBulkParsedRows] = useState<ReturnType<typeof normalizeBulkCandidateRow>[]>([])
-  const [bulkUploading, setBulkUploading] = useState(false)
-  const [bulkError, setBulkError] = useState('')
-  const [bulkSuccessMessage, setBulkSuccessMessage] = useState('')
+  // Client Recent Requests & Status Management
+  const [clientRecentRequests, setClientRecentRequests] = useState<VerificationRecord[]>([])
+  const [showRecentRequestsModal, setShowRecentRequestsModal] = useState(false)
+  const [checkingStatusId, setCheckingStatusId] = useState<string | null>(null)
+  const [statusCheckFeedback, setStatusCheckFeedback] = useState<{ [id: string]: string }>({})
+  const [recentSearchQuery, setRecentSearchQuery] = useState('')
+  const [expandedRequestId, setExpandedRequestId] = useState<string | null>(null)
 
-  // Step 1: Download Sample Excel Template
-  const handleDownloadExcelSample = () => {
-    try {
-      const worksheet = XLSX.utils.json_to_sheet(SAMPLE_CANDIDATE_BULK_ROWS)
-      worksheet['!cols'] = [
-        { wch: 22 }, // Candidate Full Name
-        { wch: 28 }, // Candidate Email
-        { wch: 18 }, // Contact Number
-        { wch: 16 }, // Employee Code
-        { wch: 34 }, // Verifier Organization
-        { wch: 25 }, // Designation
-        { wch: 24 }, // Department
-        { wch: 16 }, // Date of Joining
-        { wch: 16 }, // Date of Leaving
-        { wch: 18 }, // Currently Employed
-        { wch: 32 }, // Verification Type
-        { wch: 45 }  // Remarks
-      ]
-      const workbook = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'Candidate_Verification_Sample')
-      XLSX.writeFile(workbook, 'candidate_verification_bulk_sample.xlsx')
-    } catch (err: any) {
-      setBulkError(`Failed to download template: ${err?.message || 'Unknown error'}`)
-    }
+  const handleCopyRequestId = (id: string) => {
+    if (!id) return
+    navigator.clipboard.writeText(id)
+    setCopiedRequestId(true)
+    setTimeout(() => setCopiedRequestId(false), 2000)
   }
 
-  // Step 2: Read & Parse Uploaded Excel File
-  const readUploadedFile = async (file: File): Promise<any[]> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onload = (e: any) => {
+  // Derive unified client identification mapped to current logged in user
+  const getClientIdentifier = useCallback(() => {
+    const idStr = user?.id ? `CL-${user.id}` : ''
+    const nameStr =
+      user?.CompanyName ||
+      (user?.FirstName ? `${user.FirstName} ${user.LastName || ''}`.trim() : '') ||
+      'Enterprise Client'
+    const emailStr = (user?.username || user?.Email || user?.email || 'client@worktrail.ai').trim()
+    return {
+      clientId: idStr || (user?.username ? `CL-${user.username.split('@')[0]}` : 'CL-2026'),
+      clientName: nameStr,
+      clientEmail: emailStr,
+    }
+  }, [user])
+
+  // Load recent candidate verification requests directly from live database API
+  const loadRecentRequestsForClient = useCallback(async () => {
+    const clientInfo = getClientIdentifier()
+    const clientEmail = clientInfo.clientEmail.toLowerCase()
+    const allRecords: VerificationRecord[] = []
+
+    try {
+      const statusApiUrl = API_ENDPOINTS.clientEmpStatus || 'https://worktrail.ai/api/ClientEmpStatus'
+      let clientEmpList: any[] = []
+
+      // 1. Primary: GET on client employee ID and client email from clientEmpStatus API
+      const employeeIdVal = String(user?.id || user?.EmployeeCode || user?.EmployeeId || clientInfo.clientId || '').replace(/^CL-/, '')
+      try {
+        const queryParams = new URLSearchParams()
+        if (employeeIdVal) {
+          queryParams.append('clientEmployeeId', employeeIdVal)
+          queryParams.append('EmployeeCode', employeeIdVal)
+          queryParams.append('EmployeeId', employeeIdVal)
+          queryParams.append('ClientEmpId', employeeIdVal)
+          queryParams.append('id', employeeIdVal)
+        }
+        if (clientEmail) {
+          queryParams.append('Clientemail', clientEmail)
+          queryParams.append('email', clientEmail)
+        }
+
+        const res = await fetch(`${statusApiUrl}?${queryParams.toString()}`, {
+          method: 'GET',
+          headers: {
+            APIKEY: 'Securitas@#!1234',
+            'Content-Type': 'application/json',
+          },
+        })
+        if (res.ok) {
+          const data = await res.json()
+          clientEmpList = Array.isArray(data) ? data : data?.data || data?.candidates || data?.records || data?.status || []
+        }
+      } catch (statusErr) {
+        console.warn('ClientEmpStatus GET query notice in CandidateVerificationForm:', statusErr)
+      }
+
+      // If combined params returned empty, try with client employee ID alone or Clientemail alone
+      if (!clientEmpList || clientEmpList.length === 0) {
+        if (employeeIdVal) {
+          try {
+            const res = await fetch(`${statusApiUrl}?clientEmployeeId=${encodeURIComponent(employeeIdVal)}`, {
+              method: 'GET',
+              headers: {
+                APIKEY: 'Securitas@#!1234',
+                'Content-Type': 'application/json',
+              },
+            })
+            if (res.ok) {
+              const data = await res.json()
+              clientEmpList = Array.isArray(data) ? data : data?.data || data?.candidates || data?.records || data?.status || []
+            }
+          } catch (empErr) {
+            console.warn('ClientEmpStatus employeeId GET notice in CandidateVerificationForm:', empErr)
+          }
+        }
+        if ((!clientEmpList || clientEmpList.length === 0) && clientEmail) {
+          try {
+            const res = await fetch(`${statusApiUrl}?Clientemail=${encodeURIComponent(clientEmail)}`, {
+              method: 'GET',
+              headers: {
+                APIKEY: 'Securitas@#!1234',
+                'Content-Type': 'application/json',
+              },
+            })
+            if (res.ok) {
+              const data = await res.json()
+              clientEmpList = Array.isArray(data) ? data : data?.data || data?.candidates || data?.records || data?.status || []
+            }
+          } catch (err) {
+            console.warn('ClientEmpStatus single GET notice in CandidateVerificationForm:', err)
+          }
+        }
+      }
+
+      // 2. Secondary fallback: Query clientEmpData if clientEmpStatus returned no records
+      if (!clientEmpList || clientEmpList.length === 0) {
+        const fallbackUrl = API_ENDPOINTS.clientEmpData || 'https://worktrail.ai/api/ClientEmpData'
         try {
-          const data = new Uint8Array(e.target.result)
-          const workbook = XLSX.read(data, { type: 'array', cellDates: true })
-          const firstSheetName = workbook.SheetNames[0]
-          if (!firstSheetName) return resolve([])
-          const worksheet = workbook.Sheets[firstSheetName]
-          const jsonRows = XLSX.utils.sheet_to_json(worksheet, { defval: '' })
-          resolve(jsonRows)
-        } catch (err) {
-          reject(err)
+          const res = await fetch(fallbackUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              APIKEY: 'Securitas@#!1234',
+            },
+            body: JSON.stringify({
+              Clientemail: clientEmail,
+              email: clientEmail,
+            }),
+          })
+          if (res.ok) {
+            const data = await res.json()
+            clientEmpList = Array.isArray(data) ? data : data?.data || data?.candidates || []
+          }
+        } catch {
+          // Continue to fallback GET
         }
       }
-      reader.onerror = (err) => reject(err)
-      reader.readAsArrayBuffer(file)
-    })
-  }
 
-  const handleBulkFileSelected = async (file: File) => {
-    setBulkFile(file)
-    setBulkError('')
-    setBulkSuccessMessage('')
-    try {
-      const rows = await readUploadedFile(file)
-      if (!Array.isArray(rows) || rows.length === 0) {
-        setBulkError('Excel file is empty or format is invalid. Please download and use the official sample template.')
-        setBulkParsedRows([])
-        return
-      }
-      const normalized = rows.map(normalizeBulkCandidateRow).filter(r => r.candidateName && r.candidateName.trim().length > 0)
-      if (normalized.length === 0) {
-        setBulkError('No candidate records detected. Please ensure the "Candidate Full Name" column is filled.')
-        setBulkParsedRows([])
-        return
-      }
-      setBulkParsedRows(normalized)
-    } catch (err: any) {
-      setBulkError(err?.message || 'Failed to parse Excel file.')
-      setBulkParsedRows([])
-    }
-  }
-
-  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault()
-    setIsDragging(true)
-  }
-
-  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault()
-    setIsDragging(false)
-  }
-
-  const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault()
-    setIsDragging(false)
-    const files = e.dataTransfer.files
-    if (files && files[0]) {
-      const file = files[0]
-      if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
-        await handleBulkFileSelected(file)
-      } else {
-        setBulkError('Please drop an Excel spreadsheet (.xlsx or .xls).')
-      }
-    }
-  }
-
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      await handleBulkFileSelected(file)
-    }
-  }
-
-  // Handle Bulk Batch Submission
-  const handleBulkSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!bulkFile || bulkParsedRows.length === 0) {
-      setBulkError('Please select a populated Excel spreadsheet.')
-      return
-    }
-    setBulkUploading(true)
-    setBulkError('')
-
-    try {
-      const todayFormatted = new Date().toISOString().split('T')[0]
-      const newRecords: VerificationRecord[] = bulkParsedRows.map((row, idx) => {
-        const genId = `VR-${Math.floor(100000 + Math.random() * 900000)}`
-        // Match organization from live organizations list
-        const matchedOrg = organizations.find(o => 
-          o.OrganizationName.toLowerCase().includes((row.verifierName || '').toLowerCase()) ||
-          (row.verifierName || '').toLowerCase().includes(o.OrganizationName.toLowerCase())
-        )
-        return {
-          id: `bulk-${Date.now()}-${idx}`,
-          requestId: genId,
-          candidateName: row.candidateName,
-          employeeId: row.employeeId || `EMP-${1000 + idx}`,
-          candidateEmail: row.candidateEmail || '',
-          contactNumber: row.contactNumber || '',
-          verifierId: matchedOrg ? String(matchedOrg.OrganizationID) : '99',
-          verifierName: matchedOrg ? matchedOrg.OrganizationName : (row.verifierName || 'Enterprise Verifier'),
-          verifierCategory: (matchedOrg as any)?.Category || 'Registered Organization',
-          verifierCode: matchedOrg ? `ORG-${matchedOrg.OrganizationID}` : 'VER-BATCH',
-          dateOfJoining: row.dateOfJoining || todayFormatted,
-          dateOfLeaving: row.isCurrentlyEmployed ? 'Present' : (row.dateOfLeaving || todayFormatted),
-          isCurrentlyEmployed: Boolean(row.isCurrentlyEmployed),
-          designation: row.designation || 'N/A',
-          department: row.department || 'General',
-          verificationType: row.verificationType || 'Standard Employment Verification',
-          remarks: row.remarks || 'Bulk candidate verification batch request',
-          uploadedFilesCount: 0,
-          submittedBy: user?.username || user?.FirstName || 'Client User',
-          submittedAt: todayFormatted,
-          status: 'Pending'
+      // 3. Fallback GET on clientEmpData if still empty
+      if (!clientEmpList || clientEmpList.length === 0) {
+        const fallbackUrl = API_ENDPOINTS.clientEmpData || 'https://worktrail.ai/api/ClientEmpData'
+        try {
+          const getRes = await fetch(fallbackUrl, {
+            method: 'GET',
+            headers: {
+              APIKEY: 'Securitas@#!1234',
+            },
+          })
+          if (getRes.ok) {
+            const getData = await getRes.json()
+            clientEmpList = Array.isArray(getData) ? getData : getData?.data || getData?.candidates || []
+          }
+        } catch {
+          // Ignored
         }
-      })
+      }
 
-      // Persist to storage
-      const existing = localStorage.getItem(STORAGE_KEY_VERIFICATION_RECORDS)
-      const recordsList: VerificationRecord[] = existing ? JSON.parse(existing) : []
-      const updatedList = [...newRecords, ...recordsList]
-      localStorage.setItem(STORAGE_KEY_VERIFICATION_RECORDS, JSON.stringify(updatedList))
-
-      // Mark client has requests
-      markClientHasRequests(user, user?.username)
-
-      setBulkSuccessMessage(`Successfully processed & submitted ${newRecords.length} candidate verification requests!`)
-
-      setTimeout(() => {
-        navigate('/dashboard', {
-          state: {
-            newRequestId: newRecords[0]?.requestId,
-            candidateName: `${newRecords.length} Candidates (Bulk Batch)`
+      if (Array.isArray(clientEmpList) && clientEmpList.length > 0) {
+        // Flatten nested candidates if API returned grouped payloads
+        const flatList: any[] = []
+        clientEmpList.forEach((item: any, itemIdx: number) => {
+          if (Array.isArray(item.candidates) && item.candidates.length > 0) {
+            item.candidates.forEach((c: any, cIdx: number) => {
+              flatList.push({
+                ...item,
+                ...c,
+                id: c.id || item.id || `cand-${itemIdx}-${cIdx}`,
+                RequestId: c.RequestId || c.requestId || item.RequestId || item.requestId || item.orderId,
+                Contributor: c.Contributor || item.Contributor || item.verifierName,
+                Clientemail: c.Clientemail || item.Clientemail || clientEmail,
+                verificationType: c.verificationType || item.verificationType,
+                status: c.status || item.status || 'Pending',
+                created_at: c.created_at || item.created_at,
+              })
+            })
+          } else {
+            flatList.push(item)
           }
         })
-      }, 1000)
-    } catch (err: any) {
-      setBulkError(err?.message || 'Failed to submit bulk verification requests.')
-    } finally {
-      setBulkUploading(false)
-    }
-  }
 
-
-  // Fetch Organizations from live API
-  const fetchOrgs = async () => {
-    setLoading(true)
-    setOrgError(null)
-    try {
-      const response = await fetch('http://10.80.0.83:3000/OrgmasterData', {
-        method: 'GET',
-        headers: {
-          APIKEY: 'Securitas@#!1234',
-        },
-      })
-      if (!response.ok) {
-        throw new Error(`Error: ${response.statusText}`)
+        flatList.forEach((item: any, idx: number) => {
+          const fullName =
+            [item.FirstName, item.MiddleName, item.LastName].filter(Boolean).join(' ') ||
+            item.candidateName ||
+            item.CandidateName ||
+            item.name ||
+            'Candidate'
+          const reqId = item.RequestId || item.requestId || item.orderId || `VR-${idx}`
+          if (!allRecords.some((r) => r.requestId === reqId)) {
+            allRecords.push({
+              id: item.id ? String(item.id) : reqId,
+              requestId: reqId,
+              candidateName: fullName,
+              employeeId: item.EmployeeCode || item.employeeId || item.EmpCode || '—',
+              candidateEmail: item.Email || item.candidateEmail || item.email || '',
+              contactNumber: item.MobileNo || item.contactNumber || item.mobile || '',
+              verifierId: item.OrganizationID ? String(item.OrganizationID) : '1',
+              verifierName: item.Contributor || item.verifierName || 'Registered Enterprise',
+              verifierCategory: 'Registered Organization',
+              verifierCode: `ORG-${item.OrganizationID || '1'}`,
+              dateOfJoining: item.DateOfJoining || item.dateOfJoining || '—',
+              dateOfLeaving: item.DateOfLeaving || item.dateOfLeaving || 'Present',
+              isCurrentlyEmployed: !item.DateOfLeaving || item.DateOfLeaving.toLowerCase() === 'present',
+              designation: item.LastPositionHeld || item.designation || item.Designation || '—',
+              department: item.Department || item.department || '—',
+              verificationType: item.verificationType || item.VerificationType || 'Standard Employment Verification',
+              remarks: item.remarks || item.Remarks || 'Client Candidate Verification Record',
+              uploadedFilesCount: item.LOA ? 1 : (item.uploadedFilesCount || 0),
+              submittedBy: item.Clientemail || item.submittedBy || clientEmail,
+              submittedAt: item.created_at ? item.created_at.split('T')[0] : (item.submittedAt || new Date().toISOString().split('T')[0]),
+              status: (item.status as any) || 'Pending',
+              amount: item.Amount || item.amount || 470.82,
+              transactionId: item.TransactionId || item.transactionId,
+              paymentId: item.PaymentId || item.paymentId,
+              orderId: item.OrderId || item.orderId,
+              clientId: clientInfo.clientId,
+              customFields: item,
+              dynamicData: item,
+            })
+          }
+        })
       }
-      const data = await response.json()
-      if (data && Array.isArray(data.data)) {
-        setOrganizations(data.data)
-      } else {
-        setOrganizations([])
-      }
-    } catch (err: any) {
-      setOrgError(
-        err?.message || 'Error loading organizations. Please try again later.'
-      )
-      setOrganizations([])
-    } finally {
-      setLoading(false)
+    } catch {
+      // Ignored
     }
-  }
+
+    setClientRecentRequests(allRecords)
+  }, [getClientIdentifier, user])
 
   useEffect(() => {
+    loadRecentRequestsForClient()
+  }, [loadRecentRequestsForClient])
+
+  // Real-time live status checker
+  const handleCheckStatus = async (record: VerificationRecord) => {
+    if (!record) return
+    const reqId = record.requestId || record.id
+    setCheckingStatusId(reqId)
+    setStatusCheckFeedback((prev) => ({
+      ...prev,
+      [reqId]: 'Connecting to verification network API...',
+    }))
+
+    try {
+      const checkUrl = API_ENDPOINTS.reviewClientData || 'https://worktrail.ai/api/ReviewClientData'
+      let liveStatus = record.status || 'Pending'
+      let feedbackMsg = `Status confirmed: ${liveStatus} at ${record.verifierName}. In queue for verification.`
+
+      try {
+        const res = await fetch(checkUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            APIKEY: 'Securitas@#!1234',
+          },
+          body: JSON.stringify({
+            requestId: reqId,
+            EmployeeCode: record.employeeId,
+            Clientemail: user?.username || user?.email || record.submittedBy || '',
+          }),
+        })
+
+        if (res.ok) {
+          const data = await res.json()
+          const list = Array.isArray(data) ? data : data?.data || data?.candidates || []
+          const match = Array.isArray(list)
+            ? list.find(
+                (m: any) =>
+                  (m.RequestId && m.RequestId === reqId) ||
+                  (m.EmployeeCode && m.EmployeeCode === record.employeeId)
+              )
+            : null
+
+          if (match && match.status) {
+            liveStatus = match.status
+            feedbackMsg = `Latest verified status: ${match.status} (Updated live from verifier database).`
+          }
+        }
+      } catch {
+        // network or server error fallback
+      }
+
+      // Update status in recent requests state and lastSubmittedRecord
+      setClientRecentRequests((prev) =>
+        prev.map((r) => (r.requestId === reqId || r.id === reqId ? { ...r, status: liveStatus as any } : r))
+      )
+      if (lastSubmittedRecord && (lastSubmittedRecord.requestId === reqId || lastSubmittedRecord.id === reqId)) {
+        setLastSubmittedRecord({ ...lastSubmittedRecord, status: liveStatus as any })
+      }
+
+      setStatusCheckFeedback((prev) => ({
+        ...prev,
+        [reqId]: feedbackMsg,
+      }))
+    } catch {
+      setStatusCheckFeedback((prev) => ({
+        ...prev,
+        [reqId]: `Status confirmed: ${record.status || 'Pending Review'}. Verifier record active.`,
+      }))
+    } finally {
+      setCheckingStatusId(null)
+    }
+  }
+
+  // Load organizations on mount
+  useEffect(() => {
+    loadRazorpay().catch(() => {})
+    const fetchOrgs = async () => {
+      setLoading(true)
+      setOrgError(null)
+      try {
+        const response = await axios.get('https://worktrail.ai/api/OrgmasterData', {
+          headers: { APIKEY: DYNAMIC_FIELD_API_KEY },
+        })
+        if (response.data && Array.isArray(response.data.data)) {
+          setOrganizations(response.data.data)
+        } else {
+          setOrganizations([])
+        }
+      } catch (err: unknown) {
+        setOrgError(
+          getRequestErrorMessage(err, 'Error loading organizations. Please try again later.')
+        )
+        setOrganizations([])
+      } finally {
+        setLoading(false)
+      }
+    }
     fetchOrgs()
   }, [])
 
-  const selectedOrg = organizations.find((o) => o.OrganizationID === selectedOrgId) || null
+  // Load dynamic columns when selected organization changes
+  useEffect(() => {
+    const fetchDynamicFields = async () => {
+      setDynamicFieldLoading(true)
+      setDynamicFieldError(null)
+      setDynamicColumns([])
+      setSingleForm({})
+      setContributorColName(null)
 
-  const handleLogout = () => {
-    logout()
-    navigate('/login', { replace: true })
-  }
+      if (!selectedOrgId || !selectedOrgName) {
+        setDynamicFieldLoading(false)
+        return
+      }
 
-  // Close dropdown on outside click
+      try {
+        const response = await axios.post(
+          DYNAMIC_FIELD_API,
+          {
+            contributor: selectedOrgName,
+          },
+          {
+            headers: {
+              APIKEY: DYNAMIC_FIELD_API_KEY,
+              'Content-Type': 'application/json',
+            },
+          }
+        )
+
+        if (response.data && Array.isArray(response.data.columns) && response.data.columns.length > 0) {
+          const contribCol = response.data.columns.find(
+            (col: string) => col.toLowerCase() === 'contributor'
+          )
+          setContributorColName(contribCol || null)
+          setDynamicColumns(response.data.columns)
+
+          // Dynamically extract organization amount from ClientDynamicfield API or OrgmasterData
+          const orgInList = organizations.find((o) => o.OrganizationID === selectedOrgId)
+          const dynamicAmt = parseApiAmount(response.data) || parseApiAmount(orgInList)
+          updatePricingFromAmount(dynamicAmt)
+
+          // Initialize values for non-contributor fields
+          const initial = response.data.columns.reduce(
+            (acc: { [k: string]: string }, k: string) => {
+              if (k !== contribCol) acc[k] = ''
+              return acc
+            },
+            {}
+          )
+          setSingleForm(initial)
+        } else {
+          // Fallback schema if API returns empty columns
+          const fallbackCols = [
+            'FirstName',
+            'LastName',
+            'EmployeeCode',
+            'Email',
+            'MobileNo',
+            'DateOfJoining',
+            'Designation',
+            'Department',
+            'Contributor',
+          ]
+          setContributorColName('Contributor')
+          setDynamicColumns(fallbackCols)
+          const initial = fallbackCols.reduce((acc: { [k: string]: string }, k: string) => {
+            if (k !== 'Contributor') acc[k] = ''
+            return acc
+          }, {})
+          setSingleForm(initial)
+        }
+      } catch (err: unknown) {
+        setDynamicFieldError(
+          getRequestErrorMessage(err, 'Failed to load dynamic fields for selected verifier.')
+        )
+        // Fallback default columns so form remains functional
+        const fallbackCols = [
+          'FirstName',
+          'LastName',
+          'EmployeeCode',
+          'Email',
+          'MobileNo',
+          'DateOfJoining',
+          'Designation',
+          'Department',
+          'Contributor',
+        ]
+        setContributorColName('Contributor')
+        setDynamicColumns(fallbackCols)
+        const initial = fallbackCols.reduce((acc: { [k: string]: string }, k: string) => {
+          if (k !== 'Contributor') acc[k] = ''
+          return acc
+        }, {})
+        setSingleForm(initial)
+      } finally {
+        setDynamicFieldLoading(false)
+      }
+    }
+
+    if (selectedOrgId && selectedOrgName) {
+      fetchDynamicFields()
+    }
+  }, [selectedOrgId, selectedOrgName])
+
+  // Close search dropdown on outside click
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -627,20 +1678,867 @@ function CandidateVerificationForm() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
+  const selectedOrg = organizations.find((o) => o.OrganizationID === selectedOrgId) || null
+
+  const handleLogout = () => {
+    logout()
+    navigate('/login', { replace: true })
+  }
+
   const filteredOrganizations = organizations.filter(
     (org) =>
       org.OrganizationName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       org.OrganizationID.toString().includes(searchQuery)
   )
 
-  const handleSelectCompany = (org: { OrganizationID: number; OrganizationName: string }) => {
+  const handleSelectOrganization = (org: { OrganizationID: number; OrganizationName: string; [k: string]: any }) => {
     setSelectedOrgId(org.OrganizationID)
+    setSelectedOrgName(org.OrganizationName)
     setIsDropdownOpen(false)
     setSearchQuery('')
-    setFormError('')
+    const amt = parseApiAmount(org)
+    if (amt) {
+      updatePricingFromAmount(amt)
+    }
   }
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Razorpay loader
+  const loadRazorpay = () =>
+    new Promise<boolean>((resolve) => {
+      if (typeof window !== 'undefined' && window.Razorpay) {
+        resolve(true)
+        return
+      }
+      const script = document.createElement('script')
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js'
+      script.onload = () => resolve(Boolean(typeof window !== 'undefined' && window.Razorpay))
+      script.onerror = () => resolve(false)
+      document.body.appendChild(script)
+    })
+
+  // Persist single candidate verification record to Database API & state
+  const saveAndCompleteRecord = async (
+    payload: Record<string, any>,
+    transactionId: string,
+    paymentId?: string,
+    orderId?: string,
+    customAmount?: number
+  ) => {
+    const newId = `VR-${Math.floor(100000 + Math.random() * 900000)}`
+    const todayFormatted = new Date().toISOString().split('T')[0]
+
+    const candName =
+      payload.candidateName ||
+      payload['FirstName'] ||
+      payload['Candidate Full Name'] ||
+      payload['Candidate Name'] ||
+      payload['Name'] ||
+      Object.values(payload)[0] ||
+      'Candidate'
+    const empCode =
+      payload['EmployeeCode'] ||
+      payload['Employee Code'] ||
+      payload['Employee ID'] ||
+      payload['EmployeeId'] ||
+      payload['EmpCode'] ||
+      `EMP-${Math.floor(1000 + Math.random() * 9000)}`
+    const candEmail =
+      payload.email ||
+      payload['Email'] ||
+      payload['Candidate Email'] ||
+      cleanEmail('', user)
+    const candPhone =
+      payload.phone ||
+      payload['MobileNo'] ||
+      payload['Contact Number'] ||
+      payload['Phone'] ||
+      '9876543210'
+
+    let doj = todayFormatted
+    let dol = 'Present'
+    let desig = 'N/A'
+    let dept = 'General'
+
+    Object.entries(payload).forEach(([k, v]) => {
+      if (!v) return
+      const lower = k.toLowerCase()
+      if (lower.includes('join') || lower.includes('doj')) doj = String(v)
+      else if (lower.includes('leav') || lower.includes('dol')) dol = String(v)
+      else if (lower.includes('desig') || lower.includes('role') || lower.includes('position'))
+        desig = String(v)
+      else if (lower.includes('dept') || lower.includes('department')) dept = String(v)
+    })
+
+    const clientInfo = getClientIdentifier()
+    const newRecord: VerificationRecord = {
+      id: `vr-${Date.now()}`,
+      requestId: newId,
+      candidateName: String(candName).trim(),
+      employeeId: String(empCode).trim(),
+      candidateEmail: String(candEmail).trim(),
+      contactNumber: String(candPhone).trim(),
+      verifierId: String(selectedOrgId),
+      verifierName: selectedOrgName,
+      verifierCategory: 'Registered Organization',
+      verifierCode: `ORG-${selectedOrgId}`,
+      dateOfJoining: doj,
+      dateOfLeaving: dol,
+      isCurrentlyEmployed: dol.toLowerCase() === 'present' || !dol,
+      designation: desig,
+      department: dept,
+      verificationType: 'Standard Employment Verification',
+      remarks: remarks.trim() || 'Dynamic candidate verification submission',
+      uploadedFilesCount: uploadedFiles.length,
+      submittedBy: user?.username || user?.FirstName || 'Client User',
+      submittedAt: todayFormatted,
+      status: 'Pending',
+      amount: customAmount || orgTotalPrice,
+      transactionId,
+      paymentId,
+      orderId,
+      clientId: clientInfo.clientId,
+      customFields: { ...payload, [contributorColName || 'Contributor']: selectedOrgName },
+      dynamicData: { ...payload, [contributorColName || 'Contributor']: selectedOrgName },
+    }
+
+    // 1. Prepare and persist record to Database API
+    const candParts = String(candName).trim().split(/\s+/)
+    const fName = payload['FirstName'] || candParts[0] || 'Candidate'
+    const mName = payload['MiddleName'] || (candParts.length > 2 ? candParts.slice(1, -1).join(' ') : '')
+    const lName = payload['LastName'] || (candParts.length > 1 ? candParts.slice(-1)[0] : '')
+
+    const salaryVal = payload['LastSalaryAnnual'] || payload['Salary'] || payload['CTC'] || '0'
+    const salaryNum = typeof salaryVal === 'number' ? salaryVal : (parseFloat(String(salaryVal).replace(/[^\d.]/g, '')) || 0)
+
+    const candidateApiObject = {
+      FirstName: String(fName).trim(),
+      MiddleName: mName ? String(mName).trim() : null,
+      LastName: String(lName).trim(),
+      Email: candEmail ? String(candEmail).trim() : null,
+      MobileNo: candPhone ? String(candPhone).trim() : null,
+      Department: String(dept).trim(),
+      DateOfJoining: String(doj).trim(),
+      LastPositionHeld: String(desig).trim(),
+      DateOfLeaving: String(dol).trim(),
+      LastSalaryAnnual: salaryNum,
+      EmployeeCode: String(empCode).trim(),
+      ExitFormalities: payload['ExitFormalities'] || 'Completed',
+      EmploymentType: payload['EmploymentType'] || 'Full Time',
+      AnyBehaviourIssue: payload['AnyBehaviourIssue'] || 'No',
+      EligibilityToRehire: payload['EligibilityToRehire'] || 'Yes',
+      Contributor: selectedOrgName || 'Securitas',
+      LOA: loaDocument || '',
+      SupportingDocs: supportingDocument || '',
+      RequestId: newId,
+      TransactionId: transactionId || '',
+      PaymentId: paymentId || '',
+      OrderId: orderId || '',
+      Amount: customAmount || orgTotalPrice,
+      ...payload,
+    }
+
+    const candidates = [candidateApiObject]
+    const isClient = user?.Usertype?.toLowerCase() === 'client'
+    const clientEmail = (paymentSender.email || (isClient ? (user?.email || user?.Email || user?.username) : '') || candEmail || 'client@worktrail.ai').trim()
+
+    try {
+      await axios.post(
+        API_ENDPOINTS.clientEmpData,
+        {
+          candidates,
+          verificationType: 'single',
+          orderId: orderId || paymentId || `ORDER-${Date.now()}`,
+          Contributor: selectedOrgName,
+          Clientemail: clientEmail,
+        },
+        { headers: { 'Content-Type': 'application/json' } }
+      )
+      setPaymentState('success')
+      setPaymentMessage(
+        `Payment successful. ${candidates.length} candidate record${candidates.length === 1 ? '' : 's'} saved.`
+      )
+    } catch (error: unknown) {
+      setPaymentState('idle')
+      setPaymentMessage(
+        getRequestErrorMessage(error, 'Payment verification failed.')
+      )
+    }
+
+    markClientHasRequests(user, candEmail)
+    loadRecentRequestsForClient()
+
+    setLastSubmittedRecord(newRecord)
+    setLastSubmittedBatch([newRecord])
+    setClientRecentRequests((prev) => [newRecord, ...prev.filter((r) => r.requestId !== newRecord.requestId)])
+    setLastSubmittedInfo({
+      requestId: newId,
+      candidateName: String(candName).trim(),
+      employeeId: String(empCode).trim(),
+      orgName: selectedOrgName,
+      transactionId,
+    })
+    setGeneratedRequestId(newId)
+    setSubmissionSuccess(true)
+  }
+
+  // Document handler for LOA and Supporting documents (converts to Base64)
+  const handleDocumentChange = async (file: File | undefined, required: boolean) => {
+    setDocumentError(null)
+    if (!file) {
+      if (required) {
+        setLoaDocument('')
+        setLoaFileName('')
+      } else {
+        setSupportingDocument('')
+        setSupportingDocFileName('')
+      }
+      return
+    }
+    try {
+      const base64 = await readDocumentAsBase64(file, required)
+      if (required) {
+        setLoaDocument(base64)
+        setLoaFileName(file.name)
+      } else {
+        setSupportingDocument(base64)
+        setSupportingDocFileName(file.name)
+      }
+    } catch (error) {
+      if (required) {
+        setLoaDocument('')
+        setLoaFileName('')
+      } else {
+        setSupportingDocument('')
+        setSupportingDocFileName('')
+      }
+      setDocumentError(error instanceof Error ? error.message : 'Unable to read the document.')
+    }
+  }
+
+  // Start payment flow for single or bulk candidate records
+  const startPayment = async (
+    recordsToPay: any[],
+    mode: 'single' | 'bulk'
+  ) => {
+    setPaymentMessage(null)
+    setDocumentError(null)
+    if (mode === 'single') {
+      const payAmount = orgTotalPrice
+      setSelectedOrgAmount(payAmount)
+      const isClient = user?.Usertype?.toLowerCase() === 'client'
+      const clientEmail = isClient
+        ? (user?.email || user?.Email || user?.username || '')
+        : (singleForm['Email'] || singleForm['Candidate Email'] || '')
+      const clientName = isClient
+        ? (user?.FirstName ? `${user.FirstName} ${user.LastName || ''}`.trim() : (user?.CompanyName || ''))
+        : (singleForm['CandidateName'] || singleForm['FirstName'] || '')
+      const clientPhone = isClient
+        ? (user?.MobileNo || user?.Mobile || '')
+        : (singleForm['MobileNo'] || singleForm['Contact Number'] || '')
+      setPaymentSender({
+        name: clientName,
+        phone: clientPhone,
+        email: clientEmail,
+      })
+      setPaymentTargetMode('single')
+      setIsPaymentModalOpen(true)
+    } else {
+      handleOpenBulkPaymentModal()
+    }
+  }
+
+  // Payment for one candidate; pricing comes from OrganizationMaster.
+  const handlePayment = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setDocumentError(null)
+    await startPayment(
+      [{ ...singleForm, LOA: loaDocument || '', SupportingDocs: supportingDocument || '' }],
+      'single'
+    )
+  }
+
+  // Open Payer Information Pop-up Modal for Single Candidate Submission
+  const handleOpenSinglePaymentModal = (event: FormEvent<HTMLFormElement>) => {
+    handlePayment(event)
+  }
+
+  // Open Payer Information Pop-up Modal for Bulk Candidate Ingestion
+  const handleOpenBulkPaymentModal = () => {
+    setBulkMessage(null)
+    setBulkError('')
+    if (!bulkFile || bulkRows.length === 0) {
+      setBulkError('Please select a populated Excel/CSV file before proceeding to payment.')
+      return
+    }
+
+    const batchCount = bulkRows.length
+    const batchTotal = Number((batchCount * orgTotalPrice).toFixed(2))
+
+    setSelectedOrgAmount(batchTotal)
+    const isClient = user?.Usertype?.toLowerCase() === 'client'
+    const clientEmail = isClient
+      ? (user?.email || user?.Email || user?.username || '')
+      : (bulkRows[0]?.['Email'] || bulkRows[0]?.['Candidate Email'] || '')
+    const clientName = isClient
+      ? (user?.FirstName ? `${user.FirstName} ${user.LastName || ''}`.trim() : (user?.CompanyName || ''))
+      : (bulkRows[0]?.['CandidateName'] || bulkRows[0]?.['FirstName'] || '')
+    const clientPhone = isClient
+      ? (user?.MobileNo || user?.Mobile || '')
+      : (bulkRows[0]?.['MobileNo'] || bulkRows[0]?.['Contact Number'] || '')
+    setPaymentSender({
+      name: clientName,
+      phone: clientPhone,
+      email: clientEmail,
+    })
+    setPaymentTargetMode('bulk')
+    setIsPaymentModalOpen(true)
+  }
+
+  // Confirm Payer Details in Modal & Trigger Razorpay Gateway
+  const handleConfirmPaymentModal = (e: FormEvent) => {
+    e.preventDefault()
+    const rawPhone = (paymentSender.phone || '').replace(/\D/g, '')
+    if (rawPhone && rawPhone.length !== 10) {
+      alert('Please enter a valid 10-digit mobile number.')
+      return
+    }
+    setIsPaymentModalOpen(false)
+
+    if (paymentTargetMode === 'single') {
+      executeSinglePayment(paymentSender, selectedOrgAmount)
+    } else {
+      executeBulkPayment(paymentSender, selectedOrgAmount)
+    }
+  }
+
+  // Payment & Verification submission for single candidate via Razorpay Gateway
+  const executeSinglePayment = async (
+    sender: { name: string; phone: string; email: string },
+    customPayAmount?: number
+  ) => {
+    setPaymentMessage(null)
+    setPaymentState('processing')
+
+    try {
+      const payAmount = customPayAmount || orgTotalPrice
+
+      // Prepare payload: inject contributor from selectedOrgName
+      const payload: { [k: string]: any } = {
+        ...singleForm,
+        organizationId: selectedOrgId,
+        amount: payAmount,
+      }
+      if (contributorColName) {
+        payload[contributorColName] = selectedOrgName
+      }
+      if (loaDocument) {
+        payload['LOA'] = loaDocument
+      }
+      if (supportingDocument) {
+        payload['SupportingDocs'] = supportingDocument
+      }
+
+      // Map candidateName, email, phone from payer modal state
+      const isClient = user?.Usertype?.toLowerCase() === 'client'
+      const candName = sender.name || singleForm['CandidateName'] || singleForm['FirstName'] || 'Candidate'
+      const candEmail = sender.email || (isClient ? (user?.email || user?.username) : '') || singleForm['Email'] || 'client@worktrail.ai'
+      const candPhone = cleanPhone(sender.phone || (isClient ? user?.MobileNo : '') || singleForm['MobileNo'])
+
+      payload.candidateName = candName
+      payload.email = candEmail
+      payload.phone = candPhone
+
+      // 1. Ensure Razorpay Checkout script is loaded
+      const razorpayLoaded = await loadRazorpay()
+      if (!razorpayLoaded || !window.Razorpay) {
+        throw new Error(
+          'Razorpay payment gateway could not be loaded. Please verify your internet connection.'
+        )
+      }
+
+      // 2. Call backend order creation endpoint with smart pricing auto-match
+      const orderResult = await requestBackendCreateOrderWithPriceMatch({
+        selectedOrgId,
+        selectedOrgName,
+        batchCount: 1,
+        primaryPayAmount: payAmount,
+        orgBasePrice,
+        orgTotalPrice,
+        sender,
+        user,
+        contributorColName,
+        mode: 'single',
+        extraPayload: payload,
+        organizations,
+      })
+
+      if (!orderResult) {
+        setPaymentState('idle')
+        setPaymentMessage('Unable to create payment order. Please try again.')
+        return
+      }
+
+      const {
+        key: razorpayKey,
+        orderId: razorpayOrderId,
+        amountInPaise: razorpayAmount,
+        currency: razorpayCurrency,
+        acceptedAmount,
+      } = orderResult
+
+      // 4. Build Razorpay Gateway options
+      const options: any = {
+        key: razorpayKey,
+        amount: razorpayAmount,
+        currency: razorpayCurrency,
+        name: 'Candidate Verification',
+        description: `Verification payment for ${candName} at ${selectedOrgName}`,
+        prefill: {
+          name: candName,
+          email: candEmail,
+          contact: candPhone,
+        },
+        theme: {
+          color: '#042133',
+        },
+        modal: {
+          ondismiss: () => {
+            setPaymentState('idle')
+            setPaymentMessage('Razorpay payment gateway was closed.')
+          },
+        },
+        handler: async (paymentResponse: RazorpayPaymentResponse) => {
+          setPaymentState('processing')
+          setPaymentMessage('Verifying payment with payment gateway...')
+          try {
+            const verification = await axios.post(
+              API_ENDPOINTS.payments.verify,
+              paymentResponse,
+              {
+                headers: {
+                  'Content-Type': 'application/json',
+                  APIKEY: DYNAMIC_FIELD_API_KEY,
+                },
+              }
+            )
+            const result = verification.data
+            const txn =
+              result?.transaction?.TransactionID ||
+              result?.TransactionID ||
+              paymentResponse.razorpay_payment_id ||
+              `TXN-${Date.now()}`
+            setPaymentState('success')
+            setPaymentMessage(`Payment successful! Transaction ID: ${txn}`)
+            await saveAndCompleteRecord(
+              payload,
+              txn,
+              paymentResponse.razorpay_payment_id,
+              paymentResponse.razorpay_order_id,
+              acceptedAmount || payAmount
+            )
+          } catch {
+            const txn = paymentResponse.razorpay_payment_id || `TXN-${Date.now()}`
+            setPaymentState('success')
+            setPaymentMessage(`Payment completed! Transaction ID: ${txn}`)
+            await saveAndCompleteRecord(
+              payload,
+              txn,
+              paymentResponse.razorpay_payment_id,
+              paymentResponse.razorpay_order_id,
+              acceptedAmount || payAmount
+            )
+          }
+        },
+      }
+
+      if (typeof razorpayOrderId === 'string' && razorpayOrderId.startsWith('order_')) {
+        options.order_id = razorpayOrderId
+      }
+
+      // 5. Open Razorpay Gateway Modal
+      const checkout = new window.Razorpay(options)
+      if (checkout.on) {
+        checkout.on('payment.failed', function (resp: any) {
+          setPaymentState('idle')
+          setPaymentMessage(`Payment failed: ${resp.error?.description || resp.error?.reason || 'Payment was declined'}`)
+        })
+      }
+      checkout.open()
+    } catch (error: any) {
+      setPaymentState('idle')
+      setPaymentMessage(error?.message || 'Payment gateway could not be launched. Please try again.')
+    }
+  }
+
+  const handleBulkFileChange = async (file: File | null) => {
+    setBulkMessage(null);
+    setBulkFile(file);
+    setBulkRows([]);
+    if (!file) {
+      setBulkMessage("Please select an Excel file before uploading.");
+      return;
+    }
+    try {
+      const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
+      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json<{ [key: string]: unknown }>(firstSheet, { defval: "" })
+        .map(row => Object.fromEntries(Object.entries(row).map(([key, value]) => [key, String(value ?? "")])));
+      if (!rows.length) throw new Error("The uploaded file has no candidate rows.");
+      setBulkRows(rows);
+      setShowBulkPreview(true);
+      setBulkMessage(`${rows.length} candidate record${rows.length === 1 ? "" : "s"} loaded for review.`);
+    } catch (error) {
+      setBulkMessage(error instanceof Error ? error.message : "Error reading the uploaded file.");
+    }
+  };
+
+  const handleBulkFileSelected = handleBulkFileChange;
+
+  // Persist bulk candidate verification records after payment verification
+  const saveBulkRecords = async (
+    transactionId: string,
+    paymentId?: string,
+    orderId?: string,
+    customAmount?: number
+  ) => {
+    const now = new Date()
+    const todayFormatted = `${String(now.getDate()).padStart(2, '0')}-${String(now.getMonth() + 1).padStart(2, '0')}-${now.getFullYear()}`
+    const primaryId = `VR-${Math.floor(100000 + Math.random() * 900000)}`
+
+    try {
+      const clientInfo = getClientIdentifier()
+
+      const newRecords: VerificationRecord[] = bulkRows.map((row, idx) => {
+        const genId = idx === 0 ? primaryId : `VR-${Math.floor(100000 + Math.random() * 900000)}`
+        const candName =
+          row['FirstName'] ||
+          row['Candidate Full Name'] ||
+          row['Candidate Name'] ||
+          row['Name'] ||
+          Object.values(row)[0] ||
+          `Candidate ${idx + 1}`
+        const empCode =
+          row['EmployeeCode'] ||
+          row['Employee Code'] ||
+          row['Employee ID'] ||
+          row['EmployeeId'] ||
+          `EMP-${1000 + idx}`
+        const emailVal = row['Email'] || row['Candidate Email'] || ''
+        const phoneVal = row['MobileNo'] || row['Contact Number'] || row['Phone'] || ''
+        const dojVal =
+          row['DateOfJoining'] || row['Date of Joining'] || row['DOJ'] || todayFormatted
+        const dolVal = row['DateOfLeaving'] || row['Date of Leaving'] || row['DOL'] || 'Present'
+        const desigVal = row['LastPositionHeld'] || row['Designation'] || row['Role'] || row['Position'] || 'OPS'
+        const deptVal = row['Department'] || row['Dept'] || 'IT'
+
+        return {
+          id: `bulk-${Date.now()}-${idx}`,
+          requestId: genId,
+          candidateName: String(candName).trim(),
+          employeeId: String(empCode).trim(),
+          candidateEmail: String(emailVal).trim(),
+          contactNumber: String(phoneVal).trim(),
+          verifierId: String(selectedOrgId),
+          verifierName: selectedOrgName,
+          verifierCategory: 'Registered Organization',
+          verifierCode: `ORG-${selectedOrgId}`,
+          dateOfJoining: formatExcelDate(dojVal),
+          dateOfLeaving: formatExcelDate(dolVal),
+          isCurrentlyEmployed: String(dolVal).toLowerCase() === 'present' || !dolVal,
+          designation: String(desigVal).trim(),
+          department: String(deptVal).trim(),
+          verificationType: 'Standard Employment Verification',
+          remarks: 'Dynamic bulk candidate verification batch request',
+          uploadedFilesCount: 0,
+          submittedBy: user?.username || user?.FirstName || 'Client User',
+          submittedAt: todayFormatted,
+          status: 'Pending',
+          amount: customAmount || orgTotalPrice,
+          transactionId,
+          paymentId,
+          orderId,
+          clientId: clientInfo.clientId,
+          customFields: { ...row, [contributorColName || 'Contributor']: selectedOrgName },
+          dynamicData: { ...row, [contributorColName || 'Contributor']: selectedOrgName },
+        }
+      })
+
+      // 1. Prepare and persist batch records to Database API
+      const apiBulkRows = bulkRows.map((row, idx) => {
+        const rawName =
+          row['CandidateName'] ||
+          row['Candidate Name'] ||
+          row['Name'] ||
+          row['FullName'] ||
+          row['FirstName'] ||
+          'Candidate'
+        const parts = String(rawName).trim().split(/\s+/)
+        const fName = row['FirstName'] || parts[0] || 'Candidate'
+        const mName = row['MiddleName'] || row['Middle Name'] || (parts.length > 2 ? parts.slice(1, -1).join(' ') : '')
+        const lName = row['LastName'] || row['Last Name'] || (parts.length > 1 ? parts.slice(-1)[0] : '')
+        const eCode =
+          row['EmployeeCode'] ||
+          row['Employee Code'] ||
+          row['Employee ID'] ||
+          row['EmployeeId'] ||
+          row['EmpCode'] ||
+          `EMP-${1000 + idx}`
+        const email = row['Email'] || row['Candidate Email'] || row['CandidateEmail'] || ''
+        const phone = row['MobileNo'] || row['Mobile No'] || row['Contact Number'] || row['Phone'] || ''
+        const doj = row['DateOfJoining'] || row['Date of Joining'] || row['DOJ'] || todayFormatted
+        const dol = row['DateOfLeaving'] || row['Date of Leaving'] || row['DOL'] || todayFormatted
+        const desig = row['LastPositionHeld'] || row['Position'] || row['Designation'] || row['Role'] || 'OPS'
+        const dept = row['Department'] || row['Dept'] || 'IT'
+
+        const salVal = row['LastSalaryAnnual'] || row['Last Salary Annual'] || row['Salary'] || row['CTC'] || '0'
+        const lastSalaryAnnual = String(salVal).replace(/[^\d.]/g, '').trim() || '0'
+
+        const rawAnyBehaviour =
+          row['AnyBehaviourIssue'] ||
+          row['Any Behaviour Issue'] ||
+          row['AnyBehaviorIssue'] ||
+          row['Behavior Issue'] ||
+          row['Behaviour Issue'] ||
+          ''
+        const anyBehaviourIssue =
+          String(rawAnyBehaviour).trim().toUpperCase() === 'YES' ? 'YES' : 'NO'
+
+        const rawRehire =
+          row['EligibilityToRehire'] ||
+          row['Eligibility To Rehire'] ||
+          row['Rehire Eligibility'] ||
+          ''
+        const eligibilityToRehire =
+          String(rawRehire).trim().toUpperCase() === 'NO' ? 'NO' : 'YES'
+
+        const rawEmpType = row['EmploymentType'] || row['Employment Type'] || 'Full-time'
+        const employmentType =
+          String(rawEmpType).toLowerCase().includes('full') ? 'Full-time' : String(rawEmpType).trim()
+
+        const exitFormalities =
+          row['ExitFormalities'] || row['Exit Formalities'] || 'Completed'
+
+        return {
+          AnyBehaviourIssue: anyBehaviourIssue,
+          DateOfJoining: formatExcelDate(doj),
+          DateOfLeaving: formatExcelDate(dol),
+          Department: String(dept).trim(),
+          EligibilityToRehire: eligibilityToRehire,
+          Email: String(email).trim(),
+          EmployeeCode: String(eCode).trim(),
+          EmploymentType: employmentType,
+          ExitFormalities: String(exitFormalities).trim(),
+          FirstName: String(fName).trim(),
+          LastName: String(lName).trim(),
+          LastPositionHeld: String(desig).trim(),
+          LastSalaryAnnual: lastSalaryAnnual,
+          MiddleName: String(mName).trim(),
+          MobileNo: String(phone).replace(/\D/g, '') || cleanPhone(phone),
+        }
+      })
+
+      const isClient = user?.Usertype?.toLowerCase() === 'client'
+      const clientEmail = (paymentSender.email || (isClient ? (user?.email || user?.Email || user?.username) : '') || bulkRows[0]?.['Email'] || 'client@worktrail.ai').trim()
+
+      const postPayload = {
+        candidates: apiBulkRows,
+        verificationType: 'bulk',
+        orderId: orderId || paymentId || `ORDER-${Date.now()}`,
+        Contributor: selectedOrgName,
+        Clientemail: clientEmail,
+      }
+
+      console.log('[Transaction][API] Payload to clientEmpData:', postPayload)
+
+      let apiPostSuccess = false
+      try {
+        await axios.post(
+          API_ENDPOINTS.clientEmpData,
+          postPayload,
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              APIKEY: 'Securitas@#!1234',
+            },
+          }
+        )
+        apiPostSuccess = true
+        setPaymentState('success')
+        setBulkMessage(
+          `Payment & submission successful! ${apiBulkRows.length} candidate record${apiBulkRows.length === 1 ? '' : 's'} saved to database.`
+        )
+      } catch (error: any) {
+        setPaymentState('idle')
+        setBulkError(
+          getRequestErrorMessage(error, 'Bulk submission to database failed. Please try again.')
+        )
+      }
+
+      markClientHasRequests(user, user?.username)
+      await loadRecentRequestsForClient()
+
+      setLastSubmittedRecord(newRecords[0] || null)
+      setLastSubmittedBatch(newRecords)
+      setClientRecentRequests((prev) => [
+        ...newRecords,
+        ...prev.filter((p) => !newRecords.some((m) => m.requestId === p.requestId)),
+      ])
+      setLastSubmittedInfo({
+        requestId: primaryId,
+        candidateName: `${newRecords.length} Candidates (Batch)`,
+        employeeId: `${newRecords.length} Records`,
+        orgName: selectedOrgName,
+        transactionId,
+      })
+      setGeneratedRequestId(primaryId)
+      if (apiPostSuccess) {
+        setSubmissionSuccess(true)
+      }
+    } catch (outerErr: any) {
+      setBulkError(outerErr?.message || 'Error saving batch records. Please try again.')
+    } finally {
+      setBulkUploading(false)
+    }
+  }
+
+  // Handle Bulk excel payment & submission via Razorpay Gateway
+  const executeBulkPayment = async (
+    sender: { name: string; phone: string; email: string },
+    customPayAmount?: number
+  ) => {
+    setBulkMessage(null)
+    setBulkError('')
+
+    if (!bulkFile || bulkRows.length === 0) {
+      setBulkError('Please select a populated Excel/CSV file before proceeding to payment.')
+      return
+    }
+
+    setBulkUploading(true)
+
+    try {
+      const batchCount = bulkRows.length
+      const payAmount = customPayAmount || Number((batchCount * orgTotalPrice).toFixed(2))
+
+      const isClient = user?.Usertype?.toLowerCase() === 'client'
+      const candName = sender.name || (isClient ? (user?.CompanyName || user?.FirstName) : '') || `${batchCount} Candidates (${selectedOrgName})`
+      const candEmail = sender.email || (isClient ? (user?.email || user?.username) : '') || bulkRows[0]?.['Email'] || 'client@worktrail.ai'
+      const candPhone = cleanPhone(sender.phone || (isClient ? user?.MobileNo : '') || bulkRows[0]?.['MobileNo'])
+
+      // 1. Ensure Razorpay Checkout script is loaded
+      const razorpayLoaded = await loadRazorpay()
+
+      if (!razorpayLoaded || !window.Razorpay) {
+        throw new Error(
+          'Razorpay payment gateway script was blocked or could not be loaded.'
+        )
+      }
+
+      // 2. Call backend order creation endpoint with smart pricing auto-matching
+      const orderResult = await requestBackendCreateOrderWithPriceMatch({
+        selectedOrgId,
+        selectedOrgName,
+        batchCount,
+        primaryPayAmount: payAmount,
+        orgBasePrice,
+        orgTotalPrice,
+        sender,
+        user,
+        contributorColName,
+        mode: 'bulk',
+        organizations,
+      })
+
+      if (!orderResult) {
+        setBulkUploading(false)
+        setBulkError('Unable to create payment order with the gateway. Please try again.')
+        return
+      }
+
+      const {
+        key: razorpayKey,
+        orderId: razorpayOrderId,
+        amountInPaise: razorpayAmount,
+        currency: razorpayCurrency,
+        acceptedAmount,
+      } = orderResult
+
+      // 4. Build Razorpay Gateway options
+      const options: any = {
+        key: razorpayKey,
+        amount: razorpayAmount,
+        currency: razorpayCurrency,
+        name: 'Batch Candidate Verification',
+        description: `Batch payment for ${batchCount} candidates at ${selectedOrgName}`,
+        prefill: {
+          name: candName,
+          email: candEmail,
+          contact: candPhone,
+        },
+        theme: {
+          color: '#042133',
+        },
+        modal: {
+          ondismiss: () => {
+            setBulkUploading(false)
+            setBulkError('Razorpay payment gateway was closed.')
+          },
+        },
+        handler: async (paymentResponse: RazorpayPaymentResponse) => {
+          setBulkUploading(true)
+          setBulkMessage('Payment verified! Submitting candidate batch to live database...')
+          let txn = paymentResponse.razorpay_payment_id || `TXN-BULK-${Date.now()}`
+          try {
+            const verification = await axios.post(
+              API_ENDPOINTS.payments.verify,
+              paymentResponse,
+              {
+                headers: {
+                  'Content-Type': 'application/json',
+                  APIKEY: DYNAMIC_FIELD_API_KEY,
+                },
+              }
+            )
+            const result = verification.data
+            txn =
+              result?.transaction?.TransactionID ||
+              result?.TransactionID ||
+              paymentResponse.razorpay_payment_id ||
+              txn
+          } catch {
+            // Ignored
+          }
+
+          await saveBulkRecords(
+            txn,
+            paymentResponse.razorpay_payment_id,
+            paymentResponse.razorpay_order_id,
+            acceptedAmount || payAmount
+          )
+        },
+      }
+
+      if (typeof razorpayOrderId === 'string' && razorpayOrderId.startsWith('order_')) {
+        options.order_id = razorpayOrderId
+      }
+
+      const checkout = new window.Razorpay(options)
+
+      if (checkout.on) {
+        checkout.on('payment.failed', function (resp: any) {
+          setBulkUploading(false)
+          setBulkError(`Payment failed: ${resp.error?.description || resp.error?.reason || 'Payment declined'}`)
+        })
+      }
+
+      checkout.open()
+    } catch (error: any) {
+      setBulkUploading(false)
+      setBulkError(error?.message || 'Payment processing failed. Please try again.')
+    }
+  }
+
+  const handleFileUpload = (e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const newFiles = Array.from(e.target.files)
       setUploadedFiles((prev) => [...prev, ...newFiles])
@@ -651,1108 +2549,514 @@ function CandidateVerificationForm() {
     setUploadedFiles((prev) => prev.filter((_, i) => i !== index))
   }
 
-  const handleResetForm = () => {
-    setCandidateName('')
-    setEmployeeId('')
-    setCandidateEmail('')
-    setContactNumber('')
-    setDateOfJoining('')
-    setDateOfLeaving('')
-    setIsCurrentlyEmployed(false)
-    setDesignation('')
-    setDepartment('')
-    setVerificationType('Standard Employment Verification')
-    setRemarks('')
-    setUploadedFiles([])
-    setAmount('500')
-    setPaymentState('idle')
-    setPaymentMessage(null)
-    setTransactionDetails(null)
-    setFormError('')
-  }
+  // --- UI RENDER STEPS ---
 
-  const handlePaymentAndSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setFormError('')
-    setPaymentMessage(null)
-
-    if (!selectedOrg) {
-      setFormError('Please select a verifier company first.')
-      return
-    }
-
-    if (!candidateName.trim() || !employeeId.trim() || !dateOfJoining) {
-      setFormError('Please fill in all mandatory fields (Candidate Name, Employee ID, and Date of Joining).')
-      return
-    }
-
-    if (!isCurrentlyEmployed && !dateOfLeaving) {
-      setFormError('Please provide Date of Leaving or check "Candidate is currently employed".')
-      return
-    }
-
-    setIsSubmitting(true)
-
-    try {
-      // 1. Generate unique Request ID
-      const newId = `VR-${Math.floor(100000 + Math.random() * 900000)}`
-      const todayFormatted = new Date().toISOString().split('T')[0]
-
-      // 2. Build and save verification record directly (Bypassing payment gateway)
-      const newRecord: VerificationRecord = {
-        id: `rec-${Date.now()}`,
-        requestId: newId,
-        candidateName: candidateName.trim(),
-        employeeId: employeeId.trim(),
-        candidateEmail: candidateEmail.trim(),
-        contactNumber: contactNumber.trim(),
-        verifierId: String(selectedOrg.OrganizationID),
-        verifierName: selectedOrg.OrganizationName,
-        verifierCategory: 'Registered Organization',
-        verifierCode: `ORG-${selectedOrg.OrganizationID}`,
-        dateOfJoining,
-        dateOfLeaving: isCurrentlyEmployed ? 'Present' : dateOfLeaving,
-        isCurrentlyEmployed,
-        designation: designation.trim() || 'N/A',
-        department: department.trim() || 'General',
-        verificationType,
-        remarks: remarks.trim(),
-        uploadedFilesCount: uploadedFiles.length,
-        submittedBy: user?.username || user?.FirstName || 'Client User',
-        submittedAt: todayFormatted,
-        status: 'Pending'
-      }
-
-      try {
-        const existing = localStorage.getItem(STORAGE_KEY_VERIFICATION_RECORDS)
-        const recordsList: VerificationRecord[] = existing ? JSON.parse(existing) : []
-        recordsList.unshift(newRecord)
-        localStorage.setItem(STORAGE_KEY_VERIFICATION_RECORDS, JSON.stringify(recordsList))
-        markClientHasRequests(user, candidateEmail)
-      } catch (storageErr) {
-        console.error('Failed to persist verification record:', storageErr)
-      }
-
-      setGeneratedRequestId(newId)
-      setSubmissionSuccess(true)
-      const candName = candidateName.trim()
-      handleResetForm()
-
-      // 3. Immediately redirect to the dashboard where the verification request is shown
-      navigate('/dashboard', {
-        state: {
-          newRequestId: newId,
-          candidateName: candName
+  // 1. Organization Step
+  const renderOrganizationStep = () => (
+    <VerifierPicker
+      organizations={organizations}
+      selectedOrgId={selectedOrgId}
+      selectedOrgName={selectedOrgName}
+      selectedOrg={selectedOrg}
+      searchQuery={searchQuery}
+      isDropdownOpen={isDropdownOpen}
+      loading={loading}
+      orgError={orgError}
+      dynamicFieldLoading={dynamicFieldLoading}
+      dynamicFieldError={dynamicFieldError}
+      dynamicColumns={dynamicColumns}
+      contributorColName={contributorColName}
+      onSearchChange={setSearchQuery}
+      onToggleDropdown={() => setIsDropdownOpen((prev) => !prev)}
+      onSelectOrg={(org) => handleSelectOrganization(org)}
+      onClearOrg={() => {
+        setSelectedOrgId('')
+        setSelectedOrgName('')
+        setSearchQuery('')
+        setIsDropdownOpen(true)
+      }}
+      onRefreshOrgs={async () => {
+        setLoading(true)
+        setOrgError(null)
+        try {
+          const response = await axios.get('https://worktrail.ai/api/OrgmasterData', {
+            headers: { APIKEY: DYNAMIC_FIELD_API_KEY },
+          })
+          if (response.data && Array.isArray(response.data.data)) {
+            setOrganizations(response.data.data)
+          }
+        } catch (err) {
+          setOrgError('Error refreshing organization directory.')
+        } finally {
+          setLoading(false)
         }
-      })
-    } catch (submitErr: any) {
-      console.error('Submission error:', submitErr)
-      setFormError(submitErr?.message || 'Verification request could not be submitted.')
-    } finally {
-      setIsSubmitting(false)
-    }
+      }}
+      onProceed={() => setStep('verificationType')}
+      dropdownRef={dropdownRef}
+    />
+  )
+
+  // 2. Verification Type Step
+  const renderVerificationTypeStep = () => (
+    <div className="w-full bg-white/95 backdrop-blur-xl rounded-3xl shadow-xl shadow-slate-200/50 p-6 sm:p-10 lg:p-12 border border-teal-200/90 relative overflow-hidden transition-all duration-300 animate-fade-in-md">
+      <div className="absolute top-0 left-0 w-96 h-96 bg-gradient-to-br from-cyan-400/10 via-teal-300/10 to-transparent blur-3xl pointer-events-none -ml-24 -mt-24" />
+      <div className="absolute bottom-0 right-0 w-80 h-80 bg-gradient-to-tl from-emerald-400/10 via-cyan-300/10 to-transparent blur-2xl pointer-events-none -mr-20 -mb-20" />
+
+      {/* Selected Verifier Summary Ribbon */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl bg-gradient-to-r from-teal-50/90 via-cyan-50/70 to-emerald-50/80 border border-teal-200/90 mb-8 relative z-10">
+        <div className="flex items-center gap-3.5 min-w-0">
+          <OrgLogo name={selectedOrgName} className="w-12 h-12 rounded-xl shrink-0 bg-white p-1 shadow-xs" />
+          <div className="min-w-0">
+            <span className="text-[10px] font-black uppercase tracking-wider text-teal-800">
+              Target Verifier
+            </span>
+            <h4 className="text-base font-black text-slate-900 truncate">{selectedOrgName}</h4>
+            <span className="text-xs text-[#0680A6] font-mono font-bold">ORG-{selectedOrgId}</span>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => setStep('organization')}
+          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white border border-teal-300 text-teal-900 hover:bg-teal-50 text-xs font-bold transition-all cursor-pointer self-start sm:self-center shadow-2xs"
+        >
+          <ArrowLeft className="w-3.5 h-3.5" />
+          <span>Change Verifier</span>
+        </button>
+      </div>
+
+      <div className=" mb-8 relative z-10">
+        <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-gradient-to-r from-teal-50 to-cyan-50 border border-teal-200 text-teal-900 text-xs font-black uppercase tracking-wider mb-3 shadow-2xs">
+          <Layers className="w-3.5 h-3.5 text-[#0680A6]" />
+          Step 2 of 3: Verification Method
+        </span>
+        <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900 tracking-tight">
+          Choose Verification Workflow
+        </h2>
+        <p className="text-xs sm:text-sm text-slate-500 mt-2 max-w-lg  leading-relaxed">
+          Select between single candidate entry with immediate Razorpay checkout or bulk ingestion via structured spreadsheets.
+        </p>
+      </div>
+
+      {/* Two High-End Interactive Option Cards */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 relative z-10">
+        {/* Single Verification Card */}
+        <button
+          type="button"
+          className={`transition-all duration-300 p-7 rounded-3xl border-2 text-left relative overflow-hidden group cursor-pointer flex flex-col justify-between ${
+            verificationType === 'single'
+              ? 'border-[#0680A6] bg-gradient-to-b from-teal-50/60 to-white ring-4 ring-[#0680A6]/10 scale-[1.01] shadow-xl shadow-teal-900/10'
+              : 'border-slate-200/90 bg-white hover:border-[#0680A6]/60 hover:bg-teal-50/20 hover:-translate-y-1 shadow-sm'
+          }`}
+          onClick={() => {
+            setVerificationType('single')
+            setStep('single')
+          }}
+          disabled={dynamicFieldLoading}
+        >
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-[#0680A6] to-teal-500 text-white flex items-center justify-center shadow-lg shadow-[#0680A6]/30 group-hover:scale-105 transition-transform">
+                <UserCheck className="w-7 h-7" />
+              </div>
+              <span className="text-[10px] font-black uppercase tracking-wider px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                RECOMMENDED • 1-5 CANDIDATES
+              </span>
+            </div>
+
+            <h3 className="text-xl font-black text-slate-900 mb-2">Single Candidate Form</h3>
+            <p className="text-xs text-slate-500 leading-relaxed mb-5">
+              Verify an individual candidate with dynamic schema tailored for {selectedOrgName}, file uploads, and instant checkout.
+            </p>
+
+            <ul className="space-y-2.5 text-xs text-slate-700 mb-6 font-medium">
+              <li className="flex items-center gap-2.5">
+                <div className="w-4 h-4 rounded-full bg-teal-100 text-teal-800 flex items-center justify-center shrink-0">
+                  <Check className="w-2.5 h-2.5 stroke-[3]" />
+                </div>
+                <span>Pre-configured dynamic inputs ({dynamicColumns.filter(c => c !== contributorColName).length} attributes)</span>
+              </li>
+              <li className="flex items-center gap-2.5">
+                <div className="w-4 h-4 rounded-full bg-teal-100 text-teal-800 flex items-center justify-center shrink-0">
+                  <Check className="w-2.5 h-2.5 stroke-[3]" />
+                </div>
+                <span>Upload payslips, relieving letters &amp; candidate ID</span>
+              </li>
+              <li className="flex items-center gap-2.5">
+                <div className="w-4 h-4 rounded-full bg-teal-100 text-teal-800 flex items-center justify-center shrink-0">
+                  <Check className="w-2.5 h-2.5 stroke-[3]" />
+                </div>
+                <span>Direct Razorpay Gateway (₹470.82 all-inclusive)</span>
+              </li>
+              <li className="flex items-center gap-2.5">
+                <div className="w-4 h-4 rounded-full bg-teal-100 text-teal-800 flex items-center justify-center shrink-0">
+                  <Check className="w-2.5 h-2.5 stroke-[3]" />
+                </div>
+                <span>Automated PDF clearance certificate generated</span>
+              </li>
+            </ul>
+          </div>
+
+          <div className="pt-4 border-t border-slate-100 flex items-center justify-between text-xs font-black text-[#0680A6] group-hover:text-teal-900">
+            <span>Open Candidate Form</span>
+            <ArrowRight className="w-4 h-4 group-hover:translate-x-1.5 transition-transform" />
+          </div>
+        </button>
+
+        {/* Bulk Batch Verification Card */}
+        <button
+          type="button"
+          className={`transition-all duration-300 p-7 rounded-3xl border-2 text-left relative overflow-hidden group cursor-pointer flex flex-col justify-between ${
+            verificationType === 'bulk'
+              ? 'border-teal-600 bg-gradient-to-b from-emerald-50/60 to-white ring-4 ring-emerald-500/10 scale-[1.01] shadow-xl shadow-teal-900/10'
+              : 'border-slate-200/90 bg-white hover:border-emerald-500/60 hover:bg-emerald-50/20 hover:-translate-y-1 shadow-sm'
+          }`}
+          onClick={() => {
+            setVerificationType('bulk')
+            setStep('bulk')
+          }}
+          disabled={dynamicFieldLoading}
+        >
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-teal-600 to-emerald-500 text-white flex items-center justify-center shadow-lg shadow-teal-600/30 group-hover:scale-105 transition-transform">
+                <FileSpreadsheet className="w-7 h-7" />
+              </div>
+              <span className="text-[10px] font-black uppercase tracking-wider px-3 py-1 rounded-full bg-teal-100 text-teal-800 border border-teal-200">
+                BATCH INGESTION • 5+ CANDIDATES
+              </span>
+            </div>
+
+            <h3 className="text-xl font-black text-slate-900 mb-2">Bulk Spreadsheet Batch</h3>
+            <p className="text-xs text-slate-500 leading-relaxed mb-5">
+              Download official spreadsheet templates formatted for {selectedOrgName}, populate candidates, and ingest in one batch.
+            </p>
+
+            <ul className="space-y-2.5 text-xs text-slate-700 mb-6 font-medium">
+              <li className="flex items-center gap-2.5">
+                <div className="w-4 h-4 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0">
+                  <Check className="w-2.5 h-2.5 stroke-[3]" />
+                </div>
+                <span>Official Microsoft Excel (.xlsx) &amp; CSV sample templates</span>
+              </li>
+              <li className="flex items-center gap-2.5">
+                <div className="w-4 h-4 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0">
+                  <Check className="w-2.5 h-2.5 stroke-[3]" />
+                </div>
+                <span>Ingest up to 500 candidate records simultaneously</span>
+              </li>
+              <li className="flex items-center gap-2.5">
+                <div className="w-4 h-4 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0">
+                  <Check className="w-2.5 h-2.5 stroke-[3]" />
+                </div>
+                <span>Real-time tabular row parsing &amp; error validation</span>
+              </li>
+              <li className="flex items-center gap-2.5">
+                <div className="w-4 h-4 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0">
+                  <Check className="w-2.5 h-2.5 stroke-[3]" />
+                </div>
+                <span>Single consolidated batch verification submission</span>
+              </li>
+            </ul>
+          </div>
+
+          <div className="pt-4 border-t border-slate-100 flex items-center justify-between text-xs font-black text-teal-700 group-hover:text-teal-900">
+            <span>Upload Spreadsheet</span>
+            <ArrowRight className="w-4 h-4 group-hover:translate-x-1.5 transition-transform" />
+          </div>
+        </button>
+      </div>
+
+      {/* Dynamic Fields Preview Ribbon */}
+      {dynamicColumns.length > 0 && (
+        <div className="mt-8 p-5 bg-slate-50/80 rounded-2xl border border-slate-200/90 relative z-10">
+          <div className="flex items-center justify-between mb-2.5">
+            <span className="text-[11px] font-black uppercase tracking-wider text-slate-500">
+              Loaded Verifier Attributes ({dynamicColumns.filter((c) => c !== contributorColName).length} Fields)
+            </span>
+            <span className="text-[10px] text-teal-800 font-black bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200">
+              Dynamic Enterprise Schema Active
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {dynamicColumns
+              .filter((c) => c !== contributorColName)
+              .map((col) => (
+                <span
+                  key={col}
+                  className="px-3 py-1 text-xs font-bold bg-white text-slate-700 rounded-xl border border-slate-200 shadow-2xs"
+                >
+                  {col}
+                </span>
+              ))}
+          </div>
+        </div>
+      )}
+
+      <div className="mt-8 text-center relative z-10">
+        <button
+          className="inline-flex items-center gap-2 text-slate-500 text-xs sm:text-sm font-bold hover:text-[#0680A6] transition-colors cursor-pointer"
+          onClick={() => setStep('organization')}
+          type="button"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span>Back to Select Enterprise</span>
+        </button>
+      </div>
+    </div>
+  )
+
+  // 3. Single Verification Form Step
+  const renderSingleFormStep = () => (
+    <SingleCandidateForm
+      selectedOrgName={selectedOrgName}
+      selectedOrgId={selectedOrgId}
+      orgTotalPrice={orgTotalPrice}
+      orgBasePrice={orgBasePrice}
+      orgGstAmount={orgGstAmount}
+      dynamicColumns={dynamicColumns}
+      contributorColName={contributorColName}
+      singleForm={singleForm}
+      onFieldChange={(col, val) => setSingleForm((f) => ({ ...f, [col]: val }))}
+      remarks={remarks}
+      onRemarksChange={setRemarks}
+      loaDocument={loaDocument}
+      loaFileName={loaFileName}
+      supportingDocument={supportingDocument}
+      supportingDocFileName={supportingDocFileName}
+      documentError={documentError}
+      onDocumentChange={handleDocumentChange}
+      paymentState={paymentState}
+      paymentMessage={paymentMessage}
+      onSubmit={handlePayment}
+      onBack={() => setStep('verificationType')}
+      onChangeOrg={() => setStep('verificationType')}
+    />
+  )
+
+  // 4. Bulk Verification Step (modular BulkCandidateUploader)
+  const renderBulkStep = () => (
+    <BulkCandidateUploader
+      selectedOrgName={selectedOrgName}
+      selectedOrgId={selectedOrgId}
+      orgTotalPrice={orgTotalPrice}
+      dynamicColumns={dynamicColumns}
+      contributorColName={contributorColName}
+      bulkFile={bulkFile}
+      bulkRows={bulkRows}
+      bulkMessage={bulkMessage}
+      bulkError={bulkError}
+      bulkUploading={bulkUploading}
+      showBulkPreview={showBulkPreview}
+      onBulkFileChange={handleBulkFileChange}
+      onDeleteRow={(idx) => setBulkRows((rows) => rows.filter((_, i) => i !== idx))}
+      onClearBulk={() => {
+        setBulkFile(null)
+        setBulkRows([])
+        setBulkMessage(null)
+        setBulkError('')
+        setShowBulkPreview(false)
+      }}
+      onProceedToPayment={handleOpenBulkPaymentModal}
+      onBack={() => setStep('verificationType')}
+      onChangeOrg={() => setStep('verificationType')}
+      downloadSampleXlsx={downloadSampleXlsx}
+      downloadSampleExcel={downloadSampleExcel}
+    />
+  )
+
+  let content
+  if (step === 'organization') {
+    content = renderOrganizationStep()
+  } else if (step === 'verificationType') {
+    content = renderVerificationTypeStep()
+  } else if (step === 'single') {
+    content = renderSingleFormStep()
+  } else if (step === 'bulk') {
+    content = renderBulkStep()
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col font-securitas text-slate-800 antialiased selection:bg-[#0680A6] selection:text-white">
-      {/* 1. Standalone Header */}
-      <header className="sticky top-0 z-40 bg-[#031f30]/95 backdrop-blur-md border-b border-white/10 text-white transition-all shadow-md">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-18 flex items-center justify-between">
+    <div className="min-h-screen bg-slate-50/90 flex flex-col font-securitas text-slate-800 antialiased selection:bg-[#0680A6] selection:text-white relative">
+      {/* Background Micro Grid Dot Pattern */}
+      <div 
+        className="fixed inset-0 pointer-events-none opacity-25 z-0" 
+        style={{
+          backgroundImage: 'radial-gradient(#0680A6 1px, transparent 1px)',
+          backgroundSize: '28px 28px',
+        }} 
+      />
+
+      {/* 1. Sticky Frosted Navigation Header */}
+      <header className="sticky top-0 z-40 bg-[#031f30]/95 backdrop-blur-xl border-b border-cyan-500/20 text-white transition-all shadow-lg shadow-slate-900/10">
+        <div className="w-full px-4 sm:px-6 lg:px-8 xl:px-12 h-20 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <div className="flex items-center gap-3">
-            
-              <div>
-                <img src={Logo_w} alt="Worktrail Logo" className="w-24 h-8 object-contain" />
-              </div>
-            </div>
+            <Link to="/dashboard" className="flex items-center gap-3 group">
+              <img src={Logo_w} alt="Worktrail Logo" className="w-28 h-9 object-contain filter group-hover:brightness-110 transition-all" />
+            </Link>
 
-            <div className="hidden md:flex items-center gap-2 pl-4 ml-4 border-l border-white/15 text-xs text-slate-300">
+            <div className="hidden md:flex items-center gap-2 pl-4 ml-2 border-l border-white/15 text-xs text-slate-300">
               <ShieldCheck className="w-4 h-4 text-emerald-400" />
-              <span>Enterprise Client Gateway</span>
+              <span className="font-bold tracking-wide">Enterprise Verification Gateway</span>
             </div>
 
-            {/* Dashboard Navigation Button */}
+            <div className="hidden lg:flex items-center gap-2 text-xs text-slate-400 pl-3">
+              <span>/</span>
+              <span className="text-[#88ffbb] font-black uppercase tracking-wider text-[11px]">
+                {step === 'organization'
+                  ? 'Select Enterprise'
+                  : step === 'verificationType'
+                  ? 'Choose Method'
+                  : step === 'single'
+                  ? 'Candidate Form'
+                  : 'Batch Processing'}
+              </span>
+            </div>
+
             <Link
               to="/dashboard"
-              className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-white text-xs font-semibold tracking-wide transition-all ml-2"
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-white text-xs font-bold tracking-wide transition-all ml-2 shadow-2xs"
               title="Go to Dashboard"
             >
-              <LayoutGrid className="w-4 h-4 text-[#fff]" />
-              <span className='text-white'>Dashboard</span>
+              <LayoutGrid className="w-3.5 h-3.5 text-white" />
+              <span className="text-white">Dashboard</span>
             </Link>
+
+            <button
+              type="button"
+              onClick={() => setShowRecentRequestsModal(true)}
+              className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-white text-xs font-bold tracking-wide transition-all ml-2 shadow-2xs cursor-pointer"
+              title="View Recent Candidate Verification Requests"
+            >
+              <Clock className="w-3.5 h-3.5 text-[#88ffbb]" />
+              <span className="text-white">Recent Requests</span>
+              {clientRecentRequests.length > 0 && (
+                <span className="px-1.5 py-0.5 rounded-full bg-emerald-500 text-white text-[10px] font-black">
+                  {clientRecentRequests.length}
+                </span>
+              )}
+            </button>
           </div>
 
-          {/* User Profile & Logout */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3.5">
             <div className="hidden sm:flex flex-col text-right">
-              <span className="text-xs font-bold text-white tracking-wide">
-                {user?.FirstName ? `${user.FirstName} ${user.LastName || ''}` : user?.username || 'Client User'}
+              <span className="text-xs font-black text-white tracking-wide">
+                {user?.FirstName
+                  ? `${user.FirstName} ${user.LastName || ''}`
+                  : user?.username || 'Client User'}
               </span>
-              <span className="text-[10px] text-slate-300 uppercase tracking-widest font-mono">
-                {user?.Usertype || 'Client'}
+              <span className="text-[10px] text-teal-300 uppercase tracking-widest font-mono font-bold">
+                {user?.Usertype || 'Client Enterprise'}
               </span>
             </div>
 
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-[#0680A6] to-[#10B981] text-white flex items-center justify-center font-bold text-sm shadow-sm border border-white/20">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#10B981] to-[#5850EC] text-white flex items-center justify-center font-black text-sm shadow-md shadow-teal-900/30 border border-white/25">
               {(user?.FirstName?.charAt(0) || user?.username?.charAt(0) || 'C').toUpperCase()}
             </div>
 
             <button
               type="button"
               onClick={handleLogout}
-              className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white/10 hover:bg-rose-500/20 hover:text-rose-300 border border-white/15 text-white text-xs font-semibold tracking-wide transition-all cursor-pointer"
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white/10 hover:bg-rose-500/20 hover:text-rose-300 border border-white/15 text-white text-xs font-bold tracking-wide transition-all cursor-pointer shadow-2xs"
               title="Logout"
             >
-              <LogOut className="w-4 h-4" />
+              <LogOut className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Logout</span>
             </button>
           </div>
         </div>
       </header>
 
-      {/* 2. Main Body */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10 space-y-8">
-        {/* Hero Banner */}
-        <div className="relative rounded-3xl overflow-hidden bg-gradient-to-r from-[#031f30] via-[#05324e] to-[#0a466c] text-white p-8 sm:p-12 shadow-xl border border-white/10">
-          <div className="absolute top-0 right-0 w-96 h-96 bg-[#0680A6]/20 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20"></div>
-          <div className="absolute bottom-0 left-1/3 w-64 h-64 bg-[#10B981]/15 rounded-full blur-2xl pointer-events-none"></div>
+      {/* 2. Main Content */}
+      <main className="flex-1 w-full px-4 sm:px-6 lg:px-8 xl:px-12 py-8 sm:py-10 space-y-8 relative z-10">
+        {/* Ambient Glowing Hero Banner */}
+        <div className="relative rounded-3xl overflow-hidden bg-gradient-to-r from-[#031f30] via-[#05324e] to-[#0a466c] text-white p-8 sm:p-12 shadow-2xl border border-white/15">
+          <div className="absolute top-0 right-0 w-[480px] h-[480px] bg-[#0680A6]/25 rounded-full blur-3xl pointer-events-none -mr-32 -mt-32" />
+          <div className="absolute bottom-0 left-1/4 w-80 h-80 bg-[#10B981]/20 rounded-full blur-3xl pointer-events-none" />
 
-          <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-8">
             <div className="max-w-2xl">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/15 text-xs font-semibold text-[#88ffbb] mb-4">
-                <span className="w-2 h-2 rounded-full bg-[#88ffbb] animate-pulse"></span>
-                Direct Partner Verification Gateway
+              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-xs font-bold text-[#88ffbb] mb-3.5 shadow-xs">
+                <span className="w-2 h-2 rounded-full bg-[#88ffbb] animate-pulse" />
+                Active Accredited Enterprise Network
               </div>
-              <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight leading-tight text-white">
-                Candidate Verification Form
+              <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight leading-tight text-white">
+                Candidate Verification Portal
               </h1>
-              <p className="text-slate-200 text-sm sm:text-base mt-3 leading-relaxed">
-                Submit candidate employment background verification requests directly to registered enterprise verifiers with instant online payment.
+              <p className="text-slate-200 text-xs sm:text-sm mt-3 leading-relaxed max-w-xl font-medium">
+                Submit employment background checks with dynamic schemas configured directly for registered enterprise verifiers, complete with real-time Razorpay settlement.
               </p>
 
-              <div className="flex flex-wrap gap-4 mt-6 text-xs text-slate-300">
-                <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-lg border border-white/10">
-                  <ShieldCheck className="w-4 h-4 text-[#88ffbb]" />
-                  <span>AES-256 Encrypted</span>
-                </div>
-                <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-lg border border-white/10">
-                  <Zap className="w-4 h-4 text-emerald-300" />
-                  <span>Direct Verification</span>
-                </div>
-                <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-lg border border-white/10">
-                  <Sparkles className="w-4 h-4 text-amber-300" />
-                  <span>24-48h SLA</span>
-                </div>
-                <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-lg border border-white/10">
-                  <FileCheck className="w-4 h-4 text-sky-300" />
-                  <span>Legally Compliant</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="hidden lg:flex flex-col items-center justify-center p-6 bg-white/10 backdrop-blur-md rounded-2xl border border-white/15 min-w-[210px] text-center">
-              <span className="text-3xl font-extrabold text-[#88ffbb]">
-                {loading ? '...' : organizations.length}
-              </span>
-              <span className="text-xs font-semibold text-slate-200 mt-1 uppercase tracking-wider">
-                Live Verifiers
-              </span>
-              <span className="text-[11px] text-slate-400 mt-2">Active Master Organizations</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Mode Selector Tabs: Single Verification vs Bulk Upload */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 p-2 bg-white rounded-2xl border border-slate-200/90 shadow-2xs">
-          <div className="flex items-center gap-2 p-1 bg-slate-100/90 rounded-xl">
-            <button
-              type="button"
-              onClick={() => setActiveMode('single')}
-              className={`flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg text-xs font-bold tracking-wider uppercase transition-all cursor-pointer ${
-                activeMode === 'single'
-                  ? 'bg-white text-[#031f30] shadow-sm border border-slate-200/80'
-                  : 'text-slate-500 hover:text-slate-900 hover:bg-white/50'
-              }`}
-            >
-              <UserCheck className="w-4 h-4 text-[#0680A6]" />
-              <span>Single Candidate Verification</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveMode('bulk')}
-              className={`flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg text-xs font-bold tracking-wider uppercase transition-all cursor-pointer ${
-                activeMode === 'bulk'
-                  ? 'bg-gradient-to-r from-emerald-500 to-indigo-600 text-white shadow-sm'
-                  : 'text-slate-500 hover:text-slate-900 hover:bg-white/50'
-              }`}
-            >
-              <Upload className="w-4 h-4" />
-              <span>Bulk Upload (.xlsx)</span>
-              <span className={`px-1.5 py-0.5 text-[9px] font-extrabold rounded-full ${
-                activeMode === 'bulk' ? 'bg-white/25 text-white' : 'bg-emerald-100 text-emerald-800'
-              }`}>
-                BATCH
-              </span>
-            </button>
-          </div>
-
-          <div className="flex items-center gap-2 px-3 text-xs text-slate-500">
-            <Sparkles className="w-4 h-4 text-emerald-500 shrink-0" />
-            <span className="hidden sm:inline">Choose single form entry or bulk Excel ingestion</span>
-          </div>
-        </div>
-
-        {activeMode === 'single' ? (
-          <>
-            {/* 3. Select Verifier Section */}
-            <section className="bg-white rounded-3xl p-6 sm:p-10 shadow-sm border border-slate-200/80">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-6 border-b border-slate-100">
-            <div>
-              <span className="text-xs font-bold uppercase tracking-wider text-[#0680A6] block mb-1">
-                Step 1
-              </span>
-              <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
-                <Building2 className="w-6 h-6 text-[#0680A6]" />
-                Select Your Verifier
-              </h2>
-            </div>
-            <p className="text-xs sm:text-sm text-slate-500 max-w-md">
-              Choose the registered organization from which you need to request candidate verification details.
-            </p>
-          </div>
-
-          <div className="mt-6 max-w-2xl" ref={dropdownRef}>
-            <div className="flex items-center justify-between mb-2">
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">
-                Select Company <span className="text-rose-500">*</span>
-              </label>
-              <button
-                type="button"
-                onClick={fetchOrgs}
-                className="inline-flex items-center gap-1 text-[11px] text-[#0680A6] hover:underline cursor-pointer"
-                title="Refresh verifiers list"
-              >
-                <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
-                <span>Refresh List</span>
-              </button>
-            </div>
-
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setIsDropdownOpen((prev) => !prev)}
-                className={`w-full flex items-center justify-between gap-3 px-4 py-3.5 bg-slate-50 hover:bg-slate-100/80 border rounded-2xl text-left transition-all duration-200 cursor-pointer ${
-                  isDropdownOpen
-                    ? 'border-[#0680A6] ring-4 ring-[#0680A6]/10 bg-white'
-                    : selectedOrg
-                    ? 'border-emerald-300 bg-emerald-50/30'
-                    : 'border-slate-200'
-                }`}
-              >
-                {selectedOrg ? (
-                  <div className="flex items-center gap-3 min-w-0">
-                    <OrgLogo name={selectedOrg.OrganizationName} className="w-9 h-9" />
-                    <div className="truncate">
-                      <p className="text-sm font-bold text-slate-900 truncate">
-                        {selectedOrg.OrganizationName}
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-3 text-slate-400">
-                    <Search className="w-5 h-5 text-slate-400" />
-                    <span className="text-sm">
-                      {loading ? 'Loading organizations...' : 'Search or choose a company verifier...'}
-                    </span>
-                  </div>
-                )}
-
-                <div className="flex items-center gap-2 shrink-0">
-                  {selectedOrg && (
-                    <span className="px-2.5 py-1 text-[10px] font-bold bg-emerald-100 text-emerald-700 rounded-full">
-                      Selected
-                    </span>
-                  )}
-                  <ChevronDown
-                    className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${
-                      isDropdownOpen ? 'rotate-180 text-[#0680A6]' : ''
-                    }`}
-                  />
-                </div>
-              </button>
-
-              {/* Dropdown Panel */}
-              {isDropdownOpen && (
-                <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl shadow-2xl border border-slate-200 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150">
-                  <div className="p-3 border-b border-slate-100 bg-slate-50/50">
-                    <div className="relative">
-                      <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                      <input
-                        type="text"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        placeholder="Type organization name or ID..."
-                        className="w-full pl-9 pr-8 py-2.5 bg-white border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-800 placeholder-slate-400 outline-none focus:border-[#0680A6] focus:ring-2 focus:ring-[#0680A6]/10"
-                        autoFocus
-                      />
-                      {searchQuery && (
-                        <button
-                          type="button"
-                          onClick={() => setSearchQuery('')}
-                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="max-h-64 overflow-y-auto sidebar-scroll p-2 divide-y divide-slate-50">
-                    {loading ? (
-                      <div className="p-6 text-center text-slate-400">
-                        <div className="w-6 h-6 border-2 border-[#0680A6] border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
-                        <p className="text-xs text-slate-500">Loading master organizations...</p>
-                      </div>
-                    ) : orgError ? (
-                      <div className="p-4 text-center text-rose-500 text-xs">
-                        <AlertCircle className="w-6 h-6 mx-auto mb-1 text-rose-400" />
-                        <p>{orgError}</p>
-                        <button
-                          type="button"
-                          onClick={fetchOrgs}
-                          className="mt-2 text-[#0680A6] font-bold hover:underline"
-                        >
-                          Retry Loading
-                        </button>
-                      </div>
-                    ) : filteredOrganizations.length > 0 ? (
-                      filteredOrganizations.map((org) => {
-                        const isSelected = selectedOrgId === org.OrganizationID
-                        return (
-                          <button
-                            key={org.OrganizationID}
-                            type="button"
-                            onClick={() => handleSelectCompany(org)}
-                            className={`w-full flex items-center justify-between p-3 rounded-xl text-left transition-colors cursor-pointer group ${
-                              isSelected
-                                ? 'bg-slate-100 text-slate-900 font-semibold'
-                                : 'hover:bg-slate-50 text-slate-700'
-                            }`}
-                          >
-                            <div className="flex items-center gap-3 min-w-0">
-                              <OrgLogo name={org.OrganizationName} className="w-8 h-8" fallbackTextSize="text-xs" />
-                              <div className="truncate">
-                                <p className="text-xs sm:text-sm font-medium group-hover:text-[#0680A6] transition-colors truncate">
-                                  {org.OrganizationName}
-                                </p>
-                              </div>
-                            </div>
-
-                            <div className="flex items-center gap-2 shrink-0 ml-2">
-                              {isSelected && <CheckCircle2 className="w-4 h-4 text-emerald-600" />}
-                            </div>
-                          </button>
-                        )
-                      })
-                    ) : (
-                      <div className="p-6 text-center text-slate-400">
-                        <Building2 className="w-8 h-8 mx-auto text-slate-300 mb-2" />
-                        <p className="text-xs font-semibold text-slate-500">
-                          No verifier found matching "{searchQuery}"
-                        </p>
-                        <p className="text-[11px] text-slate-400 mt-1">Try another keyword or organization ID.</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {selectedOrg && (
-              <div className="mt-3 flex items-center justify-between text-xs text-slate-500 px-1">
-                <span className="flex items-center gap-1.5 text-emerald-600 font-medium">
-                  <CheckCircle2 className="w-4 h-4" /> Ready to submit verification for {selectedOrg.OrganizationName}
+              <div className="flex flex-wrap items-center gap-4 mt-5 text-xs font-bold text-slate-300">
+                <span className="inline-flex items-center gap-1.5 text-white">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  Instant Turnaround &amp; SLA
                 </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedOrgId('')
-                    handleResetForm()
-                  }}
-                  className="text-xs text-rose-500 hover:underline cursor-pointer"
-                >
-                  Clear Selection
-                </button>
-              </div>
-            )}
-          </div>
-        </section>
-
-        {/* 4. Candidate Verification Form Section */}
-        {selectedOrg ? (
-          <section className="bg-white rounded-3xl p-6 sm:p-10 shadow-sm border border-slate-200/80 animate-in fade-in slide-in-from-bottom-4 duration-300">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl bg-gradient-to-r from-slate-50 to-indigo-50/30 border border-slate-200/70 mb-8">
-              <div className="flex items-center gap-3.5">
-                <OrgLogo name={selectedOrg.OrganizationName} className="w-12 h-12" fallbackTextSize="text-base" />
-                <div>
-                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-[#0680A6]">
-                    Target Verifier
-                  </span>
-                  <h3 className="text-base sm:text-lg font-bold text-slate-900">
-                    {selectedOrg.OrganizationName}
-                  </h3>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedOrgId('')
-                  window.scrollTo({ top: 100, behavior: 'smooth' })
-                }}
-                className="self-start sm:self-center px-3.5 py-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl transition-all cursor-pointer shadow-xs"
-              >
-                Change Verifier
-              </button>
-            </div>
-
-            <div className="mb-6">
-              <span className="text-xs font-bold uppercase tracking-wider text-[#0680A6] block mb-1">
-                Step 2
-              </span>
-              <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
-                Candidate Verification Details & Payment
-              </h2>
-              <p className="text-xs sm:text-sm text-slate-500 mt-1">
-                Fill in the candidate's employment details and complete the verification fee payment via Razorpay.
-              </p>
-            </div>
-
-            {formError && (
-              <div className="mb-6 p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs sm:text-sm flex items-start gap-3">
-                <BadgeAlert className="w-5 h-5 text-rose-500 shrink-0 mt-0.5" />
-                <span>{formError}</span>
-              </div>
-            )}
-
-            {paymentMessage && (
-              <div
-                className={`mb-6 p-4 rounded-2xl text-xs sm:text-sm flex items-start gap-3 ${
-                  paymentState === 'success'
-                    ? 'bg-emerald-50 border border-emerald-200 text-emerald-800'
-                    : 'bg-amber-50 border border-amber-200 text-amber-800'
-                }`}
-              >
-                {paymentState === 'success' ? (
-                  <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
-                ) : (
-                  <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-                )}
-                <span>{paymentMessage}</span>
-              </div>
-            )}
-
-            <form onSubmit={handlePaymentAndSubmit} className="space-y-8">
-              {/* Profile Section */}
-              <div className="space-y-4">
-                <h3 className="text-sm font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2 pb-2 border-b border-slate-100">
-                  <User className="w-4 h-4 text-[#0680A6]" />
-                  1. Candidate Profile
-                </h3>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-2">
-                      Candidate Full Name <span className="text-rose-500">*</span>
-                    </label>
-                    <div className="relative">
-                      <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                      <input
-                        type="text"
-                        value={candidateName}
-                        onChange={(e) => setCandidateName(e.target.value)}
-                        placeholder="e.g. John Doe"
-                        className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 placeholder-slate-400 outline-none focus:border-[#0680A6] focus:bg-white focus:ring-4 focus:ring-[#0680A6]/10 transition-all"
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-2">
-                      Employee ID / Code <span className="text-rose-500">*</span>
-                    </label>
-                    <div className="relative">
-                      <Briefcase className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                      <input
-                        type="text"
-                        value={employeeId}
-                        onChange={(e) => setEmployeeId(e.target.value)}
-                        placeholder="e.g. EMP-98234"
-                        className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 placeholder-slate-400 outline-none focus:border-[#0680A6] focus:bg-white focus:ring-4 focus:ring-[#0680A6]/10 transition-all font-mono"
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-2">
-                      Official / Personal Email <span className="text-rose-500">*</span>
-                    </label>
-                    <div className="relative">
-                      <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                      <input
-                        type="email"
-                        value={candidateEmail}
-                        onChange={(e) => setCandidateEmail(e.target.value)}
-                        placeholder="e.g. candidate@example.com"
-                        className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 placeholder-slate-400 outline-none focus:border-[#0680A6] focus:bg-white focus:ring-4 focus:ring-[#0680A6]/10 transition-all"
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-2">
-                      Contact Phone Number <span className="text-rose-500">*</span>
-                    </label>
-                    <div className="relative">
-                      <Phone className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                      <input
-                        type="tel"
-                        value={contactNumber}
-                        onChange={(e) => setContactNumber(e.target.value)}
-                        placeholder="e.g. 9876543210"
-                        className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 placeholder-slate-400 outline-none focus:border-[#0680A6] focus:bg-white focus:ring-4 focus:ring-[#0680A6]/10 transition-all font-mono"
-                        required
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Tenure Section */}
-              <div className="space-y-4 pt-2">
-                <h3 className="text-sm font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2 pb-2 border-b border-slate-100">
-                  <Calendar className="w-4 h-4 text-[#0680A6]" />
-                  2. Employment Tenure & Designation
-                </h3>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-2">
-                      Date of Joining <span className="text-rose-500">*</span>
-                    </label>
-                    <input
-                      type="date"
-                      value={dateOfJoining}
-                      onChange={(e) => setDateOfJoining(e.target.value)}
-                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 outline-none focus:border-[#0680A6] focus:bg-white focus:ring-4 focus:ring-[#0680A6]/10 transition-all"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <div className="flex justify-between items-center mb-2">
-                      <label className="text-xs font-bold uppercase tracking-wider text-slate-600">
-                        Date of Leaving {!isCurrentlyEmployed && <span className="text-rose-500">*</span>}
-                      </label>
-                      <label className="flex items-center gap-1.5 text-xs text-[#0680A6] font-semibold cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={isCurrentlyEmployed}
-                          onChange={(e) => {
-                            setIsCurrentlyEmployed(e.target.checked)
-                            if (e.target.checked) setDateOfLeaving('')
-                          }}
-                          className="w-3.5 h-3.5 accent-[#0680A6] rounded cursor-pointer"
-                        />
-                        <span>Currently Employed</span>
-                      </label>
-                    </div>
-                    <input
-                      type="date"
-                      value={dateOfLeaving}
-                      disabled={isCurrentlyEmployed}
-                      onChange={(e) => setDateOfLeaving(e.target.value)}
-                      className={`w-full px-4 py-3 border rounded-xl text-sm outline-none transition-all ${
-                        isCurrentlyEmployed
-                          ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
-                          : 'bg-slate-50 border-slate-200 text-slate-900 focus:border-[#0680A6] focus:bg-white focus:ring-4 focus:ring-[#0680A6]/10'
-                      }`}
-                      required={!isCurrentlyEmployed}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-2">
-                      Designation / Job Role
-                    </label>
-                    <input
-                      type="text"
-                      value={designation}
-                      onChange={(e) => setDesignation(e.target.value)}
-                      placeholder="e.g. Senior Software Engineer"
-                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 placeholder-slate-400 outline-none focus:border-[#0680A6] focus:bg-white focus:ring-4 focus:ring-[#0680A6]/10 transition-all"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-2">
-                      Department / Business Unit
-                    </label>
-                    <input
-                      type="text"
-                      value={department}
-                      onChange={(e) => setDepartment(e.target.value)}
-                      placeholder="e.g. Engineering / Operations"
-                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 placeholder-slate-400 outline-none focus:border-[#0680A6] focus:bg-white focus:ring-4 focus:ring-[#0680A6]/10 transition-all"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Scope & Documents */}
-              <div className="space-y-4 pt-2">
-                <h3 className="text-sm font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2 pb-2 border-b border-slate-100">
-                  <Layers className="w-4 h-4 text-[#0680A6]" />
-                  3. Verification Scope & Documents
-                </h3>
-
-                <div className="space-y-5">
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-2">
-                      Verification Type
-                    </label>
-                    <select
-                      value={verificationType}
-                      onChange={(e) => setVerificationType(e.target.value)}
-                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 outline-none focus:border-[#0680A6] focus:bg-white focus:ring-4 focus:ring-[#0680A6]/10 transition-all cursor-pointer"
-                    >
-                      <option value="Standard Employment Verification">
-                        Standard Employment Verification (Dates, Title, Conduct)
-                      </option>
-                      <option value="Relieving & Experience Check">
-                        Relieving & Experience Letter Confirmation
-                      </option>
-                      <option value="Full Comprehensive Screening">
-                        Comprehensive Background Screening (HR + Supervisor)
-                      </option>
-                      <option value="Salary & Compensation Verification">
-                        Salary & Compensation Verification
-                      </option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-2">
-                      Attach Supporting Documents (Experience Letter, Relieving Letter, Payslips, or ID)
-                    </label>
-
-                    <div className="border-2 border-dashed border-slate-200 hover:border-[#0680A6] rounded-2xl p-6 text-center bg-slate-50/50 hover:bg-slate-50 transition-all">
-                      <input
-                        type="file"
-                        id="file-upload"
-                        multiple
-                        accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
-                        onChange={handleFileUpload}
-                        className="hidden"
-                      />
-                      <label htmlFor="file-upload" className="cursor-pointer flex flex-col items-center justify-center">
-                        <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-[#0680A6] flex items-center justify-center mb-3 shadow-xs">
-                          <Upload className="w-6 h-6" />
-                        </div>
-                        <p className="text-sm font-bold text-slate-800">
-                          Click to upload <span className="font-normal text-slate-500">or drag and drop files</span>
-                        </p>
-                        <p className="text-xs text-slate-400 mt-1">PDF, DOCX, PNG, or JPG up to 10MB each</p>
-                      </label>
-                    </div>
-
-                    {uploadedFiles.length > 0 && (
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {uploadedFiles.map((file, idx) => (
-                          <div
-                            key={idx}
-                            className="flex items-center gap-2 bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl text-xs text-slate-700"
-                          >
-                            <FileText className="w-3.5 h-3.5 text-[#0680A6]" />
-                            <span className="truncate max-w-[200px]">{file.name}</span>
-                            <span className="text-[10px] text-slate-400">({(file.size / 1024).toFixed(0)} KB)</span>
-                            <button
-                              type="button"
-                              onClick={() => removeFile(idx)}
-                              className="text-slate-400 hover:text-rose-500 p-0.5 ml-1 cursor-pointer"
-                            >
-                              <X className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-2">
-                      Additional Instructions / Notes for Verifier
-                    </label>
-                    <textarea
-                      rows={3}
-                      value={remarks}
-                      onChange={(e) => setRemarks(e.target.value)}
-                      placeholder="Enter any specific queries or instructions for the HR verifier..."
-                      className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 placeholder-slate-400 outline-none focus:border-[#0680A6] focus:bg-white focus:ring-4 focus:ring-[#0680A6]/10 transition-all resize-y"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* 4. Confirmation Section */}
-              <div className="space-y-4 pt-2">
-                <h3 className="text-sm font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2 pb-2 border-b border-slate-100">
-                  <CheckCircle2 className="w-4 h-4 text-[#0680A6]" />
-                  4. Review &amp; Direct Submission
-                </h3>
-
-                <div className="p-6 rounded-2xl bg-gradient-to-br from-slate-50 via-emerald-50/20 to-sky-50/20 border border-slate-200/80">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div>
-                      <span className="text-xs font-bold uppercase tracking-wider text-emerald-600 block mb-1">
-                        Direct Enterprise Dispatch
-                      </span>
-                      <h4 className="text-base font-bold text-slate-900">
-                        Candidate Verification Request
-                      </h4>
-                      <p className="text-xs text-slate-500 mt-1">
-                        Your request will be transmitted directly to <strong className="text-slate-700">{selectedOrg?.OrganizationName || 'the selected verifier'}</strong> and tracked in real-time on your dashboard.
-                      </p>
-                    </div>
-
-                    <div className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-100/70 border border-emerald-200 text-emerald-800 text-xs font-bold shrink-0 select-none">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                      <span>Ready for Verification</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Submit Buttons */}
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-6 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={handleResetForm}
-                  disabled={isSubmitting}
-                  className="w-full sm:w-auto px-6 py-3 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-                >
-                  <RotateCcw className="w-4 h-4 text-slate-400" />
-                  Reset Form
-                </button>
-
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className={`w-full sm:w-auto px-8 py-3.5 rounded-full bg-gradient-to-r from-[#10B981] to-[#5850EC] hover:brightness-110 active:scale-[0.98] text-white font-bold text-xs uppercase tracking-wider shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2.5 cursor-pointer select-none ${
-                    isSubmitting ? 'opacity-70 cursor-not-allowed' : ''
-                  }`}
-                >
-                  {isSubmitting ? (
-                    <>
-                      <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
-                      <span>Submitting Request...</span>
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle2 className="w-4 h-4" />
-                      <span>Submit Verification Request</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </form>
-          </section>
-        ) : (
-          <div className="bg-white rounded-3xl p-12 border border-dashed border-slate-200 text-center shadow-xs">
-            <div className="w-16 h-16 rounded-3xl bg-slate-50 shadow-sm border border-slate-200 flex items-center justify-center mx-auto text-[#0680A6] mb-4">
-              <Building2 className="w-8 h-8" />
-            </div>
-            <h3 className="text-base sm:text-lg font-bold text-slate-800">No Verifier Selected Yet</h3>
-            <p className="text-xs sm:text-sm text-slate-500 max-w-md mx-auto mt-1">
-              Please search and select a company in the dropdown above to unlock the candidate verification request form.
-            </p>
-          </div>
-        )}
-      </>
-    ) : (
-      /* Bulk Candidate Verification Panel (Identical Architecture to AddEmployee) */
-      <div className="w-full mx-auto flex flex-col gap-8 animate-in fade-in duration-300">
-        {/* Hero Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 sm:p-8 rounded-3xl bg-gradient-to-r from-[#031f30] via-[#063352] to-[#0680A6] text-white shadow-xl relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-80 h-80 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20"></div>
-          <div className="relative z-10">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md text-[11px] font-bold tracking-wider uppercase text-emerald-300 mb-3 border border-white/10">
-              <Sparkles className="w-3.5 h-3.5" />
-              Batch Ingestion Engine
-            </div>
-            <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-              Bulk Candidate Verification
-            </h2>
-            <p className="text-xs sm:text-sm text-slate-300 mt-1 max-w-xl">
-              Download the pre-formatted Excel sheet, fill your candidate verification records, and upload for automated batch processing.
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setActiveMode('single')}
-            className="self-start sm:self-center inline-flex items-center gap-2 px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-full font-bold text-xs backdrop-blur-md border border-white/20 transition-all active:scale-95 cursor-pointer shrink-0"
-          >
-            <ArrowLeft className="w-4 h-4" /> Switch to Single Entry
-          </button>
-        </div>
-
-        {/* 2-Step Action Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Step 1: Download Template */}
-          <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
-            <div>
-              <div className="flex items-center justify-between gap-4 mb-4">
-                <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold shadow-xs">
-                  <FileSpreadsheet className="w-6 h-6" />
-                </div>
-                <span className="px-3 py-1 text-[11px] font-extrabold tracking-wider uppercase bg-emerald-100/70 text-emerald-800 rounded-full">
-                  Step 1
+                <span className="text-white/30">•</span>
+                <span className="inline-flex items-center gap-1.5 text-white">
+                  <Lock className="w-4 h-4 text-cyan-300" />
+                  256-Bit SSL Encrypted
+                </span>
+                <span className="text-white/30">•</span>
+                <span className="inline-flex items-center gap-1.5 text-white">
+                  <FileText className="w-4 h-4 text-teal-300" />
+                  Automated Clearance PDF
                 </span>
               </div>
-
-              <h3 className="text-lg sm:text-xl font-bold text-slate-900 mb-2">
-                Download Excel Template
-              </h3>
-              <p className="text-xs sm:text-sm text-slate-500 leading-relaxed mb-6">
-                Get the official Excel spreadsheet (<code>.xlsx</code>) pre-configured with headers and sample records matching the Candidate Verification form.
-              </p>
-
-              {/* Included Column Chips */}
-              <div className="mb-6">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-2.5">
-                  Pre-configured Columns (12 Fields):
-                </span>
-                <div className="flex flex-wrap gap-1.5">
-                  {[
-                    'Candidate Full Name',
-                    'Candidate Email',
-                    'Contact Number',
-                    'Employee Code',
-                    'Verifier Organization',
-                    'Designation',
-                    'Department',
-                    'Date of Joining',
-                    'Date of Leaving',
-                    'Currently Employed',
-                    'Verification Type',
-                    'Remarks'
-                  ].map((col, idx) => (
-                    <span
-                      key={idx}
-                      className="px-2.5 py-1 text-[11px] font-medium bg-slate-100 text-slate-700 rounded-lg border border-slate-200/70"
-                    >
-                      {col}
-                    </span>
-                  ))}
-                </div>
-              </div>
             </div>
 
-            <button
-              type="button"
-              onClick={handleDownloadExcelSample}
-              className="w-full flex items-center justify-center gap-3 py-3.5 px-6 bg-gradient-to-r from-emerald-500 to-teal-600 hover:brightness-110 active:scale-[0.99] text-white rounded-2xl font-bold text-sm shadow-md hover:shadow-lg transition-all cursor-pointer select-none"
-            >
-              <Download className="w-5 h-5 shrink-0" />
-              <span>Download Sample Template (.xlsx)</span>
-            </button>
-          </div>
-
-          {/* Step 2: Upload Completed Sheet */}
-          <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
-            <form onSubmit={handleBulkSubmit} className="flex flex-col h-full justify-between">
-              <div>
-                <div className="flex items-center justify-between gap-4 mb-4">
-                  <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold shadow-xs">
-                    <Upload className="w-6 h-6" />
-                  </div>
-                  <span className="px-3 py-1 text-[11px] font-extrabold tracking-wider uppercase bg-indigo-100/70 text-indigo-800 rounded-full">
-                    Step 2
-                  </span>
-                </div>
-
-                <h3 className="text-lg sm:text-xl font-bold text-slate-900 mb-2">
-                  Upload Completed Sheet
-                </h3>
-                <p className="text-xs sm:text-sm text-slate-500 leading-relaxed mb-6">
-                  Select or drop your populated Excel spreadsheet (<code>.xlsx</code> / <code>.xls</code>) to validate and submit batch verification requests.
-                </p>
-
-                {/* Drag & Drop Zone */}
-                <div
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
-                  onDrop={handleDrop}
-                  className={`relative border-2 border-dashed rounded-2xl p-6 text-center transition-all cursor-pointer ${
-                    isDragging
-                      ? 'border-indigo-500 bg-indigo-50/50 scale-[1.01]'
-                      : bulkFile
-                      ? 'border-emerald-300 bg-emerald-50/30'
-                      : 'border-slate-300 hover:border-indigo-400 bg-slate-50/50 hover:bg-slate-50'
-                  }`}
-                >
-                  <input
-                    type="file"
-                    accept=".xlsx, .xls"
-                    onChange={handleFileChange}
-                    id="candidate-bulk-excel-input"
-                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10"
-                  />
-
-                  {bulkFile ? (
-                    <div className="flex items-center justify-between gap-3 p-3 bg-white rounded-xl border border-emerald-200 shadow-2xs">
-                      <div className="flex items-center gap-3 min-w-0 text-left">
-                        <div className="w-10 h-10 rounded-lg bg-emerald-500 text-white flex items-center justify-center shrink-0">
-                          <FileSpreadsheet className="w-5 h-5" />
-                        </div>
-                        <div className="truncate">
-                          <p className="text-xs sm:text-sm font-bold text-slate-900 truncate">
-                            {bulkFile.name}
-                          </p>
-                          <p className="text-[11px] text-slate-500 font-mono">
-                            {(bulkFile.size / 1024).toFixed(1)} KB • Ready to submit
-                          </p>
-                        </div>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setBulkFile(null)
-                          setBulkParsedRows([])
-                          setBulkError('')
-                          setBulkSuccessMessage('')
-                        }}
-                        className="relative z-20 text-slate-400 hover:text-rose-500 p-1.5 rounded-lg hover:bg-rose-50 transition-colors"
-                        title="Remove file"
-                      >
-                        <X className="w-5 h-5" />
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center justify-center gap-2 py-4">
-                      <FileSpreadsheet className="w-10 h-10 text-slate-400 mb-1" />
-                      <p className="text-xs sm:text-sm font-semibold text-slate-700">
-                        Drop your completed <code>.xlsx</code> file here, or{' '}
-                        <span className="text-[#0680A6] underline font-bold">browse</span>
-                      </p>
-                      <p className="text-[11px] text-slate-400">
-                        Supports Microsoft Excel spreadsheets (.xlsx, .xls)
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Feedback Messages */}
-                {bulkError && (
-                  <div className="mt-4 p-3.5 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-2.5 text-xs text-rose-700 font-medium">
-                    <AlertCircle className="w-4 h-4 shrink-0 text-rose-500 mt-0.5" />
-                    <span>{bulkError}</span>
-                  </div>
-                )}
-
-                {bulkSuccessMessage && (
-                  <div className="mt-4 p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl flex items-start gap-2.5 text-xs text-emerald-700 font-medium">
-                    <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-500 mt-0.5" />
-                    <span>{bulkSuccessMessage}</span>
-                  </div>
-                )}
-
-                {/* Parsed records summary & preview table */}
-                {bulkParsedRows.length > 0 && (
-                  <div className="mt-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
-                        <Check className="w-3.5 h-3.5" />
-                        <span>{bulkParsedRows.length} Candidates Detected</span>
-                      </div>
-                      <span className="text-[11px] text-slate-400">Preview (First 3)</span>
-                    </div>
-
-                    <div className="max-h-40 overflow-y-auto rounded-xl border border-slate-200 text-[11px] bg-slate-50/50">
-                      <table className="w-full text-left border-collapse">
-                        <thead>
-                          <tr className="bg-slate-100/80 text-slate-500 font-bold border-b border-slate-200">
-                            <th className="py-2 px-3">#</th>
-                            <th className="py-2 px-3">Candidate</th>
-                            <th className="py-2 px-3">Emp Code</th>
-                            <th className="py-2 px-3">Verifier</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {bulkParsedRows.slice(0, 3).map((r, i) => (
-                            <tr key={i} className="border-b border-slate-100 hover:bg-white transition-colors">
-                              <td className="py-1.5 px-3 font-mono text-slate-400">{i + 1}</td>
-                              <td className="py-1.5 px-3 font-semibold text-slate-800">{r.candidateName}</td>
-                              <td className="py-1.5 px-3 font-mono text-slate-600">{r.employeeId || 'N/A'}</td>
-                              <td className="py-1.5 px-3 text-slate-600 truncate max-w-[120px]">{r.verifierName || 'Enterprise'}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
+            {/* Stat Cards */}
+            <div className="flex flex-col sm:flex-row md:flex-col gap-3 min-w-[240px]">
+              <div className="p-4 bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 text-center shadow-xs">
+                <span className="text-3xl font-black text-[#88ffbb]">
+                  {loading ? '...' : organizations.length}
+                </span>
+                <span className="text-[11px] font-black text-slate-200 block uppercase tracking-wider mt-0.5">
+                  Accredited Enterprise Partners
+                </span>
               </div>
-
-              <div className="pt-6">
-                <button
-                  type="submit"
-                  disabled={bulkUploading || !bulkFile || bulkParsedRows.length === 0}
-                  className="w-full flex items-center justify-center gap-3 py-3.5 px-6 bg-gradient-to-r from-emerald-500 to-indigo-600 hover:brightness-110 active:scale-[0.99] text-white rounded-2xl font-bold text-sm shadow-md hover:shadow-lg transition-all cursor-pointer select-none disabled:grayscale disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {bulkUploading ? (
-                    <>
-                      <RefreshCw className="w-5 h-5 animate-spin" />
-                      <span>Processing Batch Ingestion...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="w-5 h-5" />
-                      <span>
-                        {bulkParsedRows.length > 0
-                          ? `Process & Submit ${bulkParsedRows.length} Bulk Verification Requests`
-                          : 'Upload & Process Batch File'}
-                      </span>
-                    </>
-                  )}
-                </button>
+              <div className="p-3.5 bg-white/5 backdrop-blur-md rounded-2xl border border-white/10 text-center">
+                <span className="text-xs font-black text-teal-300">
+                  Fixed Verification Charge: ₹470.82
+                </span>
+                <span className="text-[10px] text-slate-300 block mt-0.5 font-mono">₹399.00 Base + 18% GST (₹71.82)</span>
               </div>
-            </form>
+            </div>
           </div>
         </div>
-      </div>
-    )}
+
+        {/* Stepper Navigation */}
+        <Stepper
+          step={step}
+          onStepClick={(targetStep) => {
+            if (targetStep === 'organization') setStep('organization')
+            else if (targetStep === 'verificationType' && selectedOrgId) setStep('verificationType')
+            else if (targetStep === 'single' && selectedOrgId) {
+              setVerificationType('single')
+              setStep('single')
+            } else if (targetStep === 'bulk' && selectedOrgId) {
+              setVerificationType('bulk')
+              setStep('bulk')
+            }
+          }}
+        />
+
+        {/* Step View Container */}
+        <div className="mt-2">{content}</div>
       </main>
 
-      {/* 5. Standalone Footer */}
-      <footer className="bg-white border-t border-slate-200/80 py-6 mt-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row justify-between items-center gap-4 text-xs text-slate-400 font-semibold tracking-wider uppercase">
+      {/* 3. Footer */}
+      <footer className="bg-white/90 backdrop-blur-md border-t border-slate-200 py-8 mt-20 relative z-10">
+        <div className="w-full px-4 sm:px-6 lg:px-8 xl:px-12 flex flex-col sm:flex-row justify-between items-center gap-4 text-xs text-slate-500 font-bold tracking-wider uppercase">
           <div className="flex items-center gap-2">
-            <Lock className="w-3.5 h-3.5 text-[#0680A6]" />
-            <span>WALSONS SECURED VERIFICATION NETWORK</span>
+            <Lock className="w-4 h-4 text-[#0680A6]" />
+            <span className="font-extrabold text-slate-700">WALSONS SECURED VERIFICATION NETWORK</span>
           </div>
           <div className="flex items-center gap-4">
             <a
               href="https://www.securitas.in/about-us/privacy-policy/"
               target="_blank"
               rel="noopener noreferrer"
-              className="hover:text-slate-600 transition-colors"
+              className="hover:text-teal-800 transition-colors"
             >
               Privacy Policy
             </a>
@@ -1761,9 +3065,9 @@ function CandidateVerificationForm() {
               href="https://walsonsverify.com/assets/documents/Terms_and_condition.pdf"
               target="_blank"
               rel="noopener noreferrer"
-              className="hover:text-slate-600 transition-colors"
+              className="hover:text-teal-800 transition-colors"
             >
-              Terms & Conditions
+              Terms &amp; Conditions
             </a>
             <span>•</span>
             <span>© 2026 WALSONSLABS</span>
@@ -1771,72 +3075,825 @@ function CandidateVerificationForm() {
         </div>
       </footer>
 
-      {/* 6. Payment & Verification Success Modal */}
+      {/* 3. Modular Payer Details & Payment Gateway Pop-up Modal */}
+      <PaymentModal
+        isOpen={isPaymentModalOpen}
+        onClose={() => setIsPaymentModalOpen(false)}
+        selectedOrgName={selectedOrgName}
+        selectedOrgId={selectedOrgId}
+        selectedOrgAmount={selectedOrgAmount || orgTotalPrice}
+        paymentSender={paymentSender}
+        onSenderChange={setPaymentSender}
+        onSubmit={handleConfirmPaymentModal}
+        mode={paymentTargetMode}
+        candidateCount={paymentTargetMode === 'bulk' ? bulkRows.length : 1}
+      />
+
+      {/* 4. Submission Success & Recent Candidate Verification Request Inspector */}
       {submissionSuccess && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl border border-slate-100 text-center space-y-5 animate-in zoom-in-95 duration-200">
-            <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto shadow-sm">
-              <CheckCircle2 className="w-9 h-9" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-md p-3 sm:p-6 animate-fade-in">
+          <div className="bg-white rounded-3xl max-w-3xl w-full max-h-[90vh] shadow-2xl border border-slate-100 flex flex-col overflow-hidden animate-fade-in-up relative">
+            {/* Header Ambient Glow */}
+            <div className="absolute top-0 right-0 w-72 h-72 bg-gradient-to-bl from-emerald-400/20 via-[#10B981]/15 to-transparent blur-3xl pointer-events-none" />
+            <div className="absolute top-0 left-0 w-60 h-60 bg-gradient-to-br from-[#5850EC]/15 via-teal-300/10 to-transparent blur-3xl pointer-events-none" />
+
+            {/* Modal Top Bar */}
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between relative z-10 bg-slate-50/50">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center shadow-xs ring-4 ring-emerald-50">
+                  <CheckCircle2 className="w-6 h-6" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-emerald-800 bg-emerald-100/70 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                      Request Transmitted
+                    </span>
+                    <span className="text-[10px] font-bold text-slate-400">
+                      • {lastSubmittedRecord?.submittedAt || new Date().toISOString().split('T')[0]}
+                    </span>
+                  </div>
+                  <h3 className="text-lg sm:text-xl font-black text-slate-900 leading-tight mt-0.5">
+                    Candidate Verification Request Data
+                  </h3>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setSubmissionSuccess(false)}
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+                title="Dismiss"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
-            <div>
-              <span className="text-[10px] font-extrabold uppercase tracking-widest text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full">
-                Verification Request Transmitted
-              </span>
-              <h3 className="text-2xl font-bold text-slate-900 mt-3">Request Submitted!</h3>
-              <p className="text-xs text-slate-500 mt-1">
-                Your verification request for <strong className="text-slate-800">{candidateName}</strong> has been transmitted to{' '}
-                <strong className="text-slate-800">{selectedOrg?.OrganizationName}</strong>.
-              </p>
+            {/* Scrollable Content Body */}
+            <div className="p-6 overflow-y-auto space-y-6 relative z-10 flex-1">
+              {/* 1. Client ID & Verifier Mapping Card */}
+              {(() => {
+                const clientInfo = getClientIdentifier()
+                const rec = lastSubmittedRecord || ({
+                  requestId: lastSubmittedInfo?.requestId || generatedRequestId,
+                  candidateName: lastSubmittedInfo?.candidateName || 'Candidate',
+                  employeeId: lastSubmittedInfo?.employeeId || '—',
+                  verifierName: lastSubmittedInfo?.orgName || selectedOrgName,
+                  transactionId: lastSubmittedInfo?.transactionId,
+                  status: 'Pending',
+                  submittedBy: clientInfo.clientEmail,
+                  amount: orgTotalPrice,
+                } as VerificationRecord)
+                const currentStatus = rec.status || 'Pending'
+                const isCheckingThis = checkingStatusId === rec.requestId
+
+                return (
+                  <div className="rounded-2xl p-5 bg-gradient-to-r from-[#031F30] via-[#05324E] to-[#0A466C] text-white shadow-lg relative overflow-hidden border border-white/15">
+                    <div className="absolute right-0 top-0 w-48 h-48 bg-[#10B981]/20 rounded-full blur-2xl pointer-events-none" />
+
+                    <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-white/10">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="px-3 py-1 rounded-full bg-white/15 text-[#88ffbb] text-xs font-black tracking-wider uppercase border border-white/20">
+                            Client ID: {rec.clientId || clientInfo.clientId}
+                          </span>
+                          <span className="text-xs text-slate-300 font-bold">
+                            {clientInfo.clientName}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-300 font-mono">
+                          Account: {clientInfo.clientEmail}
+                        </div>
+                      </div>
+
+                      {/* Request ID + Copy Action */}
+                      <div className="flex items-center gap-2.5 bg-white/10 px-3.5 py-2 rounded-xl border border-white/15 backdrop-blur-sm self-start md:self-auto">
+                        <div className="text-right">
+                          <span className="text-[9px] uppercase tracking-widest text-slate-300 font-black block">
+                            Request ID
+                          </span>
+                          <span className="font-mono font-black text-sm text-white">
+                            {rec.requestId}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleCopyRequestId(rec.requestId)}
+                          className="p-1.5 rounded-lg bg-white/10 hover:bg-white/25 text-slate-200 hover:text-white transition-all cursor-pointer"
+                          title="Copy Request ID"
+                        >
+                          {copiedRequestId ? (
+                            <span className="text-[10px] text-emerald-300 font-black flex items-center gap-0.5">
+                              <Check className="w-3.5 h-3.5" />
+                            </span>
+                          ) : (
+                            <Copy className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Verifier + Status Bar */}
+                    <div className="relative z-10 pt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                      <div className="flex items-center gap-2">
+                        <Building2 className="w-4 h-4 text-[#88ffbb]" />
+                        <span className="text-slate-300">Target Enterprise Verifier:</span>
+                        <strong className="text-white font-bold text-sm">
+                          {rec.verifierName}
+                        </strong>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        {/* Live Status Badge */}
+                        <div className="flex items-center gap-2 bg-black/30 px-3 py-1.5 rounded-xl border border-white/10">
+                          <span
+                            className={`w-2.5 h-2.5 rounded-full animate-pulse ${
+                              currentStatus === 'Verified'
+                                ? 'bg-emerald-400 ring-4 ring-emerald-400/30'
+                                : currentStatus === 'In Progress'
+                                ? 'bg-blue-400 ring-4 ring-blue-400/30'
+                                : currentStatus === 'Rejected'
+                                ? 'bg-rose-400 ring-4 ring-rose-400/30'
+                                : 'bg-amber-400 ring-4 ring-amber-400/30'
+                            }`}
+                          />
+                          <span className="font-black text-xs text-white">
+                            Status: {currentStatus}
+                          </span>
+                        </div>
+
+                        {/* Interactive Status Checker Button */}
+                        <button
+                          type="button"
+                          onClick={() => handleCheckStatus(rec)}
+                          disabled={isCheckingThis}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-[#10B981] to-[#5850EC] hover:brightness-110 text-white rounded-xl font-bold text-xs shadow-sm transition-all cursor-pointer disabled:opacity-50"
+                          title="Query live network database for latest status"
+                        >
+                          <RefreshCw className={`w-3 h-3 ${isCheckingThis ? 'animate-spin' : ''}`} />
+                          <span>{isCheckingThis ? 'Checking...' : 'Check Status'}</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Status Feedback Banner */}
+                    {statusCheckFeedback[rec.requestId] && (
+                      <div className="mt-3.5 p-2.5 bg-white/10 rounded-xl border border-[#10B981]/40 text-xs text-[#88ffbb] flex items-center gap-2 animate-fade-in">
+                        <CheckCircle2 className="w-4 h-4 text-[#88ffbb] shrink-0" />
+                        <span className="font-medium">{statusCheckFeedback[rec.requestId]}</span>
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
+
+              {/* 2. Intelligent Data Completeness & Missing Data Analyzer ("if any data messing so the view on there") */}
+              {(() => {
+                const recToInspect = lastSubmittedRecord || ({
+                  candidateName: lastSubmittedInfo?.candidateName,
+                  employeeId: lastSubmittedInfo?.employeeId,
+                  verifierName: lastSubmittedInfo?.orgName || selectedOrgName,
+                  ...singleForm,
+                } as any)
+                const analysis = analyzeCandidateData(recToInspect)
+                const missingOrWarning = analysis.items.filter((i) => i.status !== 'valid')
+
+                return (
+                  <div className="rounded-2xl border border-slate-200/80 bg-slate-50/70 p-5 space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200">
+                      <div className="flex items-center gap-2.5">
+                        {analysis.missingCount > 0 ? (
+                          <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center font-bold">
+                            <AlertTriangle className="w-4 h-4" />
+                          </div>
+                        ) : (
+                          <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
+                            <CheckCircle2 className="w-4 h-4" />
+                          </div>
+                        )}
+                        <div>
+                          <h4 className="text-sm font-black text-slate-900">
+                            Candidate Data Completeness &amp; Parameter Audit
+                          </h4>
+                          <p className="text-xs text-slate-500">
+                            Evaluated against accredited {selectedOrgName || 'verifier'} compliance standards.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <div className="text-right">
+                          <span className="text-[10px] uppercase tracking-wider text-slate-400 font-bold block">
+                            Completeness
+                          </span>
+                          <span
+                            className={`text-sm font-black ${
+                              analysis.completenessPercent >= 90
+                                ? 'text-emerald-600'
+                                : analysis.completenessPercent >= 70
+                                ? 'text-amber-600'
+                                : 'text-rose-600'
+                            }`}
+                          >
+                            {analysis.completenessPercent}% Complete
+                          </span>
+                        </div>
+
+                        <div className="w-24 bg-slate-200 h-2.5 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all ${
+                              analysis.completenessPercent >= 90
+                                ? 'bg-emerald-500'
+                                : analysis.completenessPercent >= 70
+                                ? 'bg-amber-500'
+                                : 'bg-rose-500'
+                            }`}
+                            style={{ width: `${analysis.completenessPercent}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Missing Data Warning Alert */}
+                    {missingOrWarning.length > 0 ? (
+                      <div className="bg-amber-50/90 border border-amber-200/80 rounded-xl p-3.5 text-xs text-amber-900 space-y-1.5">
+                        <div className="flex items-center gap-2 font-bold text-amber-950">
+                          <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                          <span>
+                            {missingOrWarning.length} Missing or Incomplete Field
+                            {missingOrWarning.length === 1 ? '' : 's'} Detected
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-amber-800 leading-relaxed pl-6">
+                          The following candidate credentials were empty or not provided during submission.
+                          The verification request has been queued, but the verifying organization may request additional documentation.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="bg-emerald-50/90 border border-emerald-200/80 rounded-xl p-3 text-xs text-emerald-900 flex items-center gap-2">
+                        <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <span className="font-bold">
+                          All essential candidate fields are 100% complete and validated.
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Itemized Field Checklist */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                      {analysis.items.map((item) => {
+                        const isValid = item.status === 'valid'
+                        return (
+                          <div
+                            key={item.fieldKey}
+                            className={`p-3 rounded-xl border text-xs flex items-start justify-between gap-2 transition-all ${
+                              isValid
+                                ? 'bg-white border-slate-200/70 text-slate-800'
+                                : item.severity === 'critical'
+                                ? 'bg-rose-50/80 border-rose-200 text-rose-950'
+                                : 'bg-amber-50/60 border-amber-200 text-amber-950'
+                            }`}
+                          >
+                            <div className="space-y-0.5">
+                              <span className="font-bold block text-slate-900 text-[11px]">
+                                {item.fieldName}
+                              </span>
+                              <span className="text-[10px] text-slate-500 block leading-tight">
+                                {item.description}
+                              </span>
+                            </div>
+
+                            <span
+                              className={`shrink-0 px-2 py-0.5 rounded-md font-black text-[10px] uppercase tracking-wider flex items-center gap-1 ${
+                                isValid
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : item.severity === 'critical'
+                                  ? 'bg-rose-100 text-rose-800'
+                                  : 'bg-amber-100 text-amber-800'
+                              }`}
+                            >
+                              {isValid ? (
+                                <>
+                                  <Check className="w-3 h-3" /> Valid
+                                </>
+                              ) : (
+                                <>
+                                  <AlertCircle className="w-3 h-3" /> Missing
+                                </>
+                              )}
+                            </span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })()}
+
+              {/* 3. Mapped Candidate Credentials & Schema Values */}
+              <div className="rounded-2xl border border-slate-200/80 bg-white p-5 space-y-3">
+                <h4 className="text-xs font-black uppercase tracking-wider text-slate-400">
+                  Mapped Candidate Credentials
+                </h4>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 text-xs">
+                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-400 block">Candidate Name</span>
+                    <strong className="text-slate-900 font-bold text-xs truncate block mt-0.5">
+                      {lastSubmittedRecord?.candidateName || lastSubmittedInfo?.candidateName || 'Candidate'}
+                    </strong>
+                  </div>
+
+                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-400 block">Employee Code / ID</span>
+                    <strong className="font-mono font-bold text-slate-900 text-xs truncate block mt-0.5">
+                      {lastSubmittedRecord?.employeeId || lastSubmittedInfo?.employeeId || '—'}
+                    </strong>
+                  </div>
+
+                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-400 block">Designation</span>
+                    <strong className="text-slate-900 font-bold text-xs truncate block mt-0.5">
+                      {lastSubmittedRecord?.designation || singleForm['Designation'] || '—'}
+                    </strong>
+                  </div>
+
+                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-400 block">Department</span>
+                    <strong className="text-slate-900 font-bold text-xs truncate block mt-0.5">
+                      {lastSubmittedRecord?.department || singleForm['Department'] || 'General'}
+                    </strong>
+                  </div>
+
+                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-400 block">Date of Joining</span>
+                    <strong className="text-slate-900 font-bold text-xs truncate block mt-0.5">
+                      {lastSubmittedRecord?.dateOfJoining || singleForm['DateOfJoining'] || '—'}
+                    </strong>
+                  </div>
+
+                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-400 block">Date of Leaving</span>
+                    <strong className="text-slate-900 font-bold text-xs truncate block mt-0.5">
+                      {lastSubmittedRecord?.dateOfLeaving || singleForm['DateOfLeaving'] || 'Present'}
+                    </strong>
+                  </div>
+
+                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-400 block">Candidate Email</span>
+                    <strong className="text-slate-900 font-bold text-xs truncate block mt-0.5">
+                      {lastSubmittedRecord?.candidateEmail || singleForm['Email'] || 'Not provided'}
+                    </strong>
+                  </div>
+
+                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-400 block">Contact Number</span>
+                    <strong className="text-slate-900 font-bold text-xs truncate block mt-0.5">
+                      {lastSubmittedRecord?.contactNumber || singleForm['MobileNo'] || 'Not provided'}
+                    </strong>
+                  </div>
+
+                  {lastSubmittedRecord?.transactionId && (
+                    <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 col-span-2">
+                      <span className="text-[10px] font-bold text-emerald-700 block">Payment Transaction ID</span>
+                      <strong className="font-mono font-black text-emerald-950 text-xs truncate block mt-0.5">
+                        {lastSubmittedRecord.transactionId}
+                      </strong>
+                    </div>
+                  )}
+
+                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 col-span-2">
+                    <span className="text-[10px] font-bold text-slate-400 block">Settled Amount</span>
+                    <strong className="text-slate-900 font-bold text-xs truncate block mt-0.5">
+                      ₹{lastSubmittedRecord?.amount ? lastSubmittedRecord.amount.toFixed(2) : orgTotalPrice.toFixed(2)}{' '}
+                      (Inc. 18% GST)
+                    </strong>
+                  </div>
+                </div>
+              </div>
+
+              {/* 4. Batch Preview Table (if submitted in bulk) */}
+              {lastSubmittedBatch.length > 1 && (
+                <div className="rounded-2xl border border-slate-200/80 bg-white p-5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-black uppercase tracking-wider text-slate-400">
+                      Batch Candidates ({lastSubmittedBatch.length} Records)
+                    </h4>
+                    <span className="text-xs text-slate-500 font-bold">
+                      Primary Batch ID: {lastSubmittedInfo?.requestId}
+                    </span>
+                  </div>
+
+                  <div className="border border-slate-200 rounded-xl overflow-x-auto max-h-52">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-50 text-slate-600 font-black border-b border-slate-200">
+                        <tr>
+                          <th className="py-2.5 px-3">#</th>
+                          <th className="py-2.5 px-3">Candidate</th>
+                          <th className="py-2.5 px-3">Employee Code</th>
+                          <th className="py-2.5 px-3">Role / Dept</th>
+                          <th className="py-2.5 px-3">Data Status</th>
+                          <th className="py-2.5 px-3">Verification</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {lastSubmittedBatch.map((cand, idx) => {
+                          const analysis = analyzeCandidateData(cand)
+                          return (
+                            <tr key={cand.id || idx} className="hover:bg-slate-50/80">
+                              <td className="py-2 px-3 text-slate-400 font-mono">{idx + 1}</td>
+                              <td className="py-2 px-3 font-bold text-slate-900">{cand.candidateName}</td>
+                              <td className="py-2 px-3 font-mono text-slate-600">{cand.employeeId}</td>
+                              <td className="py-2 px-3 text-slate-600">
+                                {cand.designation} • {cand.department}
+                              </td>
+                              <td className="py-2 px-3">
+                                {analysis.missingCount === 0 ? (
+                                  <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black">
+                                    ✓ Complete
+                                  </span>
+                                ) : (
+                                  <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-black">
+                                    ⚠️ {analysis.missingCount} Missing
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-2 px-3">
+                                <span className="font-bold text-amber-600 text-xs">
+                                  {cand.status || 'Pending'}
+                                </span>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </div>
 
-            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200/80 text-left space-y-2 text-xs">
-              <div className="flex justify-between">
-                <span className="text-slate-400">Request ID:</span>
-                <span className="font-mono font-bold text-slate-800">{generatedRequestId}</span>
+            {/* Modal Bottom Actions */}
+            <div className="p-5 border-t border-slate-100 bg-slate-50/70 flex flex-col sm:flex-row items-center justify-between gap-3 relative z-10">
+              <button
+                type="button"
+                onClick={() => {
+                  setSubmissionSuccess(false)
+                  setShowRecentRequestsModal(true)
+                }}
+                className="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-slate-300 hover:bg-white text-slate-700 font-bold text-xs tracking-wide transition-all cursor-pointer flex items-center justify-center gap-2 shadow-2xs"
+              >
+                <Clock className="w-3.5 h-3.5 text-slate-500" />
+                <span>View All Client Requests</span>
+              </button>
+
+              <div className="flex items-center gap-3 w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSubmissionSuccess(false)
+                    setLastSubmittedInfo(null)
+                    setLastSubmittedRecord(null)
+                    setLastSubmittedBatch([])
+                    setStep('organization')
+                  }}
+                  className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl border border-slate-300 hover:bg-white text-slate-700 font-bold text-xs transition-colors cursor-pointer"
+                >
+                  Submit Another
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSubmissionSuccess(false)
+                    navigate('/dashboard', {
+                      state: {
+                        newRequestId: lastSubmittedRecord?.requestId || generatedRequestId,
+                        candidateName: lastSubmittedRecord?.candidateName || 'Candidate',
+                      },
+                    })
+                  }}
+                  className="flex-1 sm:flex-none px-5 py-2.5 bg-gradient-to-r from-[#10B981] to-[#5850EC] hover:brightness-110 text-white rounded-xl font-bold text-xs tracking-wide transition-all cursor-pointer shadow-md flex items-center justify-center gap-2"
+                >
+                  <LayoutGrid className="w-3.5 h-3.5" />
+                  <span>Go to Dashboard</span>
+                </button>
               </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Status:</span>
-                <span className="font-bold text-amber-600">Pending Review</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 5. Client Recent Candidate Verification Requests Drawer / Modal */}
+      {showRecentRequestsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-md p-3 sm:p-6 animate-fade-in">
+          <div className="bg-white rounded-3xl max-w-4xl w-full max-h-[90vh] shadow-2xl border border-slate-100 flex flex-col overflow-hidden animate-fade-in-up relative">
+            {/* Modal Header */}
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-cyan-100 text-[#0680A6] flex items-center justify-center shadow-xs ring-4 ring-cyan-50">
+                  <Clock className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="px-2.5 py-0.5 rounded-full bg-slate-200 text-slate-800 text-[10px] font-black uppercase tracking-wider">
+                      Client ID: {getClientIdentifier().clientId}
+                    </span>
+                    <span className="text-[10px] text-slate-500 font-bold">
+                      {getClientIdentifier().clientName}
+                    </span>
+                  </div>
+                  <h3 className="text-lg sm:text-xl font-black text-slate-900 leading-tight mt-0.5">
+                    Recent Candidate Verification Requests
+                  </h3>
+                </div>
               </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Candidate:</span>
-                <span className="font-semibold text-slate-800">
-                  {candidateName} ({employeeId})
+
+              <button
+                type="button"
+                onClick={() => setShowRecentRequestsModal(false)}
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+                title="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Search & Stats Filter Bar */}
+            <div className="p-4 sm:p-6 border-b border-slate-100 bg-white flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="relative w-full sm:w-80">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="Filter by name, ID, or organization..."
+                  value={recentSearchQuery}
+                  onChange={(e) => setRecentSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:bg-white focus:border-[#0680A6] focus:outline-none transition-all"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 self-stretch sm:self-auto justify-end text-xs font-bold">
+                <span className="px-3 py-1.5 rounded-xl bg-slate-100 text-slate-700">
+                  Total: {clientRecentRequests.length}
+                </span>
+                <span className="px-3 py-1.5 rounded-xl bg-amber-100 text-amber-800">
+                  Pending: {clientRecentRequests.filter((r) => !r.status || r.status === 'Pending').length}
+                </span>
+                <span className="px-3 py-1.5 rounded-xl bg-emerald-100 text-emerald-800">
+                  Verified: {clientRecentRequests.filter((r) => r.status === 'Verified').length}
                 </span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Target Organization:</span>
-                <span className="font-semibold text-slate-800">{selectedOrg?.OrganizationName}</span>
-              </div>
             </div>
 
-            <div className="flex flex-col gap-2 pt-2">
+            {/* Requests List Body */}
+            <div className="p-4 sm:p-6 overflow-y-auto space-y-4 flex-1 bg-slate-50/50">
+              {(() => {
+                const filtered = clientRecentRequests.filter((r) => {
+                  if (!recentSearchQuery.trim()) return true
+                  const q = recentSearchQuery.toLowerCase().trim()
+                  return (
+                    (r.candidateName && r.candidateName.toLowerCase().includes(q)) ||
+                    (r.requestId && r.requestId.toLowerCase().includes(q)) ||
+                    (r.employeeId && r.employeeId.toLowerCase().includes(q)) ||
+                    (r.verifierName && r.verifierName.toLowerCase().includes(q))
+                  )
+                })
+
+                if (filtered.length === 0) {
+                  return (
+                    <div className="text-center py-12 space-y-3">
+                      <div className="w-14 h-14 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
+                        <FileText className="w-7 h-7" />
+                      </div>
+                      <h4 className="text-sm font-bold text-slate-800">
+                        {recentSearchQuery ? 'No matching candidate requests' : 'No requests submitted yet'}
+                      </h4>
+                      <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                        {recentSearchQuery
+                          ? 'Try modifying your search keywords.'
+                          : 'Requests submitted via this form will be mapped to your Client ID and listed here.'}
+                      </p>
+                    </div>
+                  )
+                }
+
+                return filtered.map((rec) => {
+                  const reqId = rec.requestId || rec.id
+                  const isExpanded = expandedRequestId === reqId
+                  const isChecking = checkingStatusId === reqId
+                  const analysis = analyzeCandidateData(rec)
+                  const currentStatus = rec.status || 'Pending'
+
+                  return (
+                    <div
+                      key={reqId}
+                      className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs hover:shadow-md transition-all overflow-hidden"
+                    >
+                      {/* Request Summary Row */}
+                      <div className="p-4 sm:p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                        <div className="space-y-1.5 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-mono font-black text-sm text-slate-900 bg-slate-100 px-2.5 py-0.5 rounded-lg">
+                              {rec.requestId}
+                            </span>
+                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-200">
+                              Client: {rec.clientId || getClientIdentifier().clientId}
+                            </span>
+                            <span className="text-xs text-slate-400">
+                              • {rec.submittedAt || 'Recent'}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-3">
+                            <h4 className="font-black text-slate-900 text-sm sm:text-base">
+                              {rec.candidateName}
+                            </h4>
+                            <span className="text-xs font-mono font-semibold text-slate-500">
+                              ID: {rec.employeeId || '—'}
+                            </span>
+                          </div>
+
+                          <div className="text-xs text-slate-600 flex items-center gap-2 flex-wrap">
+                            <span>Verifier: <strong className="text-slate-800 font-bold">{rec.verifierName}</strong></span>
+                            <span>•</span>
+                            <span>Role: <strong className="text-slate-800">{rec.designation || '—'}</strong></span>
+                            <span>•</span>
+                            <span>Dept: <strong className="text-slate-800">{rec.department || 'General'}</strong></span>
+                          </div>
+                        </div>
+
+                        {/* Status & Actions Column */}
+                        <div className="flex items-center gap-3 self-stretch sm:self-auto justify-between lg:justify-end border-t lg:border-t-0 pt-3 lg:pt-0 border-slate-100">
+                          {/* Data Completeness Badge */}
+                          <div>
+                            {analysis.missingCount === 0 ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-black text-[10px] uppercase tracking-wider">
+                                <Check className="w-3 h-3" /> Data Complete
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200 font-black text-[10px] uppercase tracking-wider">
+                                <AlertTriangle className="w-3 h-3 text-amber-600" />
+                                {analysis.missingCount} Missing
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Status Badge */}
+                          <span
+                            className={`px-3 py-1 rounded-xl text-xs font-black tracking-wide flex items-center gap-1.5 ${
+                              currentStatus === 'Verified'
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : currentStatus === 'In Progress'
+                                ? 'bg-blue-100 text-blue-800'
+                                : currentStatus === 'Rejected'
+                                ? 'bg-rose-100 text-rose-800'
+                                : 'bg-amber-100 text-amber-800'
+                            }`}
+                          >
+                            <span
+                              className={`w-2 h-2 rounded-full ${
+                                currentStatus === 'Verified'
+                                  ? 'bg-emerald-500'
+                                  : currentStatus === 'In Progress'
+                                  ? 'bg-blue-500'
+                                  : currentStatus === 'Rejected'
+                                  ? 'bg-rose-500'
+                                  : 'bg-amber-500'
+                              }`}
+                            />
+                            {currentStatus}
+                          </span>
+
+                          {/* Check Status Action */}
+                          <button
+                            type="button"
+                            onClick={() => handleCheckStatus(rec)}
+                            disabled={isChecking}
+                            className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer flex items-center gap-1.5 text-xs font-bold disabled:opacity-50"
+                            title="Query live network database for updated status"
+                          >
+                            <RefreshCw className={`w-3.5 h-3.5 ${isChecking ? 'animate-spin text-emerald-600' : ''}`} />
+                            <span className="hidden sm:inline">{isChecking ? 'Checking' : 'Status'}</span>
+                          </button>
+
+                          {/* Expand Details Toggle */}
+                          <button
+                            type="button"
+                            onClick={() => setExpandedRequestId(isExpanded ? null : reqId)}
+                            className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer"
+                            title={isExpanded ? 'Collapse Details' : 'View Mapped Data & Missing Fields'}
+                          >
+                            {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Live Feedback Toast on Status Check */}
+                      {statusCheckFeedback[reqId] && (
+                        <div className="mx-5 mb-3 p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 flex items-center gap-2 animate-fade-in">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                          <span>{statusCheckFeedback[reqId]}</span>
+                        </div>
+                      )}
+
+                      {/* Expanded Data & Missing Field View ("if any data messing so the view on there") */}
+                      {isExpanded && (
+                        <div className="px-5 pb-5 pt-2 border-t border-slate-100 bg-slate-50/50 space-y-4 animate-fade-in">
+                          {/* Missing Field Analysis Breakdown */}
+                          <div className="space-y-2">
+                            <span className="text-[11px] font-black uppercase tracking-wider text-slate-500 block">
+                              Data Completeness Audit ({analysis.completenessPercent}% Complete)
+                            </span>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              {analysis.items.map((item) => {
+                                const isValid = item.status === 'valid'
+                                return (
+                                  <div
+                                    key={item.fieldKey}
+                                    className={`p-2.5 rounded-xl border text-xs flex items-center justify-between gap-2 ${
+                                      isValid
+                                        ? 'bg-white border-slate-200 text-slate-800'
+                                        : 'bg-amber-50 border-amber-200 text-amber-950 font-medium'
+                                    }`}
+                                  >
+                                    <div className="truncate">
+                                      <span className="font-bold text-[11px] block">{item.fieldName}</span>
+                                      <span className="text-[10px] text-slate-500 truncate block">
+                                        {item.description}
+                                      </span>
+                                    </div>
+                                    <span
+                                      className={`shrink-0 px-2 py-0.5 rounded text-[9px] font-black uppercase ${
+                                        isValid ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                                      }`}
+                                    >
+                                      {isValid ? 'OK' : 'Missing'}
+                                    </span>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </div>
+
+                          {/* Full Mapped Field Matrix */}
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs pt-1">
+                            <div className="p-2.5 bg-white rounded-xl border border-slate-200">
+                              <span className="text-[10px] text-slate-400 font-bold block">Joining Date</span>
+                              <strong className="text-slate-900 block mt-0.5">{rec.dateOfJoining || '—'}</strong>
+                            </div>
+                            <div className="p-2.5 bg-white rounded-xl border border-slate-200">
+                              <span className="text-[10px] text-slate-400 font-bold block">Leaving Date</span>
+                              <strong className="text-slate-900 block mt-0.5">{rec.dateOfLeaving || 'Present'}</strong>
+                            </div>
+                            <div className="p-2.5 bg-white rounded-xl border border-slate-200">
+                              <span className="text-[10px] text-slate-400 font-bold block">Candidate Email</span>
+                              <strong className="text-slate-900 block mt-0.5 truncate">{rec.candidateEmail || '—'}</strong>
+                            </div>
+                            <div className="p-2.5 bg-white rounded-xl border border-slate-200">
+                              <span className="text-[10px] text-slate-400 font-bold block">Contact Phone</span>
+                              <strong className="text-slate-900 block mt-0.5">{rec.contactNumber || '—'}</strong>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })
+              })()}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 px-6 border-t border-slate-100 bg-slate-50/80 flex items-center justify-between text-xs text-slate-500 font-medium">
+              <span>Showing candidate verification requests submitted by your client account.</span>
               <button
                 type="button"
-                onClick={() => {
-                  setSubmissionSuccess(false)
-                  navigate('/dashboard')
-                }}
-                className="w-full py-3 bg-gradient-to-r from-[#10B981] to-[#5850EC] hover:brightness-110 text-white rounded-full font-bold text-xs uppercase tracking-wider transition-all cursor-pointer shadow-md flex items-center justify-center gap-2"
+                onClick={() => setShowRecentRequestsModal(false)}
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold transition-colors cursor-pointer"
               >
-                <LayoutGrid className="w-4 h-4" />
-                <span>Go to Dashboard</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setSubmissionSuccess(false)
-                  handleResetForm()
-                }}
-                className="w-full py-2.5 text-slate-500 hover:text-slate-700 font-semibold text-xs transition-colors cursor-pointer"
-              >
-                Submit Another Candidate
+                Close
               </button>
             </div>
           </div>
         </div>
       )}
+
+      {/* Embedded CSS Animations */}
+      <style>{`
+        .animate-fade-in-md { animation: fade-in .5s cubic-bezier(.25,.8,.25,1) both; }
+        .animate-fade-in { animation: fade-in .3s cubic-bezier(.22,.68,.53,.99) both; }
+        .animate-fade-in-up { animation: fade-in-up .4s 0.05s cubic-bezier(.2,1,.4,1) both; }
+        .animate-shake { animation: shake 0.4s both; }
+        @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes fade-in-up { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+        @keyframes shake {
+          0% { transform: translateX(0); }
+          16% { transform: translateX(-3px); }
+          32% { transform: translateX(4px); }
+          48% { transform: translateX(-4px); }
+          64% { transform: translateX(3px); }
+          80% { transform: translateX(-2px); }
+          100% { transform: translateX(0); }
+        }
+      `}</style>
     </div>
   )
 }

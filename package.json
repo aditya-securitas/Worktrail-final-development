@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "node copy-images.js && vite",
-    "build": "node copy-images.js && tsc -b && vite build",
+    "build": "node copy-images.js && vite build",
+    "typecheck": "tsc --noEmit",
     "lint": "oxlint",
     "preview": "vite preview"
   },

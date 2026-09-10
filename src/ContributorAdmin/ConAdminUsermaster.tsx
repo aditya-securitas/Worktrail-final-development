@@ -101,7 +101,7 @@ export default function ConAdminUserMaster() {
   useEffect(() => {
     const fetchOrgs = async () => {
       try {
-        const res = await fetch("http://10.80.0.83:3000/OrgmasterData", {
+        const res = await fetch("https://worktrail.ai/api/OrgmasterData", {
           method: "GET",
           headers: {
             "Content-Type": "application/json",
@@ -124,7 +124,7 @@ export default function ConAdminUserMaster() {
     setLoading(true);
     try {
       const companyName = user?.CompanyName ? encodeURIComponent(user.CompanyName) : "";
-      const url = `http://10.80.0.83:3000/ContributorAdminData${companyName ? `?companyName=${companyName}` : ""}`;
+      const url = `https://worktrail.ai/api/ContributorAdminData${companyName ? `?companyName=${companyName}` : ""}`;
       const res = await fetch(url, {
         method: "GET",
         headers: {
@@ -194,7 +194,7 @@ export default function ConAdminUserMaster() {
     };
 
     try {
-      const res = await fetch("http://10.80.0.83:3000/Register", {
+      const res = await fetch("https://worktrail.ai/api/Register", {
         method: "POST",
         headers: {
           APIKEY: "Securitas@#!1234",
@@ -267,7 +267,7 @@ export default function ConAdminUserMaster() {
         id: String(pendingDelete.id),
         activestatus: "0"
       };
-      const res = await fetch("http://10.80.0.83:3000/ContributorDelete", {
+      const res = await fetch("https://worktrail.ai/api/ContributorDelete", {
         method: "POST",
         headers: {
           APIKEY: "Securitas@#!1234",

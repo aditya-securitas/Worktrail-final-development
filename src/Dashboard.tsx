@@ -4,6 +4,7 @@ import type { MenuRoute } from './auth-context'
 import { useState, useEffect, useRef } from 'react'
 import { checkClientHasRequests } from './client-utils'
 import ServiceRequest from './Components/ServiceRequest'
+import ServiceRequestReview from './Components/ServiceRequestReview'
 import AddEmployee from './Components/AddEmployee'
 import Client from './Components/Client'
 import CandidateVerificationForm from './Components/CandidateVerificationForm'
@@ -26,9 +27,9 @@ import DashboardCharts, {
   type ComplianceDistribution
 } from './Components/DashboardCharts'
 import {
-  type VerificationRecord,
-  STORAGE_KEY_VERIFICATION_RECORDS
+  type VerificationRecord
 } from './Components/CandidateVerificationForm'
+import { API_ENDPOINTS } from './endpoint'
 import { Search, Calendar, RefreshCw, CheckCircle2 } from 'lucide-react'
 
 const EXTERNAL_LINKS: Record<string, boolean> = {
@@ -40,6 +41,7 @@ function MenuComponent({ item }: { item: MenuRoute | undefined }) {
   const { user } = useAuth()
   if (!item) return null
   if (item.components === 'ServiceRequest.tsx') return <ServiceRequest />
+  if (item.components === 'ServiceRequestReview.tsx') return <ServiceRequestReview />
   if (item.components === 'ConUserAddEmployee.tsx') return <ConUserAddEmployee />
   if (item.components === 'ConAdminAddEmployee.tsx') return <ConUserAddEmployee />
   if (item.components === 'AddEmployee.tsx') {
@@ -70,15 +72,31 @@ function Dashboard() {
     return <CandidateVerificationForm />
   }
 
-  // If new client user with 0 requests visits /dashboard, redirect to Candidate Verification form
-  if (user?.Usertype?.toLowerCase() === 'client' && location.pathname === '/dashboard') {
-    const hasRequests = checkClientHasRequests(user)
-    if (!hasRequests) {
-      return <Navigate to="/CandidateVerification" replace />
+  const [sidebarState, setSidebarState] = useState<'full' | 'mini' | 'closed'>(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      return 'closed'
     }
-  }
+    return 'full'
+  })
 
-  const [sidebarState, setSidebarState] = useState<'full' | 'mini' | 'closed'>('full')
+  // Auto-close sidebar on mobile on route change
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      setSidebarState('closed')
+    }
+  }, [location.pathname])
+
+  // Handle window resize between desktop and mobile
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 768) {
+        setSidebarState((prev) => (prev === 'mini' ? 'closed' : prev))
+      }
+    }
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
   const menuItems = flattenMenu(menu)
 
   const userTypeNorm = (user?.Usertype || '').toLowerCase().trim().replace(/[\s_-]+/g, '')
@@ -93,56 +111,220 @@ function Dashboard() {
   const [showDatePicker, setShowDatePicker] = useState(false)
   const datePickerRef = useRef<HTMLDivElement>(null)
 
-  // Dynamic records loaded from live verification storage
+  // Dynamic records loaded directly from live API (ClientEmpData)
   const [allRecords, setAllRecords] = useState<VerificationRecord[]>([])
 
-  const loadRecords = () => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY_VERIFICATION_RECORDS)
-      if (stored) {
-        const parsed = JSON.parse(stored)
-        if (Array.isArray(parsed)) {
-          // Filter out any legacy dummy records from localStorage
-          const genuineRecords = parsed.filter(
-            (r) =>
-              !r.id?.startsWith('rec-') &&
-              !r.requestId?.startsWith('VR-849') &&
-              !r.requestId?.startsWith('VR-732') &&
-              !r.requestId?.startsWith('VR-619') &&
-              !r.requestId?.startsWith('VR-508') &&
-              !r.requestId?.startsWith('VR-381') &&
-              !r.requestId?.startsWith('VR-274') &&
-              !r.requestId?.startsWith('VR-194')
-          )
-          if (genuineRecords.length !== parsed.length) {
-            localStorage.setItem(STORAGE_KEY_VERIFICATION_RECORDS, JSON.stringify(genuineRecords))
-          }
-          if (user?.Usertype?.toLowerCase() === 'client') {
-            const ident = (user?.username || '').toLowerCase().trim()
-            const userRecords = genuineRecords.filter((r) => {
-              const sub = (r.submittedBy || '').toLowerCase().trim()
-              return !ident || sub === ident || sub.includes(ident) || ident.includes(sub)
+  const loadRecords = async () => {
+    const clientEmail = (user?.email || user?.Email || user?.username || '').trim()
+    const employeeIdVal = String(user?.id || user?.EmployeeCode || user?.EmployeeId || (user as any)?.clientEmployeeId || '').replace(/^CL-/, '')
+    const statusApiUrl = API_ENDPOINTS.clientEmpStatus || 'https://worktrail.ai/api/ClientEmpStatus'
+    let clientEmpList: any[] = []
+
+    // 1. Primary: GET on client employee ID and client email from clientEmpStatus API
+    if (clientEmail || employeeIdVal) {
+      try {
+        const queryParams = new URLSearchParams()
+        if (employeeIdVal) {
+          queryParams.append('clientEmployeeId', employeeIdVal)
+          queryParams.append('EmployeeCode', employeeIdVal)
+          queryParams.append('EmployeeId', employeeIdVal)
+          queryParams.append('ClientEmpId', employeeIdVal)
+          queryParams.append('id', employeeIdVal)
+        }
+        if (clientEmail) {
+          queryParams.append('Clientemail', clientEmail)
+          queryParams.append('email', clientEmail)
+        }
+
+        const res = await fetch(`${statusApiUrl}?${queryParams.toString()}`, {
+          method: 'GET',
+          headers: {
+            APIKEY: 'Securitas@#!1234',
+            'Content-Type': 'application/json',
+          },
+        })
+        if (res.ok) {
+          const data = await res.json()
+          clientEmpList = Array.isArray(data) ? data : data?.data || data?.candidates || data?.records || data?.status || []
+        }
+      } catch (err) {
+        console.warn('ClientEmpStatus GET query notice in Dashboard:', err)
+      }
+
+      // If combined params returned empty, try with clientEmployeeId alone or Clientemail alone
+      if (!clientEmpList || clientEmpList.length === 0) {
+        if (employeeIdVal) {
+          try {
+            const res = await fetch(`${statusApiUrl}?clientEmployeeId=${encodeURIComponent(employeeIdVal)}`, {
+              method: 'GET',
+              headers: {
+                APIKEY: 'Securitas@#!1234',
+                'Content-Type': 'application/json',
+              },
             })
-            setAllRecords(userRecords)
-          } else {
-            setAllRecords(genuineRecords)
+            if (res.ok) {
+              const data = await res.json()
+              clientEmpList = Array.isArray(data) ? data : data?.data || data?.candidates || data?.records || data?.status || []
+            }
+          } catch (err) {
+            console.warn('ClientEmpStatus employee ID GET notice in Dashboard:', err)
           }
-          return
+        }
+
+        if (!clientEmpList || clientEmpList.length === 0) {
+          if (clientEmail) {
+            try {
+              const res = await fetch(`${statusApiUrl}?Clientemail=${encodeURIComponent(clientEmail)}`, {
+                method: 'GET',
+                headers: {
+                  APIKEY: 'Securitas@#!1234',
+                  'Content-Type': 'application/json',
+                },
+              })
+              if (res.ok) {
+                const data = await res.json()
+                clientEmpList = Array.isArray(data) ? data : data?.data || data?.candidates || data?.records || data?.status || []
+              }
+            } catch (err) {
+              console.warn('ClientEmpStatus single GET notice in Dashboard:', err)
+            }
+          }
         }
       }
-    } catch {
-      // ignore
     }
 
-    setAllRecords([])
+    // 2. Secondary fallback: Query clientEmpData if clientEmpStatus returned no records
+    if (!clientEmpList || clientEmpList.length === 0) {
+      const fallbackUrl = API_ENDPOINTS.clientEmpData || 'https://worktrail.ai/api/ClientEmpData'
+      try {
+        const res = await fetch(fallbackUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            APIKEY: 'Securitas@#!1234',
+          },
+          body: JSON.stringify({
+            Clientemail: clientEmail,
+            email: clientEmail,
+          }),
+        })
+        if (res.ok) {
+          const data = await res.json()
+          clientEmpList = Array.isArray(data) ? data : data?.data || data?.candidates || []
+        }
+      } catch (err) {
+        console.warn('ClientEmpData POST fetch notice in Dashboard:', err)
+      }
+    }
+
+    // 3. Fallback GET on clientEmpData if still empty
+    if (!clientEmpList || clientEmpList.length === 0) {
+      const fallbackUrl = API_ENDPOINTS.clientEmpData || 'https://worktrail.ai/api/ClientEmpData'
+      try {
+        const getRes = await fetch(fallbackUrl, {
+          method: 'GET',
+          headers: {
+            APIKEY: 'Securitas@#!1234',
+          },
+        })
+        if (getRes.ok) {
+          const getData = await getRes.json()
+          clientEmpList = Array.isArray(getData) ? getData : getData?.data || getData?.candidates || []
+        }
+      } catch (getErr) {
+        console.warn('ClientEmpData GET fetch notice in Dashboard:', getErr)
+      }
+    }
+
+    if (Array.isArray(clientEmpList) && clientEmpList.length > 0) {
+      const flatList: any[] = []
+      clientEmpList.forEach((item: any, itemIdx: number) => {
+        if (Array.isArray(item.candidates) && item.candidates.length > 0) {
+          item.candidates.forEach((c: any, cIdx: number) => {
+            flatList.push({
+              ...item,
+              ...c,
+              id: c.id || item.id || `dash-cand-${itemIdx}-${cIdx}`,
+              RequestId: c.RequestId || c.requestId || item.RequestId || item.requestId || item.orderId,
+              Contributor: c.Contributor || item.Contributor || item.verifierName,
+              Clientemail: c.Clientemail || item.Clientemail || clientEmail,
+              verificationType: c.verificationType || item.verificationType,
+              status: c.status || item.status || 'Pending',
+              created_at: c.created_at || item.created_at,
+            })
+          })
+        } else {
+          flatList.push(item)
+        }
+      })
+
+      const isClientUser = user?.Usertype?.toLowerCase() === 'client'
+      const filteredList = isClientUser && clientEmail
+        ? flatList.filter((item: any) => {
+            const itemClient = (item.Clientemail || item.ClientEmail || item.clientEmail || item.submittedBy || '').trim().toLowerCase()
+            return !itemClient || itemClient === clientEmail.toLowerCase()
+          })
+        : flatList
+
+      const parsedRecords: VerificationRecord[] = filteredList.map((item: any, idx: number) => {
+        const fullName =
+          [item.FirstName, item.MiddleName, item.LastName].filter(Boolean).join(' ') ||
+          item.candidateName ||
+          item.CandidateName ||
+          item.name ||
+          'Candidate'
+        const rawStatus = String(item.status || item.Status || 'Pending').trim()
+        const normalizedStatus =
+          rawStatus.toLowerCase() === 'verified'
+            ? 'Verified'
+            : rawStatus.toLowerCase() === 'rejected'
+              ? 'Rejected'
+              : rawStatus.toLowerCase() === 'in progress' || rawStatus.toLowerCase() === 'inprogress'
+                ? 'In Progress'
+                : 'Pending'
+        return {
+          id: item.id ? String(item.id) : (item.RequestId ? String(item.RequestId) : `api-rec-${idx}`),
+          requestId: item.RequestId || item.requestId || item.orderId || `VR-2026-${1000 + idx}`,
+          candidateName: fullName,
+          employeeId: item.EmployeeCode || item.employeeId || item.EmpCode || '—',
+          candidateEmail: item.Email || item.candidateEmail || item.email || '',
+          contactNumber: item.MobileNo || item.contactNumber || item.mobile || '',
+          verifierId: item.OrganizationID ? String(item.OrganizationID) : '1',
+          verifierName: item.Contributor || item.verifierName || 'Registered Enterprise',
+          verifierCategory: 'Registered Organization',
+          verifierCode: `ORG-${item.OrganizationID || '1'}`,
+          dateOfJoining: item.DateOfJoining || item.dateOfJoining || '—',
+          dateOfLeaving: item.DateOfLeaving || item.dateOfLeaving || 'Present',
+          isCurrentlyEmployed: !item.DateOfLeaving || item.DateOfLeaving.toLowerCase() === 'present',
+          designation: item.LastPositionHeld || item.designation || item.Designation || '—',
+          department: item.Department || item.department || '—',
+          verificationType: item.verificationType || item.VerificationType || 'Standard Employment Verification',
+          remarks: item.remarks || item.Remarks || 'API Synchronized Verification Record',
+          uploadedFilesCount: item.LOA ? 1 : (item.uploadedFilesCount || 0),
+          submittedBy: item.Clientemail || item.submittedBy || user?.username || 'Client User',
+          submittedAt: item.created_at ? item.created_at.split('T')[0] : (item.submittedAt || new Date().toISOString().split('T')[0]),
+          status: (normalizedStatus as any),
+          amount: item.Amount || item.amount || 1499,
+          transactionId: item.TransactionId || item.transactionId,
+          paymentId: item.PaymentId || item.paymentId,
+          orderId: item.OrderId || item.orderId,
+          customFields: item,
+          dynamicData: item,
+        }
+      })
+
+      setAllRecords(parsedRecords)
+    } else {
+      setAllRecords([])
+    }
   }
 
   useEffect(() => {
+    try {
+      localStorage.removeItem('worktrail_verification_records')
+    } catch {}
     loadRecords()
-    const handleStorage = () => loadRecords()
-    window.addEventListener('storage', handleStorage)
-    return () => window.removeEventListener('storage', handleStorage)
-  }, [location.pathname])
+  }, [location.pathname, user])
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -314,6 +496,9 @@ function Dashboard() {
         <div>
           <Navbar sidebarState={sidebarState} onToggleSidebar={() => {
             setSidebarState((prev) => {
+              if (window.innerWidth < 768) {
+                return prev === 'closed' ? 'full' : 'closed'
+              }
               if (prev === 'full') return 'mini'
               if (prev === 'mini') return 'closed'
               return 'full'
@@ -450,7 +635,7 @@ function Dashboard() {
                   {/* Superadmin Exclusive: Full-Width Transaction & Revenue Telemetry Chart Under Compliance Analytics */}
                   {userTypeNorm === 'superadmin' && (
                     <div className="mt-8">
-                      <TransactionTelemetryChart timeframe={timeframe} />
+                      <TransactionTelemetryChart timeframe={timeframe} records={allRecords} />
                     </div>
                   )}
                 </>
@@ -662,6 +847,8 @@ function Dashboard() {
                 </div>
               </div>
             </>
+          ) : location.pathname === '/ServiceRequestReview' || location.pathname.startsWith('/ServiceRequestReview') ? (
+            <ServiceRequestReview />
           ) : (
             (() => {
               const activeMenuItem = menuItems.find((item) => menuPath(item.Route) === location.pathname)

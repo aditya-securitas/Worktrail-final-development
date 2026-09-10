@@ -1,5 +1,4 @@
 import type { AuthUser } from './auth-context'
-import { STORAGE_KEY_VERIFICATION_RECORDS, type VerificationRecord } from './Components/CandidateVerificationForm'
 
 /**
  * Verifies whether a client user already has submitted candidate verification requests.
@@ -30,55 +29,6 @@ export function checkClientHasRequests(user?: AuthUser | null, emailId?: string)
   if (company) {
     const compFlag = localStorage.getItem(`worktrail_client_has_requests_${company}`)
     if (compFlag === 'true') return true
-  }
-
-  // 2. Inspect verification records in storage
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY_VERIFICATION_RECORDS)
-    if (stored) {
-      const rawRecords: VerificationRecord[] = JSON.parse(stored)
-      if (Array.isArray(rawRecords) && rawRecords.length > 0) {
-        const records = rawRecords.filter(
-          (r) =>
-            !r.id?.startsWith('rec-') &&
-            !r.requestId?.startsWith('VR-849') &&
-            !r.requestId?.startsWith('VR-732') &&
-            !r.requestId?.startsWith('VR-619')
-        )
-        const found = records.some((r) => {
-          const submittedBy = (r.submittedBy || '').toLowerCase().trim()
-          
-          // Check if this record was submitted by this client
-          const matchesIdentifier = Boolean(
-            userIdentifier && (submittedBy === userIdentifier || submittedBy.includes(userIdentifier) || userIdentifier.includes(submittedBy))
-          )
-          const matchesEmail = Boolean(
-            userEmail && (submittedBy === userEmail || submittedBy.includes(userEmail))
-          )
-          const matchesCompany = Boolean(
-            company && (submittedBy === company || (r.verifierName || '').toLowerCase().includes(company))
-          )
-          
-          return matchesIdentifier || matchesEmail || matchesCompany
-        })
-
-        if (found) {
-          // Cache flag for fast subsequent lookups
-          if (userIdentifier) {
-            localStorage.setItem(`worktrail_client_has_requests_${userIdentifier}`, 'true')
-          }
-          if (userEmail) {
-            localStorage.setItem(`worktrail_client_has_requests_${userEmail}`, 'true')
-          }
-          if (userId) {
-            localStorage.setItem(`worktrail_client_has_requests_id_${userId}`, 'true')
-          }
-          return true
-        }
-      }
-    }
-  } catch (err) {
-    console.error('Error verifying client records:', err)
   }
 
   return false

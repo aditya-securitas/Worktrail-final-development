@@ -18,12 +18,19 @@ import {
   Clock,
   AlertTriangle,
   Zap,
+  Lock,
+  Sun,
+  Moon,
+  ChevronDown,
+  Check,
 } from "lucide-react";
 import { motion, useInView, animate } from "framer-motion";
 import { useEffect, useState, useRef } from "react";
 import { Link } from "react-router-dom";
 import { API_ENDPOINTS } from "./endpoint";
 import bannerVideo from "./assets/video/banner-video.mp4";
+import logoWhite from "./assets/Img/logo_w.png";
+import logoBlack from "./assets/Img/logo_b.png";
 
 const solutions: Array<[string, string, string, LucideIcon]> = [
   [
@@ -50,6 +57,57 @@ const solutions: Array<[string, string, string, LucideIcon]> = [
     "Stay compliant with industry regulations.",
     FileCheck2,
   ],
+];
+
+const complianceMarqueeItems = [
+  {
+    icon: ShieldCheck,
+    title: "100% Verified Credentials",
+    badge: "Tamper-Proof",
+    color: "#10B981",
+  },
+  {
+    icon: Zap,
+    title: "Real-Time Direct Verification",
+    badge: "Zero Delays",
+    color: "#38BDF8",
+  },
+  {
+    icon: Lock,
+    title: "Bank-Grade Data Security",
+    badge: "SOC-2 Ready",
+    color: "#A78BFA",
+  },
+  {
+    icon: FileCheck2,
+    title: "Automated Screening Pipeline",
+    badge: "AI Powered",
+    color: "#34D399",
+  },
+  {
+    icon: CheckCircle2,
+    title: "Integrity-First Compliance",
+    badge: "Certified",
+    color: "#FBBF24",
+  },
+  {
+    icon: Database,
+    title: "Authentic Contributor Master",
+    badge: "Live Network",
+    color: "#60A5FA",
+  },
+  {
+    icon: Sparkles,
+    title: "Smart Discrepancy Detection",
+    badge: "Instant Flags",
+    color: "#F472B6",
+  },
+  {
+    icon: Users,
+    title: "Trusted Enterprise Facilitator",
+    badge: "Verified",
+    color: "#2DD4BF",
+  },
 ];
 
 const process: Array<[string, string, string, any]> = [
@@ -112,7 +170,109 @@ function Counter({ value, suffix = "%" }: CounterProps) {
   return <span ref={ref}>0{suffix}</span>;
 }
 
+const businessTypeOptions = [
+  "Background Screening Agency",
+  "Enterprise Employer",
+  "Startup / SME",
+  "Other",
+];
+
+const employeeCountOptions = [
+  "1-99",
+  "100-499",
+  "500-1999",
+  "2000+",
+];
+
+function CustomDropdown({
+  label,
+  value,
+  options,
+  placeholder,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: string[];
+  placeholder: string;
+  onChange: (val: string) => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  return (
+    <div className={`form-group custom-dropdown-container ${isOpen ? "is-open" : ""}`} ref={dropdownRef}>
+      <label>{label}</label>
+      <div
+        className={`custom-dropdown-trigger ${isOpen ? "open" : ""} ${value ? "has-value" : ""}`}
+        onClick={() => setIsOpen((prev) => !prev)}
+        tabIndex={0}
+        role="button"
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            setIsOpen((prev) => !prev);
+          }
+          if (e.key === "Escape") {
+            setIsOpen(false);
+          }
+        }}
+      >
+        <span className={value ? "dropdown-selected-text" : "dropdown-placeholder"}>
+          {value || placeholder}
+        </span>
+        <ChevronDown size={17} className={`dropdown-chevron ${isOpen ? "rotate" : ""}`} />
+      </div>
+
+      {isOpen && (
+        <div className="custom-dropdown-menu" role="listbox">
+          {options.map((option) => (
+            <div
+              key={option}
+              className={`custom-dropdown-item ${value === option ? "selected" : ""}`}
+              onClick={() => {
+                onChange(option);
+                setIsOpen(false);
+              }}
+              role="option"
+              aria-selected={value === option}
+            >
+              <span>{option}</span>
+              {value === option && <Check size={15} className="dropdown-check-icon" />}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Home() {
+  const [theme, setTheme] = useState<"dark" | "light">(() => {
+    const saved = localStorage.getItem("worktrail_home_theme");
+    return saved === "light" || saved === "dark" ? saved : "dark";
+  });
+
+  const toggleTheme = () => {
+    setTheme((prev) => {
+      const next = prev === "dark" ? "light" : "dark";
+      localStorage.setItem("worktrail_home_theme", next);
+      return next;
+    });
+  };
+
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeStep, setActiveStep] = useState(0);
   const [benefitsTab, setBenefitsTab] = useState<"candidate" | "partner">("candidate");
@@ -141,6 +301,17 @@ function Home() {
     setIsSubmitting(true);
     setFormError("");
     setFormSuccess("");
+
+    if (!formState.businessType) {
+      setFormError("Please select your business type.");
+      setIsSubmitting(false);
+      return;
+    }
+    if (!formState.employeeCount) {
+      setFormError("Please select the number of employees.");
+      setIsSubmitting(false);
+      return;
+    }
 
     try {
       if (import.meta.env.DEV) {
@@ -208,7 +379,7 @@ function Home() {
   }, []);
 
   return (
-    <main className="home-page">
+    <main className={`home-page ${theme}`}>
       <header className="home-header">
         <div className="home-container home-nav">
           <motion.a
@@ -220,7 +391,11 @@ function Home() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
           >
-            <img className="public-logo" src="https://worktrail.ai/static/assets/img/securitas_ab_logo.svg" alt="" />
+            <img
+              className="public-logo"
+              src={theme === "light" ? logoBlack : logoWhite}
+              alt="Securitas Logo"
+            />
           </motion.a>
           <nav className={menuOpen ? "home-menu open" : "home-menu"}>
             <a href="#solutions" onClick={() => setMenuOpen(false)}>
@@ -245,15 +420,49 @@ function Home() {
             >
               Get Started <ArrowRight size={15} />
             </a>
+            <button
+              type="button"
+              className="theme-toggle-btn desktop-theme-btn"
+              onClick={toggleTheme}
+              aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+              title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+            >
+              {theme === "dark" ? (
+                <>
+                  <Sun size={15} className="theme-toggle-icon sun" />
+                  <span>Light</span>
+                </>
+              ) : (
+                <>
+                  <Moon size={15} className="theme-toggle-icon moon" />
+                  <span>Dark</span>
+                </>
+              )}
+            </button>
           </nav>
-          <button
-            className="menu-toggle"
-            type="button"
-            aria-label="Toggle menu"
-            onClick={() => setMenuOpen((open) => !open)}
-          >
-            {menuOpen ? <X size={24} /> : <Menu size={24} />}
-          </button>
+          <div className="home-nav-mobile-bar">
+            <button
+              type="button"
+              className="theme-toggle-btn mobile-theme-btn"
+              onClick={toggleTheme}
+              aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+              title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+            >
+              {theme === "dark" ? (
+                <Sun size={18} className="theme-toggle-icon sun" />
+              ) : (
+                <Moon size={18} className="theme-toggle-icon moon" />
+              )}
+            </button>
+            <button
+              className="menu-toggle"
+              type="button"
+              aria-label="Toggle menu"
+              onClick={() => setMenuOpen((open) => !open)}
+            >
+              {menuOpen ? <X size={24} /> : <Menu size={24} />}
+            </button>
+          </div>
         </div>
       </header>
 
@@ -347,14 +556,46 @@ function Home() {
         </div>
       </motion.section>
 
-      <div className="compliance-marquee">
-        <motion.div
-          className="marquee-track"
-          animate={{ x: ["0%", "-50%"] }}
-          transition={{ duration: 24, repeat: Infinity, ease: "linear" }}
-        >
-          Proven Prevention <b>/</b> Integrity Matters <b>/</b> Minimize Delays <b>/</b> Trusted Service <b>/</b> Integrity Matters <b>/</b> Integrity Matters <b>/</b> Integrity Matters <b>/</b> Trusted Service <b>/</b> Proven Prevention <b>/</b> Integrity Matters <b>/</b> Minimize Delays <b>/</b> Trusted Service <b>/</b>
-        </motion.div>
+      <div className="compliance-marquee-wrapper">
+        <div className="compliance-marquee">
+          <motion.div
+            className="marquee-track"
+            animate={{ x: ["0%", "-50%"] }}
+            transition={{ duration: 34, repeat: Infinity, ease: "linear" }}
+          >
+            {[...complianceMarqueeItems, ...complianceMarqueeItems].map((item, idx) => {
+              const ItemIcon = item.icon;
+              return (
+                <div key={idx} className="marquee-pill-group">
+                  <div className="marquee-pill">
+                    <span
+                      className="marquee-icon-wrapper"
+                      style={{
+                        color: item.color,
+                        background: `${item.color}18`,
+                        borderColor: `${item.color}35`,
+                      }}
+                    >
+                      <ItemIcon size={16} />
+                    </span>
+                    <span className="marquee-pill-title">{item.title}</span>
+                    <span
+                      className="marquee-pill-badge"
+                      style={{
+                        color: item.color,
+                        background: `${item.color}15`,
+                        borderColor: `${item.color}30`,
+                      }}
+                    >
+                      {item.badge}
+                    </span>
+                  </div>
+                  <span className="marquee-separator">✦</span>
+                </div>
+              );
+            })}
+          </motion.div>
+        </div>
       </div>
 
       <section className="challenge-section" id="resources">
@@ -830,21 +1071,13 @@ function Home() {
                   required
                 />
               </div>
-              <div className="form-group">
-                <label>Business Type</label>
-                <select
-                  name="businessType"
-                  value={formState.businessType}
-                  onChange={handleInputChange}
-                  required
-                >
-                  <option value="">Select business type</option>
-                  <option value="Background Screening Agency">Background Screening Agency</option>
-                  <option value="Enterprise Employer">Enterprise Employer</option>
-                  <option value="Startup / SME">Startup / SME</option>
-                  <option value="Other">Other</option>
-                </select>
-              </div>
+              <CustomDropdown
+                label="Business Type"
+                value={formState.businessType}
+                options={businessTypeOptions}
+                placeholder="Select business type"
+                onChange={(val) => setFormState((prev) => ({ ...prev, businessType: val }))}
+              />
               <div className="form-group">
                 <label>Phone Number</label>
                 <input
@@ -856,21 +1089,13 @@ function Home() {
                   required
                 />
               </div>
-              <div className="form-group">
-                <label>Number of Employees</label>
-                <select
-                  name="employeeCount"
-                  value={formState.employeeCount}
-                  onChange={handleInputChange}
-                  required
-                >
-                  <option value="">Select employee count</option>
-                  <option value="1-99">1-99</option>
-                  <option value="100-499">100-499</option>
-                  <option value="500-1999">500-1999</option>
-                  <option value="2000+">2000+</option>
-                </select>
-              </div>
+              <CustomDropdown
+                label="Number of Employees"
+                value={formState.employeeCount}
+                options={employeeCountOptions}
+                placeholder="Select employee count"
+                onChange={(val) => setFormState((prev) => ({ ...prev, employeeCount: val }))}
+              />
               <div className="form-group full-width">
                 <label>Message</label>
                 <textarea
@@ -898,7 +1123,11 @@ function Home() {
         <div className="home-container footer-inner-grid">
           <div className="footer-brand-col">
             <span className="securitas-logo">
-              <img className="public-logo" src="https://worktrail.ai/static/assets/img/securitas_ab_logo.svg" alt="" />
+              <img
+                className="public-logo"
+                src={theme === "light" ? logoBlack : logoWhite}
+                alt="Securitas Logo"
+              />
             </span>
             <p className="footer-brand-desc">
               Streamlining background screening and credential verification for complex workforce environments.
