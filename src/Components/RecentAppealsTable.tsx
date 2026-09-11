@@ -699,8 +699,8 @@ export const RecentAppealsTable: React.FC<RecentAppealsTableProps> = ({
                       {/* ... Data columns ... */}
                       <td className="px-6 py-4">
                         <div className="flex flex-col">
-                          <span className="font-mono font-bold text-[#0680A6]">{rec.requestId}</span>
-                          <span className="inline-flex items-center gap-1 text-[10px] font-mono font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md w-fit mt-1">
+                          <span className=" font-bold text-[#0680A6]">{rec.requestId}</span>
+                          <span className="inline-flex items-center gap-1 text-[10px]  font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md w-fit mt-1">
                             {rec.clientId || defaultClientId}
                           </span>
                         </div>
@@ -708,7 +708,7 @@ export const RecentAppealsTable: React.FC<RecentAppealsTableProps> = ({
                       <td className="px-6 py-4">
                         <div className="flex flex-col">
                           <span className="font-bold text-slate-900">{rec.candidateName}</span>
-                          <span className="text-xs text-slate-400 font-mono">ID: {rec.employeeId}</span>
+                          <span className="text-xs text-slate-400 ">ID: {rec.employeeId}</span>
                           {rec.candidateEmail && (
                             <span className="text-[11px] text-slate-400 truncate max-w-[170px]">{rec.candidateEmail}</span>
                           )}
@@ -831,15 +831,15 @@ export const RecentAppealsTable: React.FC<RecentAppealsTableProps> = ({
                 </span>
                 <h3 className="text-base font-bold text-slate-900">
                   {uploadTargetRecord.candidateName}{" "}
-                  <span className="font-mono text-xs text-slate-400">
+                  <span className=" text-xs text-slate-400">
                     ({uploadTargetRecord.requestId})
                   </span>
                 </h3>
                 <div className="text-xs text-slate-500 mt-0.5">
-                  Employee Code: <span className="font-mono">{uploadTargetRecord.employeeId}</span>
+                  Employee Code: <span className="">{uploadTargetRecord.employeeId}</span>
                 </div>
                 <div className="text-xs text-slate-500">
-                  Contributor: <span className="font-mono">{uploadTargetRecord.verifierName}</span>
+                  Contributor: <span className="">{uploadTargetRecord.verifierName}</span>
                 </div>
               </div>
               <button

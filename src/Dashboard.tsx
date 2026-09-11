@@ -596,7 +596,7 @@ function Dashboard() {
                     <span className="text-[10px] font-extrabold uppercase tracking-wider text-teal-700 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200/60">
                       Client ID
                     </span>
-                    <span className="font-extrabold text-slate-900 font-mono">{clientInfo.clientId}</span>
+                    <span className="font-extrabold text-slate-900 ">{clientInfo.clientId}</span>
                     {clientInfo.clientName && (
                       <>
                         <span className="text-slate-300">•</span>
