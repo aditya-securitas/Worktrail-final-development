@@ -216,7 +216,7 @@ export const VerifierPicker: React.FC<VerifierPickerProps> = ({
 
                 {/* Dropdown Floating Panel */}
                 {isDropdownOpen && (
-                  <div className="absolute top-full left-0 right-0 mt-1.5 bg-white rounded-xl shadow-xl border border-slate-200 overflow-hidden z-50 max-h-72 flex flex-col animate-fade-in-down">
+                  <div className=" mt-1.5 bg-white rounded-xl shadow-xl border border-slate-200 overflow-hidden z-50 max-h-72 flex flex-col animate-fade-in-down">
                     <div className="p-2 border-b border-slate-100 bg-slate-50 flex items-center justify-between text-[11px] font-semibold text-slate-500">
                       <span>{filteredOrgs.length} Registered Enterprise{filteredOrgs.length === 1 ? '' : 's'}</span>
                       {searchQuery && <span>Filtering by "{searchQuery}"</span>}
@@ -248,9 +248,7 @@ export const VerifierPicker: React.FC<VerifierPickerProps> = ({
                                   <div className="text-xs font-bold text-slate-900 truncate">
                                     {org.OrganizationName}
                                   </div>
-                                  <span className="text-[10px] text-slate-400 font-mono">
-                                    ORG-{org.OrganizationID}
-                                  </span>
+                                  
                                 </div>
                               </div>
                               <div className="flex items-center gap-1.5 shrink-0">

@@ -18,7 +18,7 @@ import {
   buildCandidatePdf,
   getLogoImageData,
   getClientLogoData
-} from './Client'
+} from './pdf-utils'
 import { useAuth } from '../useAuth'
 
 const Recyclebin: React.FC = () => {

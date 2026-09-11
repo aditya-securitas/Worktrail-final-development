@@ -1,4 +1,4 @@
-import { useState, useRef, type ReactNode } from 'react'
+import { useState, useEffect, useRef, type ReactNode } from 'react'
 import { API_ENDPOINTS } from './endpoint'
 import {
   AuthContext,
@@ -38,12 +38,12 @@ const TOKEN_STORAGE_KEY = 'worktrail_token'
 
 function getMenuForUserType(usertype: string) {
   const ut = (usertype || '').toLowerCase().trim().replace(/[\s_-]+/g, '')
-  if (ut === 'superadmin') return SUPERADMIN_MENU
+  if (ut.includes('superadmin')) return SUPERADMIN_MENU
   if (ut === 'admin') return ADMIN_MENU
-  if (ut === 'contributoradmin' || ut === 'admincontributor') return CONTRIBUTOR_ADMIN_MENU
-  if (ut === 'contributor' || ut === 'contributoruser') return CONTRIBUTOR_MENU
-  if (ut === 'fascilator') return FASCILATOR_MENU
-  if (ut === 'client') return CLIENT_MENU
+  if (ut.includes('contributoradmin') || ut.includes('admincontributor')) return CONTRIBUTOR_ADMIN_MENU
+  if (ut.includes('contributor')) return CONTRIBUTOR_MENU
+  if (ut.includes('fascilator')) return FASCILATOR_MENU
+  if (ut.includes('client') || ut.includes('customer')) return CLIENT_MENU
   return []
 }
 
@@ -51,8 +51,18 @@ function readStoredUser(): AuthUser | null {
   const storedUser = localStorage.getItem(USER_STORAGE_KEY)
   if (!storedUser) return null
   try {
-    const user = JSON.parse(storedUser) as AuthUser
-    return user.activestatus === '1' && Boolean(localStorage.getItem(TOKEN_STORAGE_KEY)) ? user : null
+    const raw = JSON.parse(storedUser)
+    const storedEmail = localStorage.getItem('worktrail_client_email') || ''
+    const fallback =
+      raw.EmailID ||
+      raw.email ||
+      raw.Email ||
+      storedEmail ||
+      (raw.username && raw.username.includes('@') ? raw.username : '') ||
+      (raw.Usertype?.toLowerCase() === 'client' ? 'Client.worktrial@Securitas-india.com' : '')
+    const user = normalizeAuthUser(raw, raw, fallback) || (raw as AuthUser)
+    const isActive = String(user.activestatus ?? '1') === '1'
+    return isActive && Boolean(localStorage.getItem(TOKEN_STORAGE_KEY)) ? user : null
   } catch {
     localStorage.removeItem(USER_STORAGE_KEY)
     return null
@@ -62,10 +72,19 @@ function readStoredUser(): AuthUser | null {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(readStoredUser)
   const [token, setToken] = useState<string | null>(() => localStorage.getItem(TOKEN_STORAGE_KEY))
+  
+  const rawUserType = user?.Usertype || (user as any)?.UserType || (user as any)?.role || (user as any)?.usertype || ''
+  
   const [menu, setMenu] = useState(() => {
-    if (!user?.Usertype) return []
-    return getMenuForUserType(user.Usertype)
+    return getMenuForUserType(rawUserType)
   })
+
+  // Synchronize menu whenever user changes
+  useEffect(() => {
+    if (rawUserType) {
+      setMenu(getMenuForUserType(rawUserType))
+    }
+  }, [rawUserType])
   const [isLoading, setIsLoading] = useState(false)
   const isMenuLoading = false
   const menuError = ''
@@ -111,7 +130,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (import.meta.env.DEV) console.log('[Login API] Response:', responseData)
-      const data = getLoginResponse(responseData)
+      const data = getLoginResponse(responseData, cleanIdentifier)
 
       // 1. Immediately check if an OTP was sent to user's email
       const rawMessage = (typeof (responseData as any)?.message === 'string' ? (responseData as any).message : data.message) || ''
@@ -122,10 +141,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         (!data.token && /sent to your email/i.test(rawMessage))
 
       if (isOtpDispatched) {
-        // Stop here immediately! Never call altEndpoint or trigger additional OTP dispatches
+        const dispatchedEmail = (responseData as any)?.EmailID || (responseData as any)?.email || cleanIdentifier
+        if (dispatchedEmail) {
+          localStorage.setItem('worktrail_client_email', dispatchedEmail)
+        }
+        if ((responseData as any)?.user) {
+          try {
+            localStorage.setItem('worktrail_temp_user', JSON.stringify((responseData as any).user))
+          } catch {}
+        }
         return {
           otpRequired: true,
-          message: rawMessage || 'A login OTP was sent to your email.'
+          message: rawMessage || 'A login OTP was sent to your email.',
+          EmailID: dispatchedEmail
         }
       }
 
@@ -264,12 +292,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             console.log('[Verify Login OTP API] Response from', endpoint, ':', json)
           }
 
-          const parsed = getLoginResponse(json)
+          const parsed = getLoginResponse(json, cleanIdentifier)
 
-          if (parsed.loginStatus === true && parsed.token && parsed.user) {
-            verifiedUser = parsed.user
-            receivedToken = parsed.token
-            break
+          if (parsed.loginStatus === true && parsed.token) {
+            if (!parsed.user && localStorage.getItem('worktrail_temp_user')) {
+              try {
+                const temp = JSON.parse(localStorage.getItem('worktrail_temp_user') || '{}')
+                parsed.user = normalizeAuthUser(temp, json, cleanIdentifier) || undefined
+              } catch {}
+            }
+            if (parsed.user) {
+              const finalEmail = (json as any)?.EmailID || (json as any)?.email || parsed.user.email || cleanIdentifier
+              if (finalEmail) {
+                parsed.user.email = finalEmail
+                parsed.user.Email = finalEmail
+                parsed.user.EmailID = finalEmail
+                localStorage.setItem('worktrail_client_email', finalEmail)
+              }
+              verifiedUser = parsed.user
+              receivedToken = parsed.token
+              break
+            }
           }
 
           if (json && typeof json.message === 'string') {
@@ -343,15 +386,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 }
 
-function normalizeAuthUser(candidate: any): AuthUser | null {
+function normalizeAuthUser(candidate: any, rootPayload?: any, fallbackEmail?: string): AuthUser | null {
   if (typeof candidate !== 'object' || candidate === null) return null
   const usertype = candidate.Usertype || candidate.UserType || candidate.usertype || candidate.role || candidate.userType
   if (!usertype || typeof usertype !== 'string') return null
 
+  const resolvedEmail = String(
+    candidate.EmailID ||
+    candidate.email ||
+    candidate.Email ||
+    candidate.emailId ||
+    rootPayload?.EmailID ||
+    rootPayload?.email ||
+    rootPayload?.Email ||
+    rootPayload?.emailId ||
+    fallbackEmail ||
+    (candidate.username && candidate.username.includes('@') ? candidate.username : '') ||
+    ''
+  ).trim()
+
   const activestatus = candidate.activestatus !== undefined ? String(candidate.activestatus) : '1'
   return {
-    id: candidate.id,
-    username: candidate.username || candidate.EmailID || candidate.email || '',
+    ...candidate,
+    id: candidate.id || candidate.UserMasterID || candidate.userMasterId,
+    UserMasterID: candidate.UserMasterID,
+    OrgMasterID: candidate.OrgMasterID,
+    CompanyCode: candidate.CompanyCode,
+    username: candidate.username || resolvedEmail || '',
+    email: resolvedEmail,
+    Email: resolvedEmail,
+    EmailID: resolvedEmail,
     FirstName: candidate.FirstName || candidate.firstName || '',
     LastName: candidate.LastName || candidate.lastName || '',
     CompanyName: candidate.CompanyName || candidate.companyName || '',
@@ -361,11 +425,27 @@ function normalizeAuthUser(candidate: any): AuthUser | null {
   }
 }
 
-function getLoginResponse(value: unknown): LoginResponse {
+function getLoginResponse(value: unknown, fallbackEmail?: string): LoginResponse {
   if (typeof value !== 'object' || value === null) return {}
-  const response = value as { message?: unknown; user?: unknown; data?: unknown; loginStatus?: unknown; token?: unknown }
-  
-  const user = normalizeAuthUser(response.user)
+  const response = value as {
+    message?: unknown
+    user?: unknown
+    data?: unknown
+    loginStatus?: unknown
+    token?: unknown
+    EmailID?: unknown
+    email?: unknown
+    Email?: unknown
+  }
+
+  const payloadEmail =
+    (typeof response.EmailID === 'string' ? response.EmailID : '') ||
+    (typeof response.email === 'string' ? response.email : '') ||
+    (typeof response.Email === 'string' ? response.Email : '') ||
+    fallbackEmail ||
+    ''
+
+  const user = normalizeAuthUser(response.user, response, payloadEmail)
   if (user) {
     return {
       message: typeof response.message === 'string' ? response.message : undefined,
@@ -374,7 +454,7 @@ function getLoginResponse(value: unknown): LoginResponse {
       user
     }
   }
-  if (typeof response.data === 'object' && response.data !== null) return getLoginResponse(response.data)
+  if (typeof response.data === 'object' && response.data !== null) return getLoginResponse(response.data, fallbackEmail || payloadEmail)
   return {
     message: typeof response.message === 'string' ? response.message : undefined,
     loginStatus: response.loginStatus === true || response.loginStatus === 'true',

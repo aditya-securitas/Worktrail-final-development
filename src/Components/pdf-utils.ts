@@ -1,4 +1,3 @@
-import { Navigate } from 'react-router-dom'
 import { type VerificationRecord } from './CandidateVerificationForm'
 import { getDynamicBrandDomain } from './OrgLogo'
 import securitasLogo from '../assets/Img/logo_b.png'
@@ -239,7 +238,7 @@ function pdfCircle(cx: number, cy: number, r: number): string {
   return (
     `${cx.toFixed(2)} ${(cy + r).toFixed(2)} m\n` +
     `${(cx + c).toFixed(2)} ${(cy + r).toFixed(2)} ${(cx + r).toFixed(2)} ${(cy + c).toFixed(2)} ${(cx + r).toFixed(2)} ${cy.toFixed(2)} c\n` +
-    `${(cx + r).toFixed(2)} ${(cy - c).toFixed(2)} ${(cx + c).toFixed(2)} ${(cy - r).toFixed(2)} ${cx.toFixed(2)} ${(cy - r).toFixed(2)} c\n` +
+    `${(cx + r).toFixed(2)} ${(cy - c).toFixed(2)} ${(cx + c).toFixed(2)} ${(cx - r).toFixed(2)} ${cx.toFixed(2)} ${(cy - r).toFixed(2)} c\n` +
     `${(cx - c).toFixed(2)} ${(cy - r).toFixed(2)} ${(cx - r).toFixed(2)} ${(cy - c).toFixed(2)} ${(cx - r).toFixed(2)} ${cy.toFixed(2)} c\n` +
     `f\n`
   )
@@ -546,8 +545,4 @@ export function buildCandidatePdf(
   s += 'BT /F1 8 Tf 0.06 0.73 0.51 rg 395 62 Td (CERTIFIED VERIFICATION DOCKET) Tj ET\n'
 
   return buildPdf(s, logoData, clientLogoData)
-}
-
-export default function Client() {
-  return <Navigate to="/ClientRequest" replace />
 }

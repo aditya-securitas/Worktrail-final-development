@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import type { MenuRoute } from '../auth-context'
+import { type MenuRoute, CLIENT_MENU } from '../auth-context'
 import { flattenMenu, menuPath } from './sidebar-utils'
 import { useAuth } from '../useAuth'
 import {
@@ -18,6 +18,7 @@ import {
   FileText,
   Globe,
   Receipt,
+  ClipboardList,
   X
 } from 'lucide-react'
 import securitasLogo from '../assets/Img/logo_w.png'
@@ -34,8 +35,26 @@ type SidebarProps = {
 function Sidebar({ state, onClose, userType, menu, isLoading, error }: SidebarProps) {
   const location = useLocation()
   const navigate = useNavigate()
-  const { logout } = useAuth()
-  const menuItems = flattenMenu(menu)
+  const { logout, user } = useAuth()
+
+  // Robust client identification across any naming casing
+  const effectiveUserType = (
+    userType ||
+    user?.Usertype ||
+    (user as any)?.UserType ||
+    (user as any)?.role ||
+    ''
+  ).toLowerCase().trim().replace(/[\s_-]+/g, '')
+
+  const isClient = effectiveUserType.includes('client')
+
+  // Guarantee client menu items are present even if menu state from context is stale/empty
+  let resolvedMenu = (menu && menu.length > 0) ? menu : (isClient ? CLIENT_MENU : [])
+  if (isClient && !resolvedMenu.some(item => item.Route.toLowerCase().includes('clientrequest') || item.components.toLowerCase().includes('clientrequest'))) {
+    resolvedMenu = CLIENT_MENU
+  }
+
+  const menuItems = flattenMenu(resolvedMenu)
 
   const handleLogout = () => {
     logout()
@@ -54,7 +73,7 @@ function Sidebar({ state, onClose, userType, menu, isLoading, error }: SidebarPr
     if (comp.includes('orgmaster')) return Building2
     if (comp.includes('usermaster')) return UserCog
     if (comp.includes('recyclebin')) return Trash2
-    if (comp.includes('client')) return userType?.toLowerCase() === 'client' ? FileText : Building
+    if (comp.includes('clientrequest') || route.includes('clientrequest')) return ClipboardList
     if (comp.includes('contributor')) return User
     if (comp.includes('invoice')) return Receipt
     if (comp.includes('privacypolicy')) return Lock
@@ -75,9 +94,9 @@ function Sidebar({ state, onClose, userType, menu, isLoading, error }: SidebarPr
     if (comp.includes('orgmaster')) return 'Org Master'
     if (comp.includes('usermaster')) return 'User Master'
     if (comp.includes('recyclebin')) return 'Recycle Bin'
-    if (comp.includes('client')) return userType?.toLowerCase() === 'client' ? 'Raised Requests' : 'Client'
+    if (comp.includes('clientrequest') || route.includes('clientrequest')) return 'Client Request'
     if (comp.includes('contributor')) return 'Contributor'
-    if (comp.includes('invoice')) return userType?.toLowerCase() === 'client' ? 'Invoice' : 'Invoices & Reports'
+    if (comp.includes('invoice')) return isClient ? 'Invoice' : 'Invoices & Reports'
     if (comp.includes('privacypolicy')) return 'Privacy Policy'
     if (comp.includes('termsandconditions')) return 'Terms & Conditions'
     if (comp.includes('otherservices')) return 'Other Services'
