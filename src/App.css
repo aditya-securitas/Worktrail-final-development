@@ -265,6 +265,10 @@ button {
 
 .bg-custom-gradient {
 	background: linear-gradient(195deg, #031f30 0%, #082d42 40%, #105963 70%, #1ba08d 90%, #2ecc71 100%);
+	/* background: linear-gradient(135deg, #10B981 0%, #5850EC 100%); */
+	/* background: linear-gradient(135deg,#5850EC 0%,   #10B981 100%); */
+
+
 }
 
 .form-panel {

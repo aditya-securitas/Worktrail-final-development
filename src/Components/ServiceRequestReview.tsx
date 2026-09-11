@@ -833,13 +833,13 @@ const ServiceRequestReview: React.FC<any> = (props) => {
   // Formatted JSON line-by-line viewer
   const renderFormattedJson = (jsonObj: any): React.ReactNode => {
     if (jsonObj === undefined || jsonObj === null) {
-      return <span className="text-rose-400 font-mono italic">null</span>;
+      return <span className="text-rose-400  italic">null</span>;
     }
     const jsonStr = typeof jsonObj === 'string' ? jsonObj : JSON.stringify(jsonObj, null, 2);
     const lines = jsonStr.split('\n');
 
     return (
-      <div className="font-mono text-xs leading-relaxed select-text">
+      <div className=" text-xs leading-relaxed select-text">
         {lines.map((line, idx) => {
           const keyMatch = line.match(/^(\s*)(".*?")(\s*:\s*)(.*)$/);
           if (keyMatch) {
@@ -859,7 +859,7 @@ const ServiceRequestReview: React.FC<any> = (props) => {
             }
             return (
               <div key={idx} className="flex hover:bg-slate-900/70 px-2 py-0.5 rounded transition-colors group">
-                <span className="w-10 shrink-0 text-slate-600 select-none text-right pr-4 font-mono text-[11px] group-hover:text-slate-400">
+                <span className="w-10 shrink-0 text-slate-600 select-none text-right pr-4  text-[11px] group-hover:text-slate-400">
                   {idx + 1}
                 </span>
                 <span className="flex-1 whitespace-pre">
@@ -873,7 +873,7 @@ const ServiceRequestReview: React.FC<any> = (props) => {
           }
           return (
             <div key={idx} className="flex hover:bg-slate-900/70 px-2 py-0.5 rounded transition-colors group">
-              <span className="w-10 shrink-0 text-slate-600 select-none text-right pr-4 font-mono text-[11px] group-hover:text-slate-400">
+              <span className="w-10 shrink-0 text-slate-600 select-none text-right pr-4  text-[11px] group-hover:text-slate-400">
                 {idx + 1}
               </span>
               <span className="flex-1 whitespace-pre text-slate-400">{line}</span>
@@ -989,12 +989,12 @@ const ServiceRequestReview: React.FC<any> = (props) => {
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2.5 text-xs text-slate-500">
-                      <span className="inline-flex items-center gap-1 font-mono font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md">
+                      <span className="inline-flex items-center gap-1  font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md">
                         <Building2 className="w-3 h-3 text-[#0680A6]" />
                         ID: {record?.employeeId || '—'}
                       </span>
 
-                      <span className="inline-flex items-center gap-1 font-mono text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">
+                      <span className="inline-flex items-center gap-1  text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">
                         Order: {record?.requestId || '—'}
                       </span>
 
@@ -1075,7 +1075,7 @@ const ServiceRequestReview: React.FC<any> = (props) => {
                         onClick={() => setFilterMode(f.id as any)}
                         className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
                           filterMode === f.id
-                            ? 'bg-slate-900 text-white shadow-xs'
+                            ? 'bg-gradient-to-r from-[#10B981] to-[#5850EC] text-white shadow-xs'
                             : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
                         }`}
                       >
@@ -1125,7 +1125,7 @@ const ServiceRequestReview: React.FC<any> = (props) => {
                     <div className="md:col-span-4 p-4 flex items-center gap-2 border-r border-slate-200/60">
                       <User className="w-4 h-4 text-[#0680A6]" />
                       <span>Client Submitted Claim</span>
-                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-white text-slate-500 border border-slate-200 ml-auto">
+                      <span className="text-[10px]  px-2 py-0.5 rounded bg-white text-slate-500 border border-slate-200 ml-auto">
                         Client Declared
                       </span>
                     </div>
@@ -1138,7 +1138,7 @@ const ServiceRequestReview: React.FC<any> = (props) => {
                     <div className="md:col-span-4 p-4 flex items-center gap-2">
                       <Building2 className="w-4 h-4 text-emerald-600" />
                       <span>Contributor Master Record</span>
-                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 ml-auto">
+                      <span className="text-[10px]  px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 ml-auto">
                         Official DB
                       </span>
                     </div>

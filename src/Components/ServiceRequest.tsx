@@ -401,7 +401,7 @@ const ServiceRequest: React.FC = () => {
               onClick={() => setStatusFilter('all')}
               className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer whitespace-nowrap ${
                 statusFilter === 'all'
-                  ? 'bg-[#031f30] text-white shadow-xs'
+                  ? 'bg-gradient-to-r from-[#10B981] to-[#5850EC] text-white shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
@@ -413,7 +413,7 @@ const ServiceRequest: React.FC = () => {
               onClick={() => setStatusFilter('pending')}
               className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer whitespace-nowrap ${
                 statusFilter === 'pending'
-                  ? 'bg-amber-600 text-white shadow-xs'
+                  ? 'bg-gradient-to-r from-[#10B981] to-[#5850EC] text-white shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
@@ -425,7 +425,7 @@ const ServiceRequest: React.FC = () => {
               onClick={() => setStatusFilter('in_progress')}
               className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer whitespace-nowrap ${
                 statusFilter === 'in_progress'
-                  ? 'bg-sky-600 text-white shadow-xs'
+                  ? 'bg-gradient-to-r from-[#10B981] to-[#5850EC] text-white shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
@@ -437,7 +437,7 @@ const ServiceRequest: React.FC = () => {
               onClick={() => setStatusFilter('completed')}
               className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer whitespace-nowrap ${
                 statusFilter === 'completed'
-                  ? 'bg-emerald-600 text-white shadow-xs'
+                  ? 'bg-gradient-to-r from-[#10B981] to-[#5850EC] text-white shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
@@ -474,7 +474,7 @@ const ServiceRequest: React.FC = () => {
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Order ID:</span>
               <select
-                className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-800 font-mono font-semibold outline-none focus:border-[#0680A6] focus:bg-white cursor-pointer"
+                className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-800  font-semibold outline-none focus:border-[#0680A6] focus:bg-white cursor-pointer"
                 value={orderId}
                 onChange={(e) => {
                   setOrderId(e.target.value);
@@ -494,7 +494,7 @@ const ServiceRequest: React.FC = () => {
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Employee:</span>
               <select
-                className={`bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-mono font-semibold outline-none focus:border-[#0680A6] focus:bg-white cursor-pointer ${
+                className={`bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs  font-semibold outline-none focus:border-[#0680A6] focus:bg-white cursor-pointer ${
                   !orderId ? 'text-slate-400 cursor-not-allowed opacity-60' : 'text-slate-800'
                 }`}
                 disabled={!orderId}
@@ -641,7 +641,7 @@ const ServiceRequest: React.FC = () => {
 
                       {/* 2. Employee Code */}
                       <td className="py-4 px-4">
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 border border-slate-200/80 font-mono font-bold text-xs text-slate-800">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 border border-slate-200/80  font-bold text-xs text-slate-800">
                           <Building2 className="w-3 h-3 text-[#0680A6]" />
                           {rec.EmployeeCode || '—'}
                         </span>
@@ -649,7 +649,7 @@ const ServiceRequest: React.FC = () => {
 
                       {/* 3. Order ID */}
                       <td className="py-4 px-4">
-                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-sky-50 border border-sky-100 font-mono text-xs text-[#0680A6] font-semibold">
+                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-sky-50 border border-sky-100  text-xs text-[#0680A6] font-semibold">
                           {rec.OrderID || '—'}
                         </span>
                       </td>
@@ -670,7 +670,7 @@ const ServiceRequest: React.FC = () => {
 
                       {/* 5. Service Tenure */}
                       <td className="py-4 px-4">
-                        <div className="space-y-0.5 font-mono text-[11px]">
+                        <div className="space-y-0.5  text-[11px]">
                           <span className="text-slate-700 block">
                             DOJ: <strong className="text-slate-900">{rec.DateOfJoining?.split('T')[0] || '—'}</strong>
                           </span>
