@@ -899,7 +899,7 @@ export const RecentAppealsTable: React.FC<RecentAppealsTableProps> = ({
               <button
                 type="button"
                 onClick={handleCloseUploadModal}
-                className="px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs cursor-pointer transition-colors"
+                className="px-5 py-2 rounded-xl text-slate-600 outline outline-slate-200  font-bold text-xs cursor-pointer transition-colors"
                 disabled={uploadLoading}
               >
                 Cancel
@@ -912,7 +912,7 @@ export const RecentAppealsTable: React.FC<RecentAppealsTableProps> = ({
                   px-5 py-2 rounded-xl font-bold text-xs cursor-pointer transition-colors
                   shadow
                   ${(!uploadLOAFile || uploadLoading)
-                    ? 'bg-slate-400 text-white opacity-70 cursor-not-allowed'
+                    ? 'bg-gradient-to-r from-[#10B981] to-[#5850EC] text-white opacity-70 cursor-not-allowed'
                     : 'bg-[#0680A6] hover:bg-emerald-700 text-white'}
                 `}
               >

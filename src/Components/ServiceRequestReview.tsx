@@ -1048,7 +1048,7 @@ const ServiceRequestReview: React.FC<any> = (props) => {
 
                 <div className="w-36 sm:w-64 bg-slate-100 h-2 rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-[#0680A6] transition-all duration-300 rounded-full"
+                    className="h-full bg-gradient-to-r from-[#10B981] to-[#5850EC] transition-all duration-300 rounded-full"
                     style={{ width: `${stats.auditCompletionPercent}%` }}
                   />
                 </div>
@@ -1121,22 +1121,22 @@ const ServiceRequestReview: React.FC<any> = (props) => {
                 {/* 4. Side-by-Side Comparison Container */}
                 <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden">
                   {/* Column Headers */}
-                  <div className="grid grid-cols-1 md:grid-cols-12 bg-slate-100/70 border-b border-slate-200 text-xs font-bold uppercase tracking-wider text-slate-600">
-                    <div className="md:col-span-4 p-4 flex items-center gap-2 border-r border-slate-200/60">
-                      <User className="w-4 h-4 text-[#0680A6]" />
+                  <div className="grid grid-cols-1 md:grid-cols-12 bg-gradient-to-r from-[#10B981] to-[#5850EC] border-b border-slate-200 text-xs font-bold uppercase tracking-wider text-white">
+                    <div className="md:col-span-4 p-4 flex items-center gap-2 border-r border-white">
+                      <User className="w-4 h-4 text-white" />
                       <span>Client Submitted Claim</span>
                       <span className="text-[10px]  px-2 py-0.5 rounded bg-white text-slate-500 border border-slate-200 ml-auto">
                         Client Declared
                       </span>
                     </div>
 
-                    <div className="md:col-span-4 p-4 flex items-center justify-center gap-2 border-r border-slate-200/60 text-center">
-                      <Scale className="w-4 h-4 text-slate-500" />
+                    <div className="md:col-span-4 p-4 flex items-center justify-center gap-2 border-r border-white text-center">
+                      <Scale className="w-4 h-4 text-white" />
                       <span>Audit & Comparison Verdict</span>
                     </div>
 
                     <div className="md:col-span-4 p-4 flex items-center gap-2">
-                      <Building2 className="w-4 h-4 text-emerald-600" />
+                      <Building2 className="w-4 h-4 text-white" />
                       <span>Contributor Master Record</span>
                       <span className="text-[10px]  px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 ml-auto">
                         Official DB
