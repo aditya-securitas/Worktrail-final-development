@@ -80,6 +80,9 @@ const API_HEADERS = {
   'Content-Type': 'application/json'
 };
 
+// Add UpdateFinalReport constant
+const UPDATE_FINAL_REPORT_URL = 'https://worktrail.ai/api/UpdateFinalReport';
+
 export interface FieldVerificationState {
   verified: boolean | null; // true = Yes, false = No, null = unselected
   remarks?: string;
@@ -766,7 +769,44 @@ const ServiceRequestReview: React.FC<any> = (props) => {
     showToast('All field verifications reset.', 'info');
   };
 
-  // Submit Final Review Decision
+  // --- Begin: UpdateFinalReport Helper ---
+  // Helper to call UpdateFinalReport endpoint
+  const updateFinalReport = async ({
+    contributor,
+    employeeCode,
+    status,
+    downloadStatus,
+  }: {
+    contributor: string;
+    employeeCode: string;
+    status: string;
+    downloadStatus: string | number;
+  }) => {
+    try {
+      const payload = {
+        Contributor: contributor,
+        EmployeeCode: employeeCode,
+        Status: status,
+        DownloadStatus: downloadStatus,
+      };
+      console.log(payload)
+      const res = await fetch(UPDATE_FINAL_REPORT_URL, {
+        method: 'POST',
+        headers: API_HEADERS,
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const errMsg = await res.text();
+        throw new Error(`UpdateFinalReport API failed: ${res.status} ${errMsg}`);
+      }
+      return await res.json();
+    } catch (err: any) {
+      throw err;
+    }
+  };
+  // --- End: UpdateFinalReport Helper ---
+
+  // Submit Final Review Decision (general/local update)
   const handleSaveVerification = async () => {
     if (!record) return;
     setIsUpdating(true);
@@ -794,6 +834,76 @@ const ServiceRequestReview: React.FC<any> = (props) => {
     } catch {
       showToast(`Verification decision updated locally as "${actionStatus}".`, 'success');
       setRecord((prev) => (prev ? { ...prev, status: actionStatus, remarks: overallRemarks } : null));
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  // Approve & Verify Handler (calls UpdateFinalReport API)
+  const handleApproveAndVerify = async () => {
+    if (!record) return;
+    setIsUpdating(true);
+
+    const contributor = contributorFromProps || record.verifierName || '';
+    const employeeCode = record.employeeId || '';
+    try {
+      await updateFinalReport({
+        contributor,
+        employeeCode,
+        status: 'Approved',
+        downloadStatus: 1,
+      });
+      setActionStatus('Verified');
+      showToast('Record marked as Approved/Verified and API updated.', 'success');
+      setRecord((prev) =>
+        prev
+          ? {
+              ...prev,
+              status: 'Verified',
+              remarks: overallRemarks
+            }
+          : null
+      );
+    } catch (err: any) {
+      showToast(
+        `Failed to update "Approved" status via API - ${err?.message || 'Network error'}`,
+        'error'
+      );
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  // Reject Request Handler (calls UpdateFinalReport API)
+  const handleRejectRequest = async () => {
+    if (!record) return;
+    setIsUpdating(true);
+
+    const contributor = contributorFromProps || record.verifierName || '';
+    const employeeCode = record.employeeId || '';
+    try {
+      await updateFinalReport({
+        contributor,
+        employeeCode,
+        status: 'Rejected',
+        downloadStatus: 1,
+      });
+      setActionStatus('Rejected');
+      showToast('Record marked as Rejected and API updated.', 'success');
+      setRecord((prev) =>
+        prev
+          ? {
+              ...prev,
+              status: 'Rejected',
+              remarks: overallRemarks
+            }
+          : null
+      );
+    } catch (err: any) {
+      showToast(
+        `Failed to update "Rejected" status via API - ${err?.message || 'Network error'}`,
+        'error'
+      );
     } finally {
       setIsUpdating(false);
     }
@@ -1355,7 +1465,8 @@ const ServiceRequestReview: React.FC<any> = (props) => {
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={() => setActionStatus('Verified')}
+                        onClick={handleApproveAndVerify}
+                        disabled={isUpdating || actionStatus === "Verified"}
                         className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs ${
                           actionStatus === 'Verified'
                             ? 'bg-emerald-600 text-white shadow-emerald-500/25 ring-2 ring-emerald-600/30'
@@ -1381,7 +1492,8 @@ const ServiceRequestReview: React.FC<any> = (props) => {
 
                       <button
                         type="button"
-                        onClick={() => setActionStatus('Rejected')}
+                        onClick={handleRejectRequest}
+                        disabled={isUpdating || actionStatus === "Rejected"}
                         className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs ${
                           actionStatus === 'Rejected'
                             ? 'bg-rose-600 text-white shadow-rose-500/25 ring-2 ring-rose-600/30'

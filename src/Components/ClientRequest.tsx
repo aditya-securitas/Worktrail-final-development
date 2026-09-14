@@ -53,6 +53,7 @@ export type RawEmployeeRecord = {
   LOA?: string | null;
   SupportingDocs?: string | null;
   Status?: string;
+  Downloadstatus?: string | number | null;
   [key: string]: any;
 };
 
@@ -75,6 +76,9 @@ const ClientRequest: React.FC = () => {
   const [selectedRecord, setSelectedRecord] = useState<VerificationRecord | null>(null);
   const [checkingStatusId, setCheckingStatusId] = useState<string | null>(null);
   const [statusFeedback, setStatusFeedback] = useState<Record<string, string>>({});
+
+  // Download PDF loading state (set keyed by record id)
+  const [downloadingPdf, setDownloadingPdf] = useState<Record<string, boolean>>({});
 
   // Client Identifier (e.g. CL-SECURITASCLIENT)
   const clientIdentifier = useMemo(() => {
@@ -177,6 +181,7 @@ const ClientRequest: React.FC = () => {
         const recId = rawOrderId || `REQ-${idx + 1}`;
         const uniqueId = String(item.Sno || rawEmpCode || `${recId}-${idx}`);
 
+        // This will preserve Downloadstatus from API under .raw property so we can access it in the UI
         return {
           id: uniqueId,
           requestId: recId,
@@ -202,7 +207,7 @@ const ClientRequest: React.FC = () => {
           submittedAt: item.CreatedAt ? formatDate(item.CreatedAt) : '—',
           status,
           LOA: item.LOA || item.loa || null,
-          raw: item,
+          raw: item, // <-- keep a reference to .raw for Downloadstatus
         } as unknown as VerificationRecord;
       });
 
@@ -351,6 +356,70 @@ const ClientRequest: React.FC = () => {
         [key]: `Connected to ${rec.verifierName} Repository. Status is up-to-date: ${rec.status}.`,
       }));
     }, 900);
+  };
+
+  // Download handler for Report PDF
+  const handleDownloadReport = async (rec: VerificationRecord) => {
+    // Use Contributor and EmployeeCode as in the prompt's curl
+    const contributor = rec.verifierName || (rec.raw && rec.raw.Contributor) || "Securitas";
+    const employeeCode =
+      rec.employeeId ||
+      (rec.raw && (rec.raw.EmployeeCode || rec.raw.employeeId || rec.raw.EmpCode || rec.raw.EmployeeID)) ||
+      "";
+
+    const recordKey = rec.requestId || rec.id;
+    setDownloadingPdf((prev) => ({ ...prev, [recordKey]: true }));
+
+    try {
+      const response = await axios.post(
+        'https://worktrail.ai/api/DownloadUpdatePDF',
+        {
+          Contributor: contributor,
+          EmployeeCode: employeeCode
+        },
+        {
+          headers: {
+            APIKEY: 'Securitas@#!1234',
+            'Content-Type': 'application/json'
+          },
+          responseType: 'blob', // critical for files
+        }
+      );
+      if (!response || !response.data) {
+        throw new Error('File not found or response empty');
+      }
+
+      // Blob download method: find filename or default
+      let filename = `Candidate_Report_${employeeCode || rec.requestId || rec.id}.pdf`;
+      // Try to extract filename from headers
+      const contentDisposition =
+        (response.headers && (response.headers['content-disposition'] || response.headers['Content-Disposition'])) || '';
+      const match = contentDisposition.match(/filename="?([^"]+)"?/);
+      if (match && match[1]) {
+        filename = match[1];
+      }
+
+      // Create download link and click it
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => {
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      }, 100);
+    } catch (err: any) {
+      let msg =
+        err?.response?.data?.message ||
+        err?.message ||
+        'Download failed. Please try again.';
+      alert(msg);
+    } finally {
+      setDownloadingPdf((prev) => ({ ...prev, [recordKey]: false }));
+    }
   };
 
   return (
@@ -597,6 +666,10 @@ const ClientRequest: React.FC = () => {
                     const isChecking = checkingStatusId === reqKey;
                     const feedback = statusFeedback[reqKey];
 
+                    // Extract Downloadstatus from .raw (preserved from API), handle both string and number "1"
+                    const downloadStatus = rec.raw && String(rec.raw.Downloadstatus) === "1";
+                    const isDownloading = downloadingPdf[reqKey];
+
                     return (
                       <tr key={rec.id || rec.requestId} className="hover:bg-slate-50/80 transition-colors group">
                         {/* Request ID & Client ID */}
@@ -682,6 +755,20 @@ const ClientRequest: React.FC = () => {
                         {/* Actions: Check Status & View Detail */}
                         <td className="px-6 py-4 text-right">
                           <div className="flex items-center justify-end gap-2">
+                            {/* Download Report Button (Show only when Downloadstatus is "1") */}
+                            {downloadStatus && (
+                              <button
+                                type="button"
+                                onClick={() => handleDownloadReport(rec)}
+                                disabled={isDownloading}
+                                className={`inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white border border-green-700/40 rounded-xl text-xs font-bold tracking-wide transition-all cursor-pointer shadow-xs ${isDownloading ? 'opacity-70 cursor-not-allowed' : ''}`}
+                                title="Download Candidate Verification Report"
+                              >
+                                <Download className={`w-3.5 h-3.5 ${isDownloading ? 'animate-spin' : ''}`} />
+                                <span>{isDownloading ? 'Downloading...' : 'Download Report'}</span>
+                              </button>
+                            )}
+
                             {/* Check Status Button */}
                             <button
                               type="button"
@@ -731,6 +818,10 @@ const ClientRequest: React.FC = () => {
         const isCheckingModal = checkingStatusId === modalReqKey;
         const modalFeedback = statusFeedback[modalReqKey];
 
+        // Only show the Download Report in modal if the Downloadstatus is "1"
+        const downloadStatusModal = selectedRecord.raw && String(selectedRecord.raw.Downloadstatus) === "1";
+        const isDownloadingModal = downloadingPdf[modalReqKey];
+
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
             <div className="bg-white rounded-3xl max-w-3xl w-full shadow-2xl border border-slate-100 overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
@@ -778,16 +869,29 @@ const ClientRequest: React.FC = () => {
                         </p>
                       </div>
                     </div>
-
-                    <button
-                      type="button"
-                      onClick={() => handleCheckStatus(selectedRecord)}
-                      disabled={isCheckingModal}
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl transition-all shadow-sm cursor-pointer disabled:opacity-50 shrink-0"
-                    >
-                      <RefreshCw className={`w-3.5 h-3.5 ${isCheckingModal ? 'animate-spin' : ''}`} />
-                      <span>{isCheckingModal ? 'Checking Network...' : 'Check Live Status'}</span>
-                    </button>
+                    <div className="flex flex-wrap gap-2 items-center">
+                      <button
+                        type="button"
+                        onClick={() => handleCheckStatus(selectedRecord)}
+                        disabled={isCheckingModal}
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl transition-all shadow-sm cursor-pointer disabled:opacity-50 shrink-0"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${isCheckingModal ? 'animate-spin' : ''}`} />
+                        <span>{isCheckingModal ? 'Checking Network...' : 'Check Live Status'}</span>
+                      </button>
+                      {/* Download Report Button in Modal */}
+                      {downloadStatusModal && (
+                        <button
+                          type="button"
+                          onClick={() => handleDownloadReport(selectedRecord)}
+                          disabled={isDownloadingModal}
+                          className={`inline-flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-bold text-xs rounded-xl transition-all shadow-sm cursor-pointer disabled:opacity-50 shrink-0 ${isDownloadingModal ? 'opacity-70 cursor-not-allowed' : ''}`}
+                        >
+                          <Download className={`w-4 h-4 ${isDownloadingModal ? 'animate-spin':''}`} />
+                          {isDownloadingModal ? 'Downloading...' : 'Download Report'}
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   {modalFeedback && (
