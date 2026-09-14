@@ -493,11 +493,7 @@ function Dashboard() {
                             CLIENT REQUESTS
                           </button>
                         </Link>
-                        <Link to="/Client">
-                          <button className="flex items-center gap-2 h-11 px-5 bg-white/10 hover:bg-white/20 border border-white/20 text-white font-bold text-xs tracking-wider uppercase rounded-full transition-all shadow-sm cursor-pointer select-none">
-                            VIEW RAISED REQUESTS
-                          </button>
-                        </Link>
+                      
                       </>
                     )}
                     <Link

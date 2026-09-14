@@ -14,6 +14,8 @@ import {
   RefreshCw,
   Sparkles,
   AlertTriangle,
+  AlertCircle,
+  Send,
   ArrowLeft,
   X,
   Check,
@@ -101,6 +103,7 @@ export const calculateFieldMatch = (clientVal: any, contributorVal: any): FieldM
     s === 'not recorded' ||
     s === 'not provided' ||
     s === 'record not found' ||
+    s === 'data not found' ||
     s === 'null' ||
     s === 'undefined' ||
     s === 'none' ||
@@ -156,6 +159,25 @@ export const getFieldIcon = (key: string) => {
   return FileCheck;
 };
 
+// Helper to check for missing/null/empty contributor data
+export const cleanContrDisplayVal = (val: any): string => {
+  if (val === undefined || val === null) return 'Data Not Found';
+  const s = String(val).trim();
+  if (
+    !s ||
+    s === 'NULL' ||
+    s === 'null' ||
+    s === '—' ||
+    s === '-' ||
+    s === 'Record Not Found' ||
+    s === 'Data Not Found' ||
+    s === 'Record Not Found in Contributor DB'
+  ) {
+    return 'Data Not Found';
+  }
+  return s;
+};
+
 // Build the comparison fields list dynamically from API data
 export const getComparisonFields = (clientRec: VerificationRecord | null | undefined, contr: any | null) => {
   const cRec = clientRec || ({} as VerificationRecord);
@@ -164,13 +186,13 @@ export const getComparisonFields = (clientRec: VerificationRecord | null | undef
       contr.CandidateName ||
       contr.candidateName ||
       ''
-    : 'Record Not Found in Contributor DB';
+    : '';
 
   const standardFields = [
     {
       id: 'candidateName',
       label: 'Candidate Full Name',
-      contributorVal: contrFullName || '—',
+      contributorVal: contrFullName ? contrFullName : 'Data Not Found',
       clientVal: cRec.candidateName || '—',
       icon: User,
       isDynamic: false
@@ -178,7 +200,7 @@ export const getComparisonFields = (clientRec: VerificationRecord | null | undef
     {
       id: 'employeeId',
       label: 'Employee Code / ID',
-      contributorVal: contr ? String(contr.EmployeeCode || contr.employeeId || contr.EmpCode || '—') : 'Record Not Found',
+      contributorVal: cleanContrDisplayVal(contr?.EmployeeCode || contr?.employeeId || contr?.EmpCode),
       clientVal: cRec.employeeId || '—',
       icon: Building2,
       isDynamic: false
@@ -186,9 +208,7 @@ export const getComparisonFields = (clientRec: VerificationRecord | null | undef
     {
       id: 'designation',
       label: 'Designation / Job Role',
-      contributorVal: contr
-        ? String(contr.LastPositionHeld || contr.Designation || contr.designation || 'Not Recorded')
-        : 'Record Not Found',
+      contributorVal: cleanContrDisplayVal(contr?.LastPositionHeld || contr?.Designation || contr?.designation),
       clientVal: cRec.designation || 'Not Provided',
       icon: Briefcase,
       isDynamic: false
@@ -196,7 +216,7 @@ export const getComparisonFields = (clientRec: VerificationRecord | null | undef
     {
       id: 'department',
       label: 'Department',
-      contributorVal: contr ? String(contr.Department || contr.department || 'Not Recorded') : 'Record Not Found',
+      contributorVal: cleanContrDisplayVal(contr?.Department || contr?.department),
       clientVal: cRec.department || 'Not Provided',
       icon: Layers,
       isDynamic: false
@@ -204,7 +224,7 @@ export const getComparisonFields = (clientRec: VerificationRecord | null | undef
     {
       id: 'dateOfJoining',
       label: 'Date of Joining (DOJ)',
-      contributorVal: contr ? String(contr.DateOfJoining || contr.dateOfJoining || 'Not Recorded') : 'Record Not Found',
+      contributorVal: cleanContrDisplayVal(contr?.DateOfJoining ? String(contr.DateOfJoining).split('T')[0] : contr?.dateOfJoining),
       clientVal: cRec.dateOfJoining || 'Not Provided',
       icon: Calendar,
       isDynamic: false
@@ -213,12 +233,8 @@ export const getComparisonFields = (clientRec: VerificationRecord | null | undef
       id: 'dateOfLeaving',
       label: 'Date of Leaving (DOL)',
       contributorVal: contr
-        ? String(
-            contr.DateOfLeaving ||
-              contr.dateOfLeaving ||
-              (contr.IsCurrentlyEmployed ? 'Present / Active' : 'Not Recorded')
-          )
-        : 'Record Not Found',
+        ? (contr.DateOfLeaving ? String(contr.DateOfLeaving).split('T')[0] : (contr.IsCurrentlyEmployed ? 'Present / Active' : cleanContrDisplayVal(contr.dateOfLeaving)))
+        : 'Data Not Found',
       clientVal: cRec.dateOfLeaving || (cRec.isCurrentlyEmployed ? 'Currently Employed' : 'Not Provided'),
       icon: Calendar,
       isDynamic: false
@@ -227,8 +243,8 @@ export const getComparisonFields = (clientRec: VerificationRecord | null | undef
       id: 'employmentType',
       label: 'Employment Status',
       contributorVal: contr
-        ? String(contr.EmploymentType || (contr.IsCurrentlyEmployed ? 'Active' : 'Relieved'))
-        : 'Record Not Found',
+        ? cleanContrDisplayVal(contr.EmploymentType || (contr.IsCurrentlyEmployed ? 'Active' : null))
+        : 'Data Not Found',
       clientVal: cRec.isCurrentlyEmployed ? 'Currently Employed' : 'Ex-Employee',
       icon: UserCheck,
       isDynamic: false
@@ -236,7 +252,7 @@ export const getComparisonFields = (clientRec: VerificationRecord | null | undef
     {
       id: 'exitFormalities',
       label: 'Exit Formalities & Clearance',
-      contributorVal: contr ? String(contr.ExitFormalities || '—') : 'Record Not Found',
+      contributorVal: cleanContrDisplayVal(contr?.ExitFormalities),
       clientVal: cRec.isCurrentlyEmployed
         ? 'N/A (Active Employee)'
         : cRec.remarks
@@ -248,7 +264,7 @@ export const getComparisonFields = (clientRec: VerificationRecord | null | undef
     {
       id: 'behaviourIssues',
       label: 'Disciplinary / Conduct Record',
-      contributorVal: contr ? String(contr.AnyBehaviourIssue || 'None Reported') : 'Record Not Found',
+      contributorVal: cleanContrDisplayVal(contr?.AnyBehaviourIssue),
       clientVal: 'No Disciplinary Claims Noted',
       icon: ShieldCheck,
       isDynamic: false
@@ -256,7 +272,7 @@ export const getComparisonFields = (clientRec: VerificationRecord | null | undef
     {
       id: 'eligibilityToRehire',
       label: 'Eligibility to Rehire',
-      contributorVal: contr ? String(contr.EligibilityToRehire || '—') : 'Record Not Found',
+      contributorVal: cleanContrDisplayVal(contr?.EligibilityToRehire),
       clientVal: 'Candidate Claimed',
       icon: CheckCircle2,
       isDynamic: false
@@ -264,11 +280,10 @@ export const getComparisonFields = (clientRec: VerificationRecord | null | undef
     {
       id: 'contactCredentials',
       label: 'Work Email & Contact Details',
-      contributorVal: contr
-        ? `${contr.Email || contr.candidateEmail || 'No Email'} | ${
-            contr.MobileNo || contr.contactNumber || 'No Mobile'
-          }`
-        : 'Record Not Found',
+      contributorVal:
+        contr && (contr.Email || contr.MobileNo) && contr.Email !== 'NULL'
+          ? `${contr.Email || contr.candidateEmail || 'No Email'} | ${contr.MobileNo || contr.contactNumber || 'No Mobile'}`
+          : 'Data Not Found',
       clientVal: `${cRec.candidateEmail || 'No Email'} | ${cRec.contactNumber || 'No Mobile'}`,
       icon: Mail,
       isDynamic: false
@@ -359,7 +374,7 @@ export const getComparisonFields = (clientRec: VerificationRecord | null | undef
 
   const dynamicFields = Array.from(allDynamicKeys).map((key) => {
     const cVal = clientRaw[key] != null && clientRaw[key] !== '' ? String(clientRaw[key]) : '—';
-    const rVal = contrRaw[key] != null && contrRaw[key] !== '' ? String(contrRaw[key]) : 'Record Not Found';
+    const rVal = cleanContrDisplayVal(contrRaw[key]);
     return {
       id: key,
       label: formatFieldLabel(key),
@@ -379,28 +394,52 @@ function parseIncomingJson(raw: any): { clientRec: VerificationRecord | null; co
     return { clientRec: null, contrRec: null, rawJson: raw };
   }
 
-  let target = Array.isArray(raw) ? raw[0] : raw;
-  if (!target || typeof target !== 'object') {
-    return { clientRec: null, contrRec: null, rawJson: raw };
+  let clientObj: any = null;
+  let contrObj: any = null;
+
+  // Check if raw is an array of 4-column SQL rows: [{ ContributorColumn, ContributorData, ClientColumn, ClientData }, ...]
+  const list = Array.isArray(raw) ? raw : Array.isArray(raw?.data) ? raw.data : null;
+  if (list && list.length > 0 && (list[0].ClientColumn !== undefined || list[0].ContributorColumn !== undefined)) {
+    const cMap: Record<string, any> = {};
+    const rMap: Record<string, any> = {};
+
+    list.forEach((row: any) => {
+      if (row.ClientColumn) {
+        cMap[row.ClientColumn] = row.ClientData;
+      }
+      if (row.ContributorColumn) {
+        rMap[row.ContributorColumn] = row.ContributorData;
+      }
+    });
+
+    clientObj = cMap;
+    contrObj = rMap;
+  } else {
+    let target = Array.isArray(raw) ? raw[0] : raw;
+    if (!target || typeof target !== 'object') {
+      return { clientRec: null, contrRec: null, rawJson: raw };
+    }
+
+    // Check if target has explicit split keys
+    clientObj = target.client || target.clientData || target.clientRecord || target.claim || null;
+    contrObj =
+      target.contributor ||
+      target.contributorData ||
+      target.contributorRecord ||
+      target.masterRecord ||
+      target.officialData ||
+      null;
+
+    if (!clientObj && !contrObj) {
+      clientObj = target;
+      contrObj = null;
+    } else if (!clientObj && contrObj) {
+      clientObj = contrObj;
+    }
   }
 
-  // Check if target has explicit split keys
-  let clientObj = target.client || target.clientData || target.clientRecord || target.claim || null;
-  let contrObj =
-    target.contributor ||
-    target.contributorData ||
-    target.contributorRecord ||
-    target.masterRecord ||
-    target.officialData ||
-    null;
-
-  if (!clientObj && !contrObj) {
-    clientObj = target;
-    contrObj = target;
-  } else if (!clientObj && contrObj) {
-    clientObj = contrObj;
-  } else if (clientObj && !contrObj) {
-    contrObj = clientObj;
+  if (!clientObj) {
+    return { clientRec: null, contrRec: contrObj, rawJson: raw };
   }
 
   const fullName =
@@ -529,6 +568,13 @@ const ServiceRequestReview: React.FC<any> = (props) => {
   const [toast, setToast] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
+  // Appeal Modal & Email State
+  const [isAppealModalOpen, setIsAppealModalOpen] = useState<boolean>(false);
+  const [appealRecipient, setAppealRecipient] = useState<string>('');
+  const [appealSubject, setAppealSubject] = useState<string>('');
+  const [appealBody, setAppealBody] = useState<string>('');
+  const [appealSending, setAppealSending] = useState<boolean>(false);
+
   const showToast = (text: string, type: 'success' | 'error' | 'info' = 'info') => {
     setToast({ text, type });
     setTimeout(() => setToast(null), 3500);
@@ -602,7 +648,7 @@ const ServiceRequestReview: React.FC<any> = (props) => {
         const parsed = parseIncomingJson(data);
         if (parsed.clientRec) {
           setRecord(parsed.clientRec);
-          setContributorData(parsed.contrRec || data);
+          setContributorData(parsed.contrRec);
           setActionStatus(parsed.clientRec.status || 'Pending');
           setOverallRemarks(parsed.clientRec.remarks || '');
         } else {
@@ -633,10 +679,19 @@ const ServiceRequestReview: React.FC<any> = (props) => {
       const parsed = parseIncomingJson(directJson);
       if (parsed.clientRec) {
         setRecord(parsed.clientRec);
-        setContributorData(parsed.contrRec || directJson);
+        setContributorData(parsed.contrRec);
         setActionStatus(parsed.clientRec.status || 'Pending');
         setOverallRemarks(parsed.clientRec.remarks || '');
         setLoadingRecord(false);
+
+        // If directJson did not include contributor master records, query live API
+        if (!parsed.contrRec) {
+          const contr = contributorFromProps || (location.state as any)?.contributor || parsed.clientRec.verifierName || 'Securitas';
+          const empCode = employeeCodeFromProps || selectedRecordId || parsed.clientRec.employeeId;
+          if (contr && empCode && empCode !== '—') {
+            fetchReviewClientData(contr, empCode);
+          }
+        }
         return;
       }
     }
@@ -906,6 +961,91 @@ const ServiceRequestReview: React.FC<any> = (props) => {
       );
     } finally {
       setIsUpdating(false);
+    }
+  };
+
+  // Open Appeal Email Composer
+  const handleOpenAppealModal = () => {
+    if (!record) return;
+    const contributorName = contributorFromProps || record.verifierName || 'Contributor HR';
+    const candidateName = record.candidateName || 'Candidate';
+    const employeeCode = record.employeeId || '—';
+    const reqId = record.requestId || record.id || 'REQ-01';
+    const reviewerName = user?.username || user?.email || 'Worktrail Reviewer';
+    const reviewerEmail = user?.email || user?.EmailID || 'reviewer@worktrail.ai';
+
+    // Find contributor contact email if available
+    const contrEmail =
+      contributorData?.Email ||
+      contributorData?.email ||
+      contributorData?.Clientemail ||
+      '';
+
+    const defaultRecipient = contrEmail && contrEmail !== 'NULL' && contrEmail !== 'null' ? contrEmail : '';
+    const subj = `[Urgent Appeal] Missing Employment Data Request - Candidate: ${candidateName} (${employeeCode})`;
+
+    const bodyText = `Dear ${contributorName} HR / Verification Department,
+
+Re: Official Employment Verification Records Request
+Candidate Name: ${candidateName}
+Employee Code / ID: ${employeeCode}
+Reference Request ID: ${reqId}
+Department Claimed: ${record.department || 'Not Specified'}
+Designation Claimed: ${record.designation || 'Not Specified'}
+Claimed Period of Employment: ${record.dateOfJoining || '—'} to ${record.dateOfLeaving || 'Present'}
+
+During our background verification review on Worktrail, official contributor records were not found for this candidate ("Data Not Found").
+
+As the registered Contributor / Employer, we kindly request that you provide the official employment records, tenure confirmation, and clearance details for this candidate so the verification can proceed.
+
+Please reply directly to this email with the verified details or update the candidate record via the Worktrail Contributor portal.
+
+Requested by: ${reviewerName} (${reviewerEmail})
+Date: ${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+Platform: Worktrail Background Verification System`;
+
+    setAppealRecipient(defaultRecipient);
+    setAppealSubject(subj);
+    setAppealBody(bodyText);
+    setIsAppealModalOpen(true);
+  };
+
+  // Send Appeal Email & Record Appeal Status
+  const handleSendAppealEmail = async () => {
+    if (!record) return;
+    setAppealSending(true);
+
+    try {
+      const recipient = appealRecipient.trim();
+      const mailtoUrl = `mailto:${encodeURIComponent(recipient)}?subject=${encodeURIComponent(
+        appealSubject
+      )}&body=${encodeURIComponent(appealBody)}`;
+
+      // Launch default email client
+      window.location.href = mailtoUrl;
+
+      // Update backend status to Appeal (downloadStatus: 0)
+      const contributor = contributorFromProps || record.verifierName || '';
+      const employeeCode = record.employeeId || '';
+      if (contributor && employeeCode) {
+        try {
+          await updateFinalReport({
+            contributor,
+            employeeCode,
+            status: 'Appeal',
+            downloadStatus: 0,
+          });
+        } catch {
+          // Status update is best effort
+        }
+      }
+
+      showToast('Email client launched! Appeal recorded successfully.', 'success');
+      setIsAppealModalOpen(false);
+    } catch (err: any) {
+      showToast(`Error launching email client: ${err?.message || 'Failed to open mail client'}`, 'error');
+    } finally {
+      setAppealSending(false);
     }
   };
 
@@ -1394,13 +1534,20 @@ const ServiceRequestReview: React.FC<any> = (props) => {
                               </div>
 
                               <div
-                                className={`p-3 rounded-xl border text-xs font-medium break-words flex items-center justify-between gap-2 group ${
-                                  matchStatus === 'mismatch'
+                                className={`p-3 rounded-xl border text-xs font-medium break-words flex items-center justify-between gap-2 group transition-all ${
+                                  field.contributorVal === 'Data Not Found'
+                                    ? 'bg-amber-50/40 border-amber-200 text-amber-900 shadow-2xs'
+                                    : matchStatus === 'mismatch'
                                     ? 'bg-rose-50/40 border-rose-200/80 text-rose-950 font-semibold'
                                     : 'bg-emerald-50/30 border-emerald-200/70 text-emerald-950 font-semibold'
                                 }`}
                               >
-                                {isDocumentOrMediaUrl(field.contributorVal) ? (
+                                {field.contributorVal === 'Data Not Found' ? (
+                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300 shadow-2xs">
+                                    <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                                    <span>Data Not Found</span>
+                                  </span>
+                                ) : isDocumentOrMediaUrl(field.contributorVal) ? (
                                   <button
                                     type="button"
                                     onClick={() => {
@@ -1416,14 +1563,16 @@ const ServiceRequestReview: React.FC<any> = (props) => {
                                   <span>{String(field.contributorVal)}</span>
                                 )}
 
-                                <button
-                                  type="button"
-                                  onClick={() => handleCopyText(String(field.contributorVal), `r-${field.id}`)}
-                                  className="text-slate-400 hover:text-slate-700 opacity-0 group-hover:opacity-100 transition-opacity"
-                                  title="Copy value"
-                                >
-                                  <Copy className="w-3 h-3" />
-                                </button>
+                                {field.contributorVal !== 'Data Not Found' && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleCopyText(String(field.contributorVal), `r-${field.id}`)}
+                                    className="text-slate-400 hover:text-slate-700 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    title="Copy value"
+                                  >
+                                    <Copy className="w-3 h-3" />
+                                  </button>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -1462,7 +1611,7 @@ const ServiceRequestReview: React.FC<any> = (props) => {
                     </div>
 
                     {/* Verdict Options */}
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <button
                         type="button"
                         onClick={handleApproveAndVerify}
@@ -1477,18 +1626,7 @@ const ServiceRequestReview: React.FC<any> = (props) => {
                         <span>Approve & Verify</span>
                       </button>
 
-                      <button
-                        type="button"
-                        onClick={() => setActionStatus('In Progress')}
-                        className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs ${
-                          actionStatus === 'In Progress'
-                            ? 'bg-sky-600 text-white shadow-sky-500/25 ring-2 ring-sky-600/30'
-                            : 'bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200'
-                        }`}
-                      >
-                        <Clock className="w-4 h-4" />
-                        <span>In Progress</span>
-                      </button>
+                     
 
                       <button
                         type="button"
@@ -1502,6 +1640,16 @@ const ServiceRequestReview: React.FC<any> = (props) => {
                       >
                         <XCircle className="w-4 h-4" />
                         <span>Reject Request</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleOpenAppealModal}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300"
+                        title="Send appeal email to contributor requesting missing records"
+                      >
+                        <Send className="w-4 h-4 text-amber-600" />
+                        <span>Appeal (Email Contributor)</span>
                       </button>
                     </div>
                   </div>
@@ -1531,7 +1679,16 @@ const ServiceRequestReview: React.FC<any> = (props) => {
                     </div>
 
                     <div className="flex items-center gap-3">
-                    
+                      <button
+                        type="button"
+                        onClick={handleOpenAppealModal}
+                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold tracking-wide uppercase transition-all shadow-md cursor-pointer"
+                        title="Draft and send an appeal email to the contributor requesting missing candidate data"
+                      >
+                        <Send className="w-4 h-4" />
+                        <span>Appeal - Send Mail to Contributor</span>
+                      </button>
+
                       <button
                         type="button"
                         onClick={handleSaveVerification}
@@ -1687,6 +1844,125 @@ const ServiceRequestReview: React.FC<any> = (props) => {
                   </a>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 7. Appeal Email Modal */}
+      {isAppealModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl max-w-2xl w-full shadow-2xl border border-slate-100 overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
+            {/* Modal Header */}
+            <div className="p-5 bg-gradient-to-r from-amber-500/10 via-amber-50 to-white border-b border-amber-100 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center shadow-xs">
+                  <Send className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base">Appeal: Request Contributor Records</h3>
+                  <p className="text-xs text-slate-500">Send an official email to the contributor asking for missing candidate records</p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsAppealModalOpen(false)}
+                className="w-8 h-8 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-500 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5 sm:p-6 overflow-y-auto space-y-4 text-xs text-slate-700">
+              {/* Info banner */}
+              <div className="p-3.5 rounded-2xl bg-amber-50/80 border border-amber-200 flex items-start gap-3">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div className="space-y-0.5 text-xs text-amber-900">
+                  <span className="font-bold">Contributor Data Not Found:</span>
+                  <p>
+                    Official records for candidate <span className="font-semibold">{record?.candidateName}</span> ({record?.employeeId}) were not found in the contributor database. Send this appeal to request that the contributor HR supply the verification data.
+                  </p>
+                </div>
+              </div>
+
+              {/* Recipient Email */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold uppercase tracking-wider text-slate-600">
+                  Contributor Email / Recipient
+                </label>
+                <input
+                  type="email"
+                  value={appealRecipient}
+                  onChange={(e) => setAppealRecipient(e.target.value)}
+                  placeholder="e.g. hr@contributor-company.com"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 outline-none focus:border-amber-500 focus:bg-white"
+                />
+              </div>
+
+              {/* Subject */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold uppercase tracking-wider text-slate-600">
+                  Email Subject
+                </label>
+                <input
+                  type="text"
+                  value={appealSubject}
+                  onChange={(e) => setAppealSubject(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 outline-none focus:border-amber-500 focus:bg-white"
+                />
+              </div>
+
+              {/* Message Body */}
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-bold uppercase tracking-wider text-slate-600">
+                    Email Message Body
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyText(appealBody, 'appeal-body')}
+                    className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 hover:text-amber-800 cursor-pointer"
+                  >
+                    <Copy className="w-3 h-3" />
+                    <span>{copiedId === 'appeal-body' ? 'Copied!' : 'Copy Body'}</span>
+                  </button>
+                </div>
+                <textarea
+                  rows={9}
+                  value={appealBody}
+                  onChange={(e) => setAppealBody(e.target.value)}
+                  className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-mono leading-relaxed text-slate-800 placeholder-slate-400 outline-none focus:border-amber-500 focus:bg-white resize-y"
+                />
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 sm:p-5 bg-slate-50 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
+              <span className="text-[11px] text-slate-500">
+                Clicking "Send Mail to Contributor" launches your email client with pre-filled details.
+              </span>
+
+              <div className="flex items-center gap-2.5 justify-end">
+                <button
+                  type="button"
+                  onClick={() => setIsAppealModalOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-xs font-bold text-slate-700 cursor-pointer"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleSendAppealEmail}
+                  disabled={appealSending}
+                  className="inline-flex items-center gap-2 px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold transition-all shadow-md cursor-pointer disabled:opacity-50"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  <span>{appealSending ? 'Launching Mail...' : 'Send Mail to Contributor'}</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>

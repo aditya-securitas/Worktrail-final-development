@@ -160,7 +160,13 @@ export const RecentAppealsTable: React.FC<RecentAppealsTableProps> = ({
         ? res.data
         : res.data?.data || res.data?.candidates || res.data?.records || []
 
-      const mapped: VerificationRecord[] = rawList.map((item, idx) => {
+      // Exclude appeal status records so appeal data does not show in the recent appeals table
+      const nonAppealList = rawList.filter((item) => {
+        const st = String(item.Status || item.status || '').toLowerCase().trim()
+        return st !== 'appeal'
+      })
+
+      const mapped: VerificationRecord[] = nonAppealList.map((item, idx) => {
         const candidateName =
           [item.FirstName, item.MiddleName, item.LastName].filter(Boolean).join(' ') ||
           item.candidateName ||
@@ -237,7 +243,11 @@ export const RecentAppealsTable: React.FC<RecentAppealsTableProps> = ({
 
   useEffect(() => {
     if (initialRecords && initialRecords.length > 0) {
-      setRecords(initialRecords)
+      const nonAppeal = initialRecords.filter((r: any) => {
+        const st = String(r.status || r.Status || '').toLowerCase().trim()
+        return st !== 'appeal'
+      })
+      setRecords(nonAppeal)
       setLoading(false)
     }
   }, [initialRecords])
