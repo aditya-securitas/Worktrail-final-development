@@ -156,18 +156,15 @@ const ClientRequest: React.FC = () => {
 
       // Apply business rule: If row is Status="Downloaded" (case-insensitive) and Downloadstatus is "0" (or 0, or '0'), skip it
       const filteredRawList: RawEmployeeRecord[] = rawList.filter((item) => {
-        // Only filter out if all conditions match
         const status = (item.Status || '').trim().toLowerCase();
         const downloadstatus = String(item.Downloadstatus ?? '').trim();
-        // If status is 'downloaded' and Downloadstatus is '0', skip it (do not show)
         if (status === 'downloaded' && (downloadstatus === '0' || downloadstatus === '')) {
           return false;
         }
-        // Otherwise, include
         return true;
       });
 
-      // Normalize records into VerificationRecord shape expected by the UI and analyzer
+      // Normalize records into VerificationRecord shape - show actual API status
       const mapped: VerificationRecord[] = filteredRawList.map((item, idx) => {
         const candidateName =
           [item.FirstName, item.MiddleName, item.LastName].filter(Boolean).join(' ') ||
@@ -189,17 +186,8 @@ const ClientRequest: React.FC = () => {
         const recId = rawOrderId || `REQ-${idx + 1}`;
         const uniqueId = String(item.Sno || rawEmpCode || `${recId}-${idx}`);
 
-        // Binary status rule: Verified if download is active, Rejected otherwise (no Pending / In Progress)
-        const stRaw = (item.Status || '').trim().toLowerCase();
+        const stRaw = (item.Status || '').trim();
         const dlRaw = String(item.Downloadstatus ?? '').trim();
-        const isDownloadActive =
-          dlRaw === '1' ||
-          stRaw === 'downloaded' ||
-          stRaw === 'approved' ||
-          stRaw.includes('verif') ||
-          stRaw.includes('complet');
-
-        const finalStatus: 'Verified' | 'Rejected' = isDownloadActive ? 'Verified' : 'Rejected';
 
         const dojFormatted = item.DateOfJoining
           ? formatDate(item.DateOfJoining)
@@ -250,11 +238,12 @@ const ClientRequest: React.FC = () => {
           uploadedFilesCount: (item.LOA || item.loa || item.SupportingDocs) ? 1 : 0,
           submittedBy: item.Clientemail || clientIdentifier,
           submittedAt: item.CreatedAt ? formatDate(item.CreatedAt) : '—',
-          status: finalStatus,
+          // Use actual status string from API, pass through for UI rendering (case preserved)
+          status: stRaw,
           LOA: item.LOA || item.loa || null,
           raw: {
             ...item,
-            Downloadstatus: isDownloadActive ? '1' : '0',
+            Downloadstatus: dlRaw, // capture actual string
           },
         } as unknown as VerificationRecord;
       });
@@ -280,7 +269,7 @@ const ClientRequest: React.FC = () => {
   // Filtering records
   const filteredRecords = useMemo(() => {
     return records.filter((r) => {
-      // (Extra safeguard: double-check the business rule here, in case anything is left, should not render)
+      // Extra safeguard (skip Downloaded+Downloadstatus==0 rows)
       if (
         r.raw &&
         typeof r.raw.Status === 'string' &&
@@ -306,9 +295,11 @@ const ClientRequest: React.FC = () => {
         if (!matchesQuery) return false;
       }
 
-      // Status
-      if (selectedStatus !== 'All' && r.status !== selectedStatus) {
-        return false;
+      // Status filter
+      if (selectedStatus !== 'All') {
+        if (!r.status || r.status.toLowerCase() !== selectedStatus.toLowerCase()) {
+          return false;
+        }
       }
 
       // Company
@@ -328,26 +319,40 @@ const ClientRequest: React.FC = () => {
     // eslint-disable-next-line
   }, [records, searchQuery, selectedStatus, selectedCompanyFilter, selectedCompletenessFilter]);
 
-  // Metrics - Binary status evaluation (Verified vs Rejected)
+  // Metrics: use the Status coming from API (case-insensitive):
   const totalRequests = records.length;
-  const verifiedRequests = records.filter((r) => r.status === 'Verified').length;
-  const rejectedRequests = records.filter((r) => r.status === 'Rejected').length;
+  const verifiedRequests = records.filter((r) =>
+    r.status && typeof r.status === 'string' && r.status.trim().toLowerCase() === 'verified'
+  ).length;
+  const rejectedRequests = records.filter((r) =>
+    r.status && typeof r.status === 'string' && r.status.trim().toLowerCase() === 'rejected'
+  ).length;
   const recordsWithMissingData = records.filter((r) => analyzeCandidateData(r).missingCount > 0).length;
 
-  // Status Badge UI - Only Verified and Rejected
-  const getStatusBadge = (status: VerificationRecord['status']) => {
-    if (status === 'Verified') {
+  // Status Badge UI: Display status exactly as from API (show color for important cases)
+  const getStatusBadge = (status: string) => {
+    if (!status) return null;
+    const st = status.trim().toLowerCase();
+    if (st === 'verified' || st === 'approved' || st === 'downloaded') {
       return (
         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-          Verified
+          {status}
+        </span>
+      );
+    }
+    if (st === 'rejected') {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200">
+          <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+          {status}
         </span>
       );
     }
     return (
-      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200">
-        <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
-        Rejected
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-slate-50 text-slate-700 border border-slate-200">
+        <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+        {status}
       </span>
     );
   };
@@ -394,12 +399,13 @@ const ClientRequest: React.FC = () => {
       setCheckingStatusId(null);
       setStatusFeedback((prev) => ({
         ...prev,
-        [key]: `Connected to ${rec.verifierName} Repository. Status is up-to-date: ${rec.status}.`,
+        [key]: `Connected to ${rec.verifierName} Repository. Status is up-to-date: ${rec.status || ''}.`,
       }));
     }, 900);
   };
 
-  // Download handler for Report PDF matching Enterprise Verification Report Docket
+  // When download is done, call backend, then reload records from API
+  // Download handler for Report PDF
   const handleDownloadReport = async (rec: VerificationRecord) => {
     const contributor =
       rec.verifierName ||
@@ -414,16 +420,12 @@ const ClientRequest: React.FC = () => {
     setDownloadingPdf((prev) => ({ ...prev, [recordKey]: true }));
 
     try {
-      // 1. Fetch Application Logo and Contributor Logo in parallel
       const [logoData, clientLogoData] = await Promise.all([
         getLogoImageData(),
         getClientLogoData(contributor),
       ]);
-
-      // 2. Generate PDF document with complete candidate data populated
       const pdfBytes = buildCandidatePdf(rec, logoData, clientLogoData);
 
-      // 3. Download generated PDF
       const blob = new Blob([pdfBytes as any], { type: 'application/pdf' });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -441,8 +443,8 @@ const ClientRequest: React.FC = () => {
         window.URL.revokeObjectURL(url);
       }, 1000);
 
-      // 4. Asynchronously notify backend DownloadUpdatePDF to record download
-      axios
+      // Notify backend of download, then reload API data (refresh table state)
+      await axios
         .post(
           'https://worktrail.ai/api/DownloadUpdatePDF',
           {
@@ -455,10 +457,9 @@ const ClientRequest: React.FC = () => {
               'Content-Type': 'application/json',
             },
           }
-        )
-        .catch((err) => {
-          console.warn('[ClientRequest] Backend download tracking notice:', err);
-        });
+        );
+      // After success, reload the table by refreshing data
+      await loadRecords(true);
     } catch (err: any) {
       console.error('[ClientRequest] Error generating PDF report:', err);
       alert('Failed to generate verification report. Please try again.');
@@ -699,8 +700,8 @@ const ClientRequest: React.FC = () => {
                     const isChecking = checkingStatusId === reqKey;
                     const feedback = statusFeedback[reqKey];
 
-                    // Active download button when status is Verified
-                    const downloadStatus = rec.status === 'Verified' || (rec.raw && String(rec.raw.Downloadstatus) === "1");
+                    // Show download button ONLY when Downloadstatus === "1"
+                    const downloadStatus = rec.raw && String(rec.raw.Downloadstatus) === "1";
                     const isDownloading = downloadingPdf[reqKey];
 
                     return (
@@ -726,7 +727,7 @@ const ClientRequest: React.FC = () => {
                           </div>
                         </td>
 
-                        {/* Data Quality: Clean status and missing count without duplicate upload button */}
+                        {/* Data Quality */}
                         <td className="px-6 py-4">
                           {analysis.missingCount === 0 ? (
                             <div className="flex flex-col">
@@ -788,7 +789,7 @@ const ClientRequest: React.FC = () => {
                         {/* Actions: Check Status & View Detail */}
                         <td className="px-6 py-4 text-right">
                           <div className="flex items-center justify-end gap-2">
-                            {/* Download Report Button (Show only when Downloadstatus is "1" or 1 - 'Approved') */}
+                            {/* Download Report Button (Show only when Downloadstatus is "1") */}
                             {downloadStatus && (
                               <button
                                 type="button"
@@ -851,8 +852,8 @@ const ClientRequest: React.FC = () => {
         const isCheckingModal = checkingStatusId === modalReqKey;
         const modalFeedback = statusFeedback[modalReqKey];
 
-        // Only show Download Report in modal if record is Verified / download active
-        const downloadStatusModal = selectedRecord.status === 'Verified' || (selectedRecord.raw && String(selectedRecord.raw.Downloadstatus) === "1");
+        // Show download button ONLY when Downloadstatus === "1"
+        const downloadStatusModal = selectedRecord.raw && String(selectedRecord.raw.Downloadstatus) === "1";
         const isDownloadingModal = downloadingPdf[modalReqKey];
 
         return (
