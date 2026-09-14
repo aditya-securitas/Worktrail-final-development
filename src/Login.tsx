@@ -326,7 +326,7 @@ function Login({ onRegister }: LoginProps) {
         {/* User ID Field */}
         <div className="flex flex-col gap-1.5">
           <label className="text-[10px] sm:text-[11px] font-bold tracking-wider text-slate-500 uppercase select-none">
-            User ID / Email Address
+             Email Address
           </label>
           <div className="flex items-center gap-3 h-[48px] px-4 bg-slate-50/70 hover:bg-slate-50 focus-within:bg-white border border-slate-200/90 focus-within:border-[#42638C] focus-within:ring-2 focus-within:ring-slate-100 rounded-2xl transition-all shadow-2xs">
             <Mail className="w-4.5 h-4.5 text-slate-400 shrink-0" />
