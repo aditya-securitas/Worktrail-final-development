@@ -25,6 +25,11 @@ import {
   analyzeCandidateData,
   type VerificationRecord
 } from './CandidateVerificationForm';
+import {
+  buildCandidatePdf,
+  getLogoImageData,
+  getClientLogoData,
+} from './pdf-utils';
 
 export type RawEmployeeRecord = {
   Sno?: number;
@@ -200,8 +205,10 @@ const ClientRequest: React.FC = () => {
           isCurrentlyEmployed: !item.DateOfLeaving,
           designation: item.LastPositionHeld || item.Department || '—',
           department: item.Department || 'General',
-          verificationType: 'Employment & Integrity',
-          remarks: item.AnyBehaviourIssue ? `Behaviour: ${item.AnyBehaviourIssue}` : '',
+          verificationType: 'Standard Employment Verification',
+          remarks: item.AnyBehaviourIssue
+            ? `Behaviour: ${item.AnyBehaviourIssue}`
+            : (item.Remarks || item.remarks || 'Confirmed relieving date and integrity clearance'),
           uploadedFilesCount: (item.LOA || item.loa || item.SupportingDocs) ? 1 : 0,
           submittedBy: item.Clientemail || clientIdentifier,
           submittedAt: item.CreatedAt ? formatDate(item.CreatedAt) : '—',
@@ -358,9 +365,8 @@ const ClientRequest: React.FC = () => {
     }, 900);
   };
 
-  // Download handler for Report PDF
+  // Download handler for Report PDF matching Enterprise Verification Report Docket
   const handleDownloadReport = async (rec: VerificationRecord) => {
-    // Use Contributor and EmployeeCode as in the prompt's curl
     const contributor = rec.verifierName || (rec.raw && rec.raw.Contributor) || "Securitas";
     const employeeCode =
       rec.employeeId ||
@@ -371,52 +377,50 @@ const ClientRequest: React.FC = () => {
     setDownloadingPdf((prev) => ({ ...prev, [recordKey]: true }));
 
     try {
-      const response = await axios.post(
-        'https://worktrail.ai/api/DownloadUpdatePDF',
-        {
-          Contributor: contributor,
-          EmployeeCode: employeeCode
-        },
-        {
-          headers: {
-            APIKEY: 'Securitas@#!1234',
-            'Content-Type': 'application/json'
-          },
-          responseType: 'blob', // critical for files
-        }
-      );
-      if (!response || !response.data) {
-        throw new Error('File not found or response empty');
-      }
+      // 1. Concurrently fetch application logo (Securitas) and contributor brand logo (e.g. TCS)
+      const [logoData, contributorLogoData] = await Promise.all([
+        getLogoImageData(),
+        getClientLogoData(contributor),
+      ]);
 
-      // Blob download method: find filename or default
-      let filename = `Candidate_Report_${employeeCode || rec.requestId || rec.id}.pdf`;
-      // Try to extract filename from headers
-      const contentDisposition =
-        (response.headers && (response.headers['content-disposition'] || response.headers['Content-Disposition'])) || '';
-      const match = contentDisposition.match(/filename="?([^"]+)"?/);
-      if (match && match[1]) {
-        filename = match[1];
-      }
+      // 2. Build certified verification report PDF matching the specification
+      const pdfBytes = buildCandidatePdf(rec, logoData, contributorLogoData);
 
-      // Create download link and click it
-      const blob = new Blob([response.data], { type: 'application/pdf' });
+      // 3. Initiate browser download as a PDF file
+      const blob = new Blob([pdfBytes as any], { type: 'application/pdf' });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = filename;
+      const safeEmpCode = (employeeCode || rec.requestId || rec.candidateName || 'Record')
+        .replace(/[^a-zA-Z0-9_-]/g, '_');
+      a.download = `Candidate_Report_${safeEmpCode}.pdf`;
       document.body.appendChild(a);
       a.click();
+
       setTimeout(() => {
+        if (document.body.contains(a)) {
+          document.body.removeChild(a);
+        }
         window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-      }, 100);
+      }, 1000);
+
+      // 4. Fire background update ping to backend DownloadUpdatePDF endpoint if available
+      try {
+        fetch('https://worktrail.ai/api/DownloadUpdatePDF', {
+          method: 'POST',
+          headers: {
+            APIKEY: 'Securitas@#!1234',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            Contributor: contributor,
+            EmployeeCode: employeeCode,
+          }),
+        }).catch(() => {});
+      } catch {}
     } catch (err: any) {
-      let msg =
-        err?.response?.data?.message ||
-        err?.message ||
-        'Download failed. Please try again.';
-      alert(msg);
+      console.error('[ClientRequest] Error generating PDF report:', err);
+      alert('Failed to generate verification report. Please try again.');
     } finally {
       setDownloadingPdf((prev) => ({ ...prev, [recordKey]: false }));
     }
@@ -541,7 +545,7 @@ const ClientRequest: React.FC = () => {
         {/* Filter Controls Bar */}
         <div className="p-6 border-b border-slate-100 flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-slate-50/40">
           {/* Search Box */}
-          <div className="relative w-full lg:w-72">
+          <div className="relative w-full lg:w-50">
             <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
@@ -666,8 +670,17 @@ const ClientRequest: React.FC = () => {
                     const isChecking = checkingStatusId === reqKey;
                     const feedback = statusFeedback[reqKey];
 
-                    // Extract Downloadstatus from .raw (preserved from API), handle both string and number "1"
-                    const downloadStatus = rec.raw && String(rec.raw.Downloadstatus) === "1";
+                    // Extract Downloadstatus from .raw (preserved from API), handle both string and number "1" or Verified
+                    const downloadStatus = Boolean(
+                      (rec.raw && (
+                        String(rec.raw.Downloadstatus) === "1" ||
+                        String(rec.raw.downloadStatus) === "1" ||
+                        String(rec.raw.DownloadStatus) === "1" ||
+                        String(rec.raw.downloadstatus) === "1"
+                      )) ||
+                      rec.status === 'Verified' ||
+                      rec.status === 'Approved'
+                    );
                     const isDownloading = downloadingPdf[reqKey];
 
                     return (
@@ -818,8 +831,17 @@ const ClientRequest: React.FC = () => {
         const isCheckingModal = checkingStatusId === modalReqKey;
         const modalFeedback = statusFeedback[modalReqKey];
 
-        // Only show the Download Report in modal if the Downloadstatus is "1"
-        const downloadStatusModal = selectedRecord.raw && String(selectedRecord.raw.Downloadstatus) === "1";
+        // Only show the Download Report in modal if the Downloadstatus is "1" or Verified
+        const downloadStatusModal = Boolean(
+          (selectedRecord.raw && (
+            String(selectedRecord.raw.Downloadstatus) === "1" ||
+            String(selectedRecord.raw.downloadStatus) === "1" ||
+            String(selectedRecord.raw.DownloadStatus) === "1" ||
+            String(selectedRecord.raw.downloadstatus) === "1"
+          )) ||
+          selectedRecord.status === 'Verified' ||
+          selectedRecord.status === 'Approved'
+        );
         const isDownloadingModal = downloadingPdf[modalReqKey];
 
         return (

@@ -7,6 +7,22 @@ export function getDynamicBrandDomain(name: string): string {
   if (!name || typeof name !== 'string') return ''
   const lower = name.toLowerCase().trim()
 
+  // High-priority enterprise contributor aliases
+  if (lower.includes('tata consultancy') || lower.includes('tcs')) return 'tcs.com'
+  if (lower.includes('infosys')) return 'infosys.com'
+  if (lower.includes('wipro')) return 'wipro.com'
+  if (lower.includes('accenture')) return 'accenture.com'
+  if (lower.includes('cognizant')) return 'cognizant.com'
+  if (lower.includes('securitas')) return 'securitas.com'
+  if (lower.includes('hcl')) return 'hcltech.com'
+  if (lower.includes('tech mahindra')) return 'techmahindra.com'
+  if (lower.includes('deloitte')) return 'deloitte.com'
+  if (lower.includes('capgemini')) return 'capgemini.com'
+  if (lower.includes('ibm')) return 'ibm.com'
+  if (lower.includes('microsoft')) return 'microsoft.com'
+  if (lower.includes('google')) return 'google.com'
+  if (lower.includes('amazon')) return 'amazon.com'
+
   const parenMatch = lower.match(/\(([^)]+)\)/)
   if (parenMatch && parenMatch[1]) {
     const acronym = parenMatch[1].replace(/[^a-z0-9]/g, '')

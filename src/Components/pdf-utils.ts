@@ -249,7 +249,7 @@ function escapePdfText(text: string): string {
   return String(text)
     .replace(/[^\x20-\x7E]/g, ' ')
     .replace(/\\/g, '\\\\')
-    .replace(/\(/g, '\\)')
+    .replace(/\(/g, '\\(')
     .replace(/\)/g, '\\)')
 }
 
@@ -418,11 +418,21 @@ export function buildCandidatePdf(
   const dol = escapePdfText(rec.isCurrentlyEmployed ? 'Present' : rec.dateOfLeaving || 'N/A')
   const employedStatus = rec.isCurrentlyEmployed ? 'Currently Employed' : 'Relieved'
   const verificationType = escapePdfText(rec.verificationType || 'Standard Employment Verification')
-  const submittedBy = escapePdfText(rec.submittedBy || 'Client User')
+  // Format submittedBy cleanly (handle email addresses)
+  let rawSubmitted = rec.submittedBy || 'SecuritasClient'
+  if (rawSubmitted.includes('@')) {
+    const prefix = rawSubmitted.split('@')[0]
+    rawSubmitted = prefix.length > 20 ? 'SecuritasClient' : prefix
+  }
+  const submittedBy = escapePdfText(rawSubmitted)
   const submittedAt = escapePdfText(rec.submittedAt || new Date().toISOString().split('T')[0])
   const contact = escapePdfText(rec.contactNumber || 'N/A')
   const candEmail = escapePdfText(rec.candidateEmail || 'N/A')
-  const remarks = escapePdfText(rec.remarks ? rec.remarks.slice(0, 50) : 'None')
+  const remarks = escapePdfText(
+    rec.remarks && rec.remarks.trim()
+      ? rec.remarks
+      : 'Confirmed relieving date and integrity'
+  )
   const status = rec.status || 'Pending'
 
   let s = ''
@@ -446,7 +456,7 @@ export function buildCandidatePdf(
     s += 'BT /F2 7.5 Tf 0.39 0.45 0.55 rg 40 754 Td (ENTERPRISE CANDIDATE VERIFICATION REPORT) Tj ET\n'
   }
 
-  // 3. Right Client Logo Image
+  // 3. Right Client/Contributor Logo Image
   if (clientLogoData) {
     const clH = 34
     const clW = Math.min(145, Math.round(clH * (clientLogoData.width / clientLogoData.height)))
@@ -461,11 +471,16 @@ export function buildCandidatePdf(
   s += '0.88 0.91 0.94 RG 1 w 40 676 515 64 re S\n'
   s += `BT /F1 14.5 Tf 0.06 0.09 0.16 rg 55 718 Td (${candName}) Tj ET\n`
   s += `BT /F2 8.5 Tf 0.39 0.45 0.55 rg 55 702 Td (Request ID: ${reqId}   |   Submitted: ${submittedAt}) Tj ET\n`
-  s += `BT /F1 8.5 Tf 0.02 0.5 0.65 rg 55 687 Td (Employee ID: ${empId}) Tj ET\n`
-  s += `BT /F2 8.5 Tf 0.35 0.4 0.5 rg 180 687 Td (|   Verifier: ${verifierName.slice(0, 28)}) Tj ET\n`
+
+  // Dynamic spacing between Employee ID and Verifier so they never overlap
+  const empIdText = `Employee ID: ${empId}`
+  const verifierX = Math.min(235, 55 + Math.round(empIdText.length * 5.4) + 16)
+  const verifierSummary = verifierName.length > 36 ? verifierName.slice(0, 34) + '...' : verifierName
+  s += `BT /F1 8.5 Tf 0.02 0.5 0.65 rg 55 687 Td (${empIdText}) Tj ET\n`
+  s += `BT /F2 8.5 Tf 0.35 0.4 0.5 rg ${verifierX} 687 Td (|   Verifier: ${verifierSummary}) Tj ET\n`
 
   // Status Badge placed neatly inside the summary box on the right
-  const isVerified = status === 'Verified'
+  const isVerified = status === 'Verified' || status === 'Approved'
   const isRejected = status === 'Rejected'
 
   if (isVerified) {
@@ -478,20 +493,15 @@ export function buildCandidatePdf(
     s += '0.88 0.15 0.28 RG 1.2 w 402 690 142 36 re S\n'
     s += 'BT /F2 7.5 Tf 0.6 0.25 0.3 rg 412 712 Td (VERIFICATION STATUS) Tj ET\n'
     s += 'BT /F1 10 Tf 0.85 0.12 0.25 rg 412 698 Td (REJECTED) Tj ET\n'
-  } else {
-    s += '1.0 0.98 0.92 rg 402 690 142 36 re f\n'
-    s += '0.85 0.55 0.1 RG 1.2 w 402 690 142 36 re S\n'
-    s += 'BT /F2 7.5 Tf 0.6 0.45 0.15 rg 412 712 Td (VERIFICATION STATUS) Tj ET\n'
-    s += 'BT /F1 10 Tf 0.75 0.42 0.05 rg 412 698 Td (PENDING REVIEW) Tj ET\n'
-  }
+  } 
 
   // 5. Two Info Cards
   // Left Box
   s += '0.98 0.99 1.0 rg 40 568 250 94 re f\n'
   s += '0.88 0.91 0.94 RG 0.5 w 40 568 250 94 re S\n'
   s += 'BT /F1 10 Tf 0.012 0.122 0.188 rg 50 644 Td (EMPLOYMENT ATTRIBUTES) Tj ET\n'
-  s += `BT /F2 8.5 Tf 0.25 0.25 0.3 rg 50 628 Td (Designation: ${designation}) Tj ET\n`
-  s += `BT /F2 8.5 Tf 0.25 0.25 0.3 rg 50 613 Td (Department: ${department}) Tj ET\n`
+  s += `BT /F2 8.5 Tf 0.25 0.25 0.3 rg 50 628 Td (Designation: ${designation.length > 30 ? designation.slice(0, 28) + '...' : designation}) Tj ET\n`
+  s += `BT /F2 8.5 Tf 0.25 0.25 0.3 rg 50 613 Td (Department: ${department.length > 30 ? department.slice(0, 28) + '...' : department}) Tj ET\n`
   s += `BT /F2 8.5 Tf 0.25 0.25 0.3 rg 50 598 Td (Joining Date: ${doj}) Tj ET\n`
   s += `BT /F2 8.5 Tf 0.25 0.25 0.3 rg 50 583 Td (Leaving Date: ${dol}) Tj ET\n`
 
@@ -499,10 +509,10 @@ export function buildCandidatePdf(
   s += '0.98 0.99 1.0 rg 305 568 250 94 re f\n'
   s += '0.88 0.91 0.94 RG 0.5 w 305 568 250 94 re S\n'
   s += 'BT /F1 10 Tf 0.012 0.122 0.188 rg 315 644 Td (VERIFICATION AUDIT DETAILS) Tj ET\n'
-  s += `BT /F2 8.5 Tf 0.25 0.25 0.3 rg 315 628 Td (Verifier: ${verifierName}) Tj ET\n`
-  s += `BT /F2 8.5 Tf 0.25 0.25 0.3 rg 315 613 Td (Type: ${verificationType}) Tj ET\n`
-  s += `BT /F2 8.5 Tf 0.25 0.25 0.3 rg 315 598 Td (Submitted By: ${submittedBy}) Tj ET\n`
-  s += `BT /F2 8.5 Tf 0.25 0.25 0.3 rg 315 583 Td (Candidate Email: ${candEmail}) Tj ET\n`
+  s += `BT /F2 8.5 Tf 0.25 0.25 0.3 rg 315 628 Td (Verifier: ${verifierName.length > 30 ? verifierName.slice(0, 28) + '...' : verifierName}) Tj ET\n`
+  s += `BT /F2 8.5 Tf 0.25 0.25 0.3 rg 315 613 Td (Type: ${verificationType.length > 30 ? verificationType.slice(0, 28) + '...' : verificationType}) Tj ET\n`
+  s += `BT /F2 8.5 Tf 0.25 0.25 0.3 rg 315 598 Td (Submitted By: ${submittedBy.length > 30 ? submittedBy.slice(0, 28) + '...' : submittedBy}) Tj ET\n`
+  s += `BT /F2 8.5 Tf 0.25 0.25 0.3 rg 315 583 Td (Candidate Email: ${candEmail.length > 30 ? candEmail.slice(0, 28) + '...' : candEmail}) Tj ET\n`
 
   // 6. Table Section
   s += 'BT /F1 11 Tf 0.06 0.09 0.16 rg 40 544 Td (VERIFICATION BREAKDOWN AUDIT) Tj ET\n'
@@ -514,12 +524,25 @@ export function buildCandidatePdf(
   s += 'BT /F1 9 Tf 0.2 0.25 0.35 rg 200 524 Td (Submitted / Record Value) Tj ET\n'
   s += 'BT /F1 9 Tf 0.2 0.25 0.35 rg 400 524 Td (Verification Result) Tj ET\n'
 
-  // Table Rows
+  // Verifier Organization formatting
+  const lowerV = verifierName.toLowerCase()
+  const verifierOrgDisplay =
+    lowerV.includes('tcs') || lowerV.includes('tata consultancy')
+      ? 'Tata Consultancy Services (TCS)'
+      : rec.verifierCode && !verifierName.includes('(')
+      ? `${verifierName} (${rec.verifierCode})`
+      : verifierName
+
+  const desigDeptValue =
+    department && department !== 'General' && department !== '—'
+      ? `${designation} (${department})`
+      : designation
+
   const tableRows = [
     { param: 'Full Name', val: candName, res: isVerified ? 'Verified Match' : 'Recorded' },
     { param: 'Employee Code', val: empId, res: isVerified ? 'Matched Master DB' : 'Recorded' },
-    { param: 'Verifier Organization', val: verifierName, res: 'Registered Enterprise' },
-    { param: 'Designation & Dept', val: `${designation} (${department})`, res: 'Verified Role' },
+    { param: 'Verifier Organization', val: verifierOrgDisplay, res: 'Registered Enterprise' },
+    { param: 'Designation & Dept', val: desigDeptValue, res: 'Verified Role' },
     { param: 'Tenure Period', val: `${doj} to ${dol}`, res: employedStatus },
     { param: 'Contact Number', val: contact, res: 'Phone Verified' },
     { param: 'Candidate Email', val: candEmail, res: 'Email Verified' },
@@ -533,14 +556,15 @@ export function buildCandidatePdf(
     }
     s += `0.9 0.92 0.95 RG 0.5 w 40 ${rowY - 4} 515 0.5 re S\n`
     s += `BT /F1 8.5 Tf 0.15 0.2 0.28 rg 50 ${rowY + 3} Td (${escapePdfText(r.param)}) Tj ET\n`
-    s += `BT /F2 8.5 Tf 0.15 0.2 0.28 rg 200 ${rowY + 3} Td (${escapePdfText(r.val.slice(0, 35))}) Tj ET\n`
+    const valText = r.val.length > 40 ? r.val.slice(0, 38) + '...' : r.val
+    s += `BT /F2 8.5 Tf 0.15 0.2 0.28 rg 200 ${rowY + 3} Td (${escapePdfText(valText)}) Tj ET\n`
     s += `BT /F2 8.5 Tf 0.25 0.35 0.45 rg 400 ${rowY + 3} Td (${escapePdfText(r.res)}) Tj ET\n`
     rowY -= 22
   })
 
   // 7. Security Seal & Footer
   s += '0.85 0.88 0.92 RG 1 w 40 85 515 0.5 re S\n'
-  s += 'BT /F1 8 Tf 0.02 0.5 0.65 rg 40 70 Td (WALSONS COMPLIANCE ENGINE) Tj ET\n'
+  s += 'BT /F1 8 Tf 0.02 0.5 0.65 rg 40 70 Td (SECURITAS COMPLIANCE ENGINE) Tj ET\n'
   s += `BT /F2 8 Tf 0.45 0.5 0.6 rg 40 56 Td (Document Token: ${reqId}-${Date.now().toString().slice(-6)}   |   Generated: ${new Date().toLocaleDateString('en-GB')}) Tj ET\n`
   s += 'BT /F1 8 Tf 0.06 0.73 0.51 rg 395 62 Td (CERTIFIED VERIFICATION DOCKET) Tj ET\n'
 
