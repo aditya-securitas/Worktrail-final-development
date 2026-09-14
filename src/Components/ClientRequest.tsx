@@ -135,12 +135,6 @@ const ClientRequest: React.FC = () => {
       'Content-Type': 'application/json',
     };
 
-    console.log('[ClientRequest] AuthContext User:', user);
-    console.log('[ClientRequest] Passing Email ID from AuthContext:', email);
-    console.log('[ClientRequest] Outgoing Request URL:', requestUrl);
-    console.log('[ClientRequest] Outgoing Request Payload:', requestPayload);
-    console.log('[ClientRequest] Outgoing Request Headers:', requestHeaders);
-
     if (isManual) {
       setRefreshing(true);
     } else {
@@ -150,26 +144,40 @@ const ClientRequest: React.FC = () => {
 
     try {
       const res: any = await axios.post(requestUrl, requestPayload, { headers: requestHeaders });
-      console.log('[ClientRequest] API Response Status:', res.status);
-      console.log('[ClientRequest] API Response Payload / Data:', res.data);
 
       const rawList: RawEmployeeRecord[] = Array.isArray(res.data)
         ? res.data
         : res.data?.data || res.data?.candidates || res.data?.records || [];
 
-      console.log('[ClientRequest] Extracted Records:', rawList);
+      // Apply business rule: If row is Status="Downloaded" (case-insensitive) and Downloadstatus is "0" (or 0, or '0'), skip it
+      const filteredRawList: RawEmployeeRecord[] = rawList.filter((item) => {
+        // Only filter out if all conditions match
+        const status = (item.Status || '').trim().toLowerCase();
+        const downloadstatus = String(item.Downloadstatus ?? '').trim();
+        // If status is 'downloaded' and Downloadstatus is '0', skip it (do not show)
+        if (status === 'downloaded' && (downloadstatus === '0' || downloadstatus === '')) {
+          return false;
+        }
+        // Otherwise, include
+        return true;
+      });
 
       // Normalize records into VerificationRecord shape expected by the UI and analyzer
-      const mapped: VerificationRecord[] = rawList.map((item, idx) => {
+      const mapped: VerificationRecord[] = filteredRawList.map((item, idx) => {
         const candidateName = [item.FirstName, item.MiddleName, item.LastName].filter(Boolean).join(' ') || 'Candidate';
         
         let status: 'Pending' | 'In Progress' | 'Verified' | 'Rejected' = 'Pending';
-        const st = (item.Status || '').toLowerCase();
-        if (st.includes('verif') || st.includes('complet')) {
+        // Enhanced logic based on Status value (for Downloaded/Approved etc)
+        const stRaw = (item.Status || '').trim().toLowerCase();
+        if (stRaw === 'downloaded') {
+          status = 'Pending'; // Special: treat as Pending (for now, could be changed)
+        } else if (stRaw === 'approved') {
+          status = 'Verified'; // Treat Approved as Verified
+        } else if (stRaw.includes('verif') || stRaw.includes('complet')) {
           status = 'Verified';
-        } else if (st.includes('progress') || st.includes('review')) {
+        } else if (stRaw.includes('progress') || stRaw.includes('review')) {
           status = 'In Progress';
-        } else if (st.includes('reject') || st.includes('cancel')) {
+        } else if (stRaw.includes('reject') || stRaw.includes('cancel')) {
           status = 'Rejected';
         } else {
           status = 'Pending';
@@ -205,7 +213,8 @@ const ClientRequest: React.FC = () => {
           uploadedFilesCount: (item.LOA || item.loa || item.SupportingDocs) ? 1 : 0,
           submittedBy: item.Clientemail || clientIdentifier,
           submittedAt: item.CreatedAt ? formatDate(item.CreatedAt) : '—',
-          status,
+          // For aligning "Status" — show Downloaded/Approved values
+          status: stRaw === 'downloaded' ? 'Pending' : stRaw === 'approved' ? 'Verified' : status,
           LOA: item.LOA || item.loa || null,
           raw: item, // <-- keep a reference to .raw for Downloadstatus
         } as unknown as VerificationRecord;
@@ -213,7 +222,6 @@ const ClientRequest: React.FC = () => {
 
       setRecords(mapped);
     } catch (err: any) {
-      console.error('[ClientRequest] Request Error:', err);
       setError(
         err?.response?.data?.message ||
           err?.message ||
@@ -227,11 +235,22 @@ const ClientRequest: React.FC = () => {
 
   useEffect(() => {
     loadRecords();
+    // eslint-disable-next-line
   }, [user]);
 
   // Filtering records
   const filteredRecords = useMemo(() => {
     return records.filter((r) => {
+      // (Extra safeguard: double-check the business rule here, in case anything is left, should not render)
+      if (
+        r.raw &&
+        typeof r.raw.Status === 'string' &&
+        r.raw.Status.trim().toLowerCase() === 'downloaded' &&
+        (String(r.raw.Downloadstatus ?? '').trim() === '0' || String(r.raw.Downloadstatus ?? '') === '')
+      ) {
+        return false;
+      }
+
       // Search
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
@@ -267,6 +286,7 @@ const ClientRequest: React.FC = () => {
 
       return true;
     });
+    // eslint-disable-next-line
   }, [records, searchQuery, selectedStatus, selectedCompanyFilter, selectedCompletenessFilter]);
 
   // Metrics
@@ -391,7 +411,6 @@ const ClientRequest: React.FC = () => {
 
       // Blob download method: find filename or default
       let filename = `Candidate_Report_${employeeCode || rec.requestId || rec.id}.pdf`;
-      // Try to extract filename from headers
       const contentDisposition =
         (response.headers && (response.headers['content-disposition'] || response.headers['Content-Disposition'])) || '';
       const match = contentDisposition.match(/filename="?([^"]+)"?/);
@@ -399,7 +418,6 @@ const ClientRequest: React.FC = () => {
         filename = match[1];
       }
 
-      // Create download link and click it
       const blob = new Blob([response.data], { type: 'application/pdf' });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -411,6 +429,10 @@ const ClientRequest: React.FC = () => {
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
       }, 100);
+
+      // Refresh after download per requirements
+      await loadRecords(true);
+
     } catch (err: any) {
       let msg =
         err?.response?.data?.message ||
@@ -666,8 +688,8 @@ const ClientRequest: React.FC = () => {
                     const isChecking = checkingStatusId === reqKey;
                     const feedback = statusFeedback[reqKey];
 
-                    // Extract Downloadstatus from .raw (preserved from API), handle both string and number "1"
-                    const downloadStatus = rec.raw && String(rec.raw.Downloadstatus) === "1";
+                    // Downloadstatus mapping: only show download if Downloadstatus is "1" or number 1 ("Approved")
+                    const downloadStatus = rec.raw && (String(rec.raw.Downloadstatus) === "1" || rec.raw.Downloadstatus === 1);
                     const isDownloading = downloadingPdf[reqKey];
 
                     return (
@@ -755,7 +777,7 @@ const ClientRequest: React.FC = () => {
                         {/* Actions: Check Status & View Detail */}
                         <td className="px-6 py-4 text-right">
                           <div className="flex items-center justify-end gap-2">
-                            {/* Download Report Button (Show only when Downloadstatus is "1") */}
+                            {/* Download Report Button (Show only when Downloadstatus is "1" or 1 - 'Approved') */}
                             {downloadStatus && (
                               <button
                                 type="button"
@@ -818,8 +840,8 @@ const ClientRequest: React.FC = () => {
         const isCheckingModal = checkingStatusId === modalReqKey;
         const modalFeedback = statusFeedback[modalReqKey];
 
-        // Only show the Download Report in modal if the Downloadstatus is "1"
-        const downloadStatusModal = selectedRecord.raw && String(selectedRecord.raw.Downloadstatus) === "1";
+        // Only show the Download Report in modal if the Downloadstatus is "1" or 1 ("Approved")
+        const downloadStatusModal = selectedRecord.raw && (String(selectedRecord.raw.Downloadstatus) === "1" || selectedRecord.raw.Downloadstatus === 1);
         const isDownloadingModal = downloadingPdf[modalReqKey];
 
         return (
