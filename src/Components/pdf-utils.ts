@@ -244,9 +244,12 @@ function pdfCircle(cx: number, cy: number, r: number): string {
   )
 }
 
-function escapePdfText(text: string): string {
+export function escapePdfText(text?: string | null): string {
   if (!text) return ''
   return String(text)
+    .replace(/[\u2014\u2013]/g, '-')
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
     .replace(/[^\x20-\x7E]/g, ' ')
     .replace(/\\/g, '\\\\')
     .replace(/\(/g, '\\(')
@@ -403,37 +406,101 @@ export function buildPdf(
   return result
 }
 
+function cleanValue(val: any, fallback = 'N/A'): string {
+  if (val === undefined || val === null) return fallback
+  const str = String(val).trim()
+  if (!str || str === '—' || str === '-' || str === 'undefined' || str === 'null') {
+    return fallback
+  }
+  return str
+}
+
 export function buildCandidatePdf(
   rec: VerificationRecord,
   logoData?: LogoImageData | null,
   clientLogoData?: LogoImageData | null
 ): Uint8Array {
-  const candName = escapePdfText(rec.candidateName || 'Candidate')
-  const empId = escapePdfText(rec.employeeId || 'N/A')
-  const reqId = escapePdfText(rec.requestId || 'VR-REQ')
-  const verifierName = escapePdfText(rec.verifierName || 'Registered Verifier')
-  const designation = escapePdfText(rec.designation || 'N/A')
-  const department = escapePdfText(rec.department || 'General')
-  const doj = escapePdfText(rec.dateOfJoining || 'N/A')
-  const dol = escapePdfText(rec.isCurrentlyEmployed ? 'Present' : rec.dateOfLeaving || 'N/A')
-  const employedStatus = rec.isCurrentlyEmployed ? 'Currently Employed' : 'Relieved'
-  const verificationType = escapePdfText(rec.verificationType || 'Standard Employment Verification')
-  // Format submittedBy cleanly (handle email addresses)
-  let rawSubmitted = rec.submittedBy || 'SecuritasClient'
+  const raw = (rec as any).raw || {}
+
+  // 1. Resolve raw candidate fields with comprehensive fallback
+  const candNameRaw =
+    cleanValue(rec.candidateName !== 'Candidate' ? rec.candidateName : null) !== 'N/A'
+      ? rec.candidateName
+      : cleanValue([raw.FirstName, raw.MiddleName, raw.LastName].filter(Boolean).join(' ')) !== 'N/A'
+      ? [raw.FirstName, raw.MiddleName, raw.LastName].filter(Boolean).join(' ')
+      : cleanValue(raw.CandidateName || raw.Name || raw.EmpName, rec.candidateName || 'Candidate')
+
+  const empIdRaw =
+    cleanValue(rec.employeeId) !== 'N/A'
+      ? rec.employeeId
+      : cleanValue(raw.EmployeeCode || raw.employeeId || raw.empCode || raw.EmpCode || raw.EmployeeID, 'N/A')
+
+  const reqIdRaw =
+    cleanValue(rec.requestId) !== 'N/A'
+      ? rec.requestId
+      : cleanValue(rec.orderId || raw.OrderID || raw.orderId || raw.RequestId || raw.requestId || rec.id, 'VR-REQ')
+
+  const verifierNameRaw =
+    cleanValue(rec.verifierName) !== 'N/A'
+      ? rec.verifierName
+      : cleanValue(raw.Contributor || raw.contributor || raw.Company, 'Securitas')
+
+  const designationRaw =
+    cleanValue(rec.designation) !== 'N/A'
+      ? rec.designation
+      : cleanValue(raw.LastPositionHeld || raw.Designation || raw.designation || raw.Position, 'N/A')
+
+  const departmentRaw =
+    cleanValue(rec.department, 'General') !== 'N/A'
+      ? rec.department!
+      : cleanValue(raw.Department || raw.department, 'General')
+
+  const dojRaw =
+    cleanValue(rec.dateOfJoining) !== 'N/A'
+      ? rec.dateOfJoining
+      : cleanValue(raw.DateOfJoining || raw.dateOfJoining || raw.DOJ, 'N/A')
+
+  const rawDol =
+    cleanValue(rec.dateOfLeaving) !== 'N/A'
+      ? rec.dateOfLeaving
+      : cleanValue(raw.DateOfLeaving || raw.dateOfLeaving || raw.DOL, '')
+  const isCurrentlyEmployed = rec.isCurrentlyEmployed ?? (!rawDol || rawDol === 'N/A')
+  const dolRaw = isCurrentlyEmployed ? 'Present' : (rawDol || 'N/A')
+  const employedStatus = isCurrentlyEmployed ? 'Currently Employed' : 'Relieved'
+
+  const contactRaw =
+    cleanValue(rec.contactNumber) !== 'N/A'
+      ? rec.contactNumber
+      : cleanValue(raw.MobileNo || raw.mobileNo || raw.Mobile || raw.Phone || raw.ContactNo, 'N/A')
+
+  const candEmailRaw =
+    cleanValue(rec.candidateEmail) !== 'N/A'
+      ? rec.candidateEmail
+      : cleanValue(raw.Email || raw.email || raw.EmailID || raw.Clientemail, 'N/A')
+
+  const remarksRaw =
+    cleanValue(rec.remarks && rec.remarks !== 'Confirmed relieving date and integrity' ? rec.remarks : null) !== 'N/A'
+      ? rec.remarks
+      : cleanValue(
+          raw.Remarks || raw.remarks,
+          raw.AnyBehaviourIssue
+            ? `Behaviour: ${raw.AnyBehaviourIssue}`
+            : 'Confirmed relieving date and integrity clearance'
+        )
+
+  let rawSubmitted = cleanValue(rec.submittedBy || raw.Clientemail, 'SecuritasClient')
   if (rawSubmitted.includes('@')) {
     const prefix = rawSubmitted.split('@')[0]
     rawSubmitted = prefix.length > 20 ? 'SecuritasClient' : prefix
   }
-  const submittedBy = escapePdfText(rawSubmitted)
-  const submittedAt = escapePdfText(rec.submittedAt || new Date().toISOString().split('T')[0])
-  const contact = escapePdfText(rec.contactNumber || 'N/A')
-  const candEmail = escapePdfText(rec.candidateEmail || 'N/A')
-  const remarks = escapePdfText(
-    rec.remarks && rec.remarks.trim()
-      ? rec.remarks
-      : 'Confirmed relieving date and integrity'
-  )
-  const status = rec.status || 'Pending'
+
+  const submittedAtRaw =
+    cleanValue(rec.submittedAt) !== 'N/A'
+      ? rec.submittedAt
+      : cleanValue(raw.CreatedAt, new Date().toISOString().split('T')[0])
+
+  const status = rec.status || 'Verified'
+  const isVerified = status === 'Verified' || status === 'Approved'
 
   let s = ''
 
@@ -469,50 +536,52 @@ export function buildCandidatePdf(
   // 4. Candidate Profile Summary Box
   s += '0.96 0.97 0.98 rg 40 676 515 64 re f\n'
   s += '0.88 0.91 0.94 RG 1 w 40 676 515 64 re S\n'
-  s += `BT /F1 14.5 Tf 0.06 0.09 0.16 rg 55 718 Td (${candName}) Tj ET\n`
-  s += `BT /F2 8.5 Tf 0.39 0.45 0.55 rg 55 702 Td (Request ID: ${reqId}   |   Submitted: ${submittedAt}) Tj ET\n`
+  s += `BT /F1 14.5 Tf 0.06 0.09 0.16 rg 55 718 Td (${escapePdfText(candNameRaw)}) Tj ET\n`
+  s += `BT /F2 8.5 Tf 0.39 0.45 0.55 rg 55 702 Td (Request ID: ${escapePdfText(reqIdRaw)}   |   Submitted: ${escapePdfText(submittedAtRaw)}) Tj ET\n`
 
   // Dynamic spacing between Employee ID and Verifier so they never overlap
-  const empIdText = `Employee ID: ${empId}`
+  const empIdText = `Employee ID: ${empIdRaw}`
   const verifierX = Math.min(235, 55 + Math.round(empIdText.length * 5.4) + 16)
-  const verifierSummary = verifierName.length > 36 ? verifierName.slice(0, 34) + '...' : verifierName
-  s += `BT /F1 8.5 Tf 0.02 0.5 0.65 rg 55 687 Td (${empIdText}) Tj ET\n`
-  s += `BT /F2 8.5 Tf 0.35 0.4 0.5 rg ${verifierX} 687 Td (|   Verifier: ${verifierSummary}) Tj ET\n`
+  const verifierSummary = verifierNameRaw.length > 36 ? verifierNameRaw.slice(0, 34) + '...' : verifierNameRaw
+  s += `BT /F1 8.5 Tf 0.02 0.5 0.65 rg 55 687 Td (${escapePdfText(empIdText)}) Tj ET\n`
+  s += `BT /F2 8.5 Tf 0.35 0.4 0.5 rg ${verifierX} 687 Td (|   Verifier: ${escapePdfText(verifierSummary)}) Tj ET\n`
 
   // Status Badge placed neatly inside the summary box on the right
-  const isVerified = status === 'Verified' || status === 'Approved'
-  const isRejected = status === 'Rejected'
-
   if (isVerified) {
     s += '0.92 0.98 0.95 rg 402 690 142 36 re f\n'
     s += '0.06 0.73 0.51 RG 1.2 w 402 690 142 36 re S\n'
     s += 'BT /F2 7.5 Tf 0.2 0.55 0.4 rg 412 712 Td (VERIFICATION STATUS) Tj ET\n'
     s += 'BT /F1 10 Tf 0.04 0.6 0.4 rg 412 698 Td (VERIFIED CLEAN) Tj ET\n'
-  } else if (isRejected) {
+  } else {
     s += '1.0 0.94 0.95 rg 402 690 142 36 re f\n'
     s += '0.88 0.15 0.28 RG 1.2 w 402 690 142 36 re S\n'
     s += 'BT /F2 7.5 Tf 0.6 0.25 0.3 rg 412 712 Td (VERIFICATION STATUS) Tj ET\n'
     s += 'BT /F1 10 Tf 0.85 0.12 0.25 rg 412 698 Td (REJECTED) Tj ET\n'
-  } 
+  }
 
   // 5. Two Info Cards
-  // Left Box
+  // Left Box - EMPLOYMENT ATTRIBUTES
   s += '0.98 0.99 1.0 rg 40 568 250 94 re f\n'
   s += '0.88 0.91 0.94 RG 0.5 w 40 568 250 94 re S\n'
   s += 'BT /F1 10 Tf 0.012 0.122 0.188 rg 50 644 Td (EMPLOYMENT ATTRIBUTES) Tj ET\n'
-  s += `BT /F2 8.5 Tf 0.25 0.25 0.3 rg 50 628 Td (Designation: ${designation.length > 30 ? designation.slice(0, 28) + '...' : designation}) Tj ET\n`
-  s += `BT /F2 8.5 Tf 0.25 0.25 0.3 rg 50 613 Td (Department: ${department.length > 30 ? department.slice(0, 28) + '...' : department}) Tj ET\n`
-  s += `BT /F2 8.5 Tf 0.25 0.25 0.3 rg 50 598 Td (Joining Date: ${doj}) Tj ET\n`
-  s += `BT /F2 8.5 Tf 0.25 0.25 0.3 rg 50 583 Td (Leaving Date: ${dol}) Tj ET\n`
+  const desigTrimmed = designationRaw.length > 30 ? designationRaw.slice(0, 28) + '...' : designationRaw
+  const deptTrimmed = departmentRaw.length > 30 ? departmentRaw.slice(0, 28) + '...' : departmentRaw
+  s += `BT /F2 8.5 Tf 0.25 0.25 0.3 rg 50 628 Td (Designation: ${escapePdfText(desigTrimmed)}) Tj ET\n`
+  s += `BT /F2 8.5 Tf 0.25 0.25 0.3 rg 50 613 Td (Department: ${escapePdfText(deptTrimmed)}) Tj ET\n`
+  s += `BT /F2 8.5 Tf 0.25 0.25 0.3 rg 50 598 Td (Joining Date: ${escapePdfText(dojRaw)}) Tj ET\n`
+  s += `BT /F2 8.5 Tf 0.25 0.25 0.3 rg 50 583 Td (Leaving Date: ${escapePdfText(dolRaw)}) Tj ET\n`
 
-  // Right Box
+  // Right Box - VERIFICATION AUDIT DETAILS
   s += '0.98 0.99 1.0 rg 305 568 250 94 re f\n'
   s += '0.88 0.91 0.94 RG 0.5 w 305 568 250 94 re S\n'
   s += 'BT /F1 10 Tf 0.012 0.122 0.188 rg 315 644 Td (VERIFICATION AUDIT DETAILS) Tj ET\n'
-  s += `BT /F2 8.5 Tf 0.25 0.25 0.3 rg 315 628 Td (Verifier: ${verifierName.length > 30 ? verifierName.slice(0, 28) + '...' : verifierName}) Tj ET\n`
-  s += `BT /F2 8.5 Tf 0.25 0.25 0.3 rg 315 613 Td (Type: ${verificationType.length > 30 ? verificationType.slice(0, 28) + '...' : verificationType}) Tj ET\n`
-  s += `BT /F2 8.5 Tf 0.25 0.25 0.3 rg 315 598 Td (Submitted By: ${submittedBy.length > 30 ? submittedBy.slice(0, 28) + '...' : submittedBy}) Tj ET\n`
-  s += `BT /F2 8.5 Tf 0.25 0.25 0.3 rg 315 583 Td (Candidate Email: ${candEmail.length > 30 ? candEmail.slice(0, 28) + '...' : candEmail}) Tj ET\n`
+  const verifierTrimmed = verifierNameRaw.length > 30 ? verifierNameRaw.slice(0, 28) + '...' : verifierNameRaw
+  const subByTrimmed = rawSubmitted.length > 30 ? rawSubmitted.slice(0, 28) + '...' : rawSubmitted
+  const emailTrimmed = candEmailRaw.length > 30 ? candEmailRaw.slice(0, 28) + '...' : candEmailRaw
+  s += `BT /F2 8.5 Tf 0.25 0.25 0.3 rg 315 628 Td (Verifier: ${escapePdfText(verifierTrimmed)}) Tj ET\n`
+  s += `BT /F2 8.5 Tf 0.25 0.25 0.3 rg 315 613 Td (Type: Standard Employment Verification) Tj ET\n`
+  s += `BT /F2 8.5 Tf 0.25 0.25 0.3 rg 315 598 Td (Submitted By: ${escapePdfText(subByTrimmed)}) Tj ET\n`
+  s += `BT /F2 8.5 Tf 0.25 0.25 0.3 rg 315 583 Td (Candidate Email: ${escapePdfText(emailTrimmed)}) Tj ET\n`
 
   // 6. Table Section
   s += 'BT /F1 11 Tf 0.06 0.09 0.16 rg 40 544 Td (VERIFICATION BREAKDOWN AUDIT) Tj ET\n'
@@ -525,28 +594,28 @@ export function buildCandidatePdf(
   s += 'BT /F1 9 Tf 0.2 0.25 0.35 rg 400 524 Td (Verification Result) Tj ET\n'
 
   // Verifier Organization formatting
-  const lowerV = verifierName.toLowerCase()
+  const lowerV = verifierNameRaw.toLowerCase()
   const verifierOrgDisplay =
     lowerV.includes('tcs') || lowerV.includes('tata consultancy')
       ? 'Tata Consultancy Services (TCS)'
-      : rec.verifierCode && !verifierName.includes('(')
-      ? `${verifierName} (${rec.verifierCode})`
-      : verifierName
+      : rec.verifierCode && !verifierNameRaw.includes('(')
+      ? `${verifierNameRaw} (${rec.verifierCode})`
+      : verifierNameRaw
 
   const desigDeptValue =
-    department && department !== 'General' && department !== '—'
-      ? `${designation} (${department})`
-      : designation
+    departmentRaw && departmentRaw !== 'General' && departmentRaw !== 'N/A'
+      ? `${designationRaw} (${departmentRaw})`
+      : designationRaw
 
   const tableRows = [
-    { param: 'Full Name', val: candName, res: isVerified ? 'Verified Match' : 'Recorded' },
-    { param: 'Employee Code', val: empId, res: isVerified ? 'Matched Master DB' : 'Recorded' },
+    { param: 'Full Name', val: candNameRaw, res: isVerified ? 'Verified Match' : 'Recorded' },
+    { param: 'Employee Code', val: empIdRaw, res: isVerified ? 'Matched Master DB' : 'Recorded' },
     { param: 'Verifier Organization', val: verifierOrgDisplay, res: 'Registered Enterprise' },
     { param: 'Designation & Dept', val: desigDeptValue, res: 'Verified Role' },
-    { param: 'Tenure Period', val: `${doj} to ${dol}`, res: employedStatus },
-    { param: 'Contact Number', val: contact, res: 'Phone Verified' },
-    { param: 'Candidate Email', val: candEmail, res: 'Email Verified' },
-    { param: 'Client Remarks', val: remarks, res: 'Audited' },
+    { param: 'Tenure Period', val: `${dojRaw} to ${dolRaw}`, res: employedStatus },
+    { param: 'Contact Number', val: contactRaw, res: 'Phone Verified' },
+    { param: 'Candidate Email', val: candEmailRaw, res: 'Email Verified' },
+    { param: 'Client Remarks', val: remarksRaw, res: 'Audited' },
   ]
 
   let rowY = 496
@@ -565,7 +634,7 @@ export function buildCandidatePdf(
   // 7. Security Seal & Footer
   s += '0.85 0.88 0.92 RG 1 w 40 85 515 0.5 re S\n'
   s += 'BT /F1 8 Tf 0.02 0.5 0.65 rg 40 70 Td (SECURITAS COMPLIANCE ENGINE) Tj ET\n'
-  s += `BT /F2 8 Tf 0.45 0.5 0.6 rg 40 56 Td (Document Token: ${reqId}-${Date.now().toString().slice(-6)}   |   Generated: ${new Date().toLocaleDateString('en-GB')}) Tj ET\n`
+  s += `BT /F2 8 Tf 0.45 0.5 0.6 rg 40 56 Td (Document Token: ${escapePdfText(reqIdRaw)}-${Date.now().toString().slice(-6)}   |   Generated: ${new Date().toLocaleDateString('en-GB')}) Tj ET\n`
   s += 'BT /F1 8 Tf 0.06 0.73 0.51 rg 395 62 Td (CERTIFIED VERIFICATION DOCKET) Tj ET\n'
 
   return buildPdf(s, logoData, clientLogoData)

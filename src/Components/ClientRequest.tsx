@@ -140,12 +140,6 @@ const ClientRequest: React.FC = () => {
       'Content-Type': 'application/json',
     };
 
-    console.log('[ClientRequest] AuthContext User:', user);
-    console.log('[ClientRequest] Passing Email ID from AuthContext:', email);
-    console.log('[ClientRequest] Outgoing Request URL:', requestUrl);
-    console.log('[ClientRequest] Outgoing Request Payload:', requestPayload);
-    console.log('[ClientRequest] Outgoing Request Headers:', requestHeaders);
-
     if (isManual) {
       setRefreshing(true);
     } else {
@@ -155,38 +149,82 @@ const ClientRequest: React.FC = () => {
 
     try {
       const res: any = await axios.post(requestUrl, requestPayload, { headers: requestHeaders });
-      console.log('[ClientRequest] API Response Status:', res.status);
-      console.log('[ClientRequest] API Response Payload / Data:', res.data);
 
       const rawList: RawEmployeeRecord[] = Array.isArray(res.data)
         ? res.data
         : res.data?.data || res.data?.candidates || res.data?.records || [];
 
-      console.log('[ClientRequest] Extracted Records:', rawList);
+      // Apply business rule: If row is Status="Downloaded" (case-insensitive) and Downloadstatus is "0" (or 0, or '0'), skip it
+      const filteredRawList: RawEmployeeRecord[] = rawList.filter((item) => {
+        // Only filter out if all conditions match
+        const status = (item.Status || '').trim().toLowerCase();
+        const downloadstatus = String(item.Downloadstatus ?? '').trim();
+        // If status is 'downloaded' and Downloadstatus is '0', skip it (do not show)
+        if (status === 'downloaded' && (downloadstatus === '0' || downloadstatus === '')) {
+          return false;
+        }
+        // Otherwise, include
+        return true;
+      });
 
       // Normalize records into VerificationRecord shape expected by the UI and analyzer
-      const mapped: VerificationRecord[] = rawList.map((item, idx) => {
-        const candidateName = [item.FirstName, item.MiddleName, item.LastName].filter(Boolean).join(' ') || 'Candidate';
-        
-        let status: 'Pending' | 'In Progress' | 'Verified' | 'Rejected' = 'Pending';
-        const st = (item.Status || '').toLowerCase();
-        if (st.includes('verif') || st.includes('complet')) {
-          status = 'Verified';
-        } else if (st.includes('progress') || st.includes('review')) {
-          status = 'In Progress';
-        } else if (st.includes('reject') || st.includes('cancel')) {
-          status = 'Rejected';
-        } else {
-          status = 'Pending';
-        }
+      const mapped: VerificationRecord[] = filteredRawList.map((item, idx) => {
+        const candidateName =
+          [item.FirstName, item.MiddleName, item.LastName].filter(Boolean).join(' ') ||
+          item.CandidateName ||
+          item.Name ||
+          item.EmpName ||
+          'Candidate';
 
-        const rawEmpCode = item.EmployeeCode || item.employeeId || item.empCode || item.EmpCode || item.EmployeeID || '';
+        const rawEmpCode =
+          item.EmployeeCode ||
+          item.employeeId ||
+          item.empCode ||
+          item.EmpCode ||
+          item.EmployeeID ||
+          '';
+
         const rawOrderId = item.OrderID || item.orderId || item.OrderId || item.RequestId || item.requestId || '';
-        const rawContributor = item.Contributor || item.contributor || 'Securitas';
+        const rawContributor = item.Contributor || item.contributor || item.Company || item.CompanyName || 'Securitas';
         const recId = rawOrderId || `REQ-${idx + 1}`;
         const uniqueId = String(item.Sno || rawEmpCode || `${recId}-${idx}`);
 
-        // This will preserve Downloadstatus from API under .raw property so we can access it in the UI
+        // Binary status rule: Verified if download is active, Rejected otherwise (no Pending / In Progress)
+        const stRaw = (item.Status || '').trim().toLowerCase();
+        const dlRaw = String(item.Downloadstatus ?? '').trim();
+        const isDownloadActive =
+          dlRaw === '1' ||
+          stRaw === 'downloaded' ||
+          stRaw === 'approved' ||
+          stRaw.includes('verif') ||
+          stRaw.includes('complet');
+
+        const finalStatus: 'Verified' | 'Rejected' = isDownloadActive ? 'Verified' : 'Rejected';
+
+        const dojFormatted = item.DateOfJoining
+          ? formatDate(item.DateOfJoining)
+          : item.DOJ
+          ? formatDate(item.DOJ)
+          : '—';
+
+        const dolFormatted = item.DateOfLeaving
+          ? formatDate(item.DateOfLeaving)
+          : item.DOL
+          ? formatDate(item.DOL)
+          : '—';
+
+        const isCurrentlyEmployed = !item.DateOfLeaving && !item.DOL;
+
+        const designation =
+          item.LastPositionHeld ||
+          item.Designation ||
+          item.designation ||
+          item.Position ||
+          item.Department ||
+          '—';
+
+        const department = item.Department || item.department || 'General';
+
         return {
           id: uniqueId,
           requestId: recId,
@@ -194,17 +232,17 @@ const ClientRequest: React.FC = () => {
           clientId: clientIdentifier,
           candidateName,
           employeeId: rawEmpCode || '—',
-          candidateEmail: item.Email || item.candidateEmail || item.email || '',
-          contactNumber: item.MobileNo || item.contactNumber || item.mobile || '',
+          candidateEmail: item.Email || item.candidateEmail || item.email || item.EmailID || '',
+          contactNumber: item.MobileNo || item.contactNumber || item.mobile || item.Mobile || item.Phone || '',
           verifierId: rawContributor || 'SEC-01',
           verifierName: rawContributor || 'Securitas',
           verifierCategory: 'Master Contributor',
           verifierCode: rawContributor ? rawContributor.slice(0, 4).toUpperCase() : 'SEC',
-          dateOfJoining: item.DateOfJoining ? formatDate(item.DateOfJoining) : '—',
-          dateOfLeaving: item.DateOfLeaving ? formatDate(item.DateOfLeaving) : '—',
-          isCurrentlyEmployed: !item.DateOfLeaving,
-          designation: item.LastPositionHeld || item.Department || '—',
-          department: item.Department || 'General',
+          dateOfJoining: dojFormatted,
+          dateOfLeaving: dolFormatted,
+          isCurrentlyEmployed,
+          designation,
+          department,
           verificationType: 'Standard Employment Verification',
           remarks: item.AnyBehaviourIssue
             ? `Behaviour: ${item.AnyBehaviourIssue}`
@@ -212,15 +250,17 @@ const ClientRequest: React.FC = () => {
           uploadedFilesCount: (item.LOA || item.loa || item.SupportingDocs) ? 1 : 0,
           submittedBy: item.Clientemail || clientIdentifier,
           submittedAt: item.CreatedAt ? formatDate(item.CreatedAt) : '—',
-          status,
+          status: finalStatus,
           LOA: item.LOA || item.loa || null,
-          raw: item, // <-- keep a reference to .raw for Downloadstatus
+          raw: {
+            ...item,
+            Downloadstatus: isDownloadActive ? '1' : '0',
+          },
         } as unknown as VerificationRecord;
       });
 
       setRecords(mapped);
     } catch (err: any) {
-      console.error('[ClientRequest] Request Error:', err);
       setError(
         err?.response?.data?.message ||
           err?.message ||
@@ -234,11 +274,22 @@ const ClientRequest: React.FC = () => {
 
   useEffect(() => {
     loadRecords();
+    // eslint-disable-next-line
   }, [user]);
 
   // Filtering records
   const filteredRecords = useMemo(() => {
     return records.filter((r) => {
+      // (Extra safeguard: double-check the business rule here, in case anything is left, should not render)
+      if (
+        r.raw &&
+        typeof r.raw.Status === 'string' &&
+        r.raw.Status.trim().toLowerCase() === 'downloaded' &&
+        (String(r.raw.Downloadstatus ?? '').trim() === '0' || String(r.raw.Downloadstatus ?? '') === '')
+      ) {
+        return false;
+      }
+
       // Search
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
@@ -274,48 +325,31 @@ const ClientRequest: React.FC = () => {
 
       return true;
     });
+    // eslint-disable-next-line
   }, [records, searchQuery, selectedStatus, selectedCompanyFilter, selectedCompletenessFilter]);
 
-  // Metrics
+  // Metrics - Binary status evaluation (Verified vs Rejected)
   const totalRequests = records.length;
-  const pendingRequests = records.filter((r) => r.status === 'Pending').length;
-  const inProgressRequests = records.filter((r) => r.status === 'In Progress').length;
   const verifiedRequests = records.filter((r) => r.status === 'Verified').length;
   const rejectedRequests = records.filter((r) => r.status === 'Rejected').length;
   const recordsWithMissingData = records.filter((r) => analyzeCandidateData(r).missingCount > 0).length;
 
-  // Status Badge UI
+  // Status Badge UI - Only Verified and Rejected
   const getStatusBadge = (status: VerificationRecord['status']) => {
-    switch (status) {
-      case 'Verified':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-            Verified
-          </span>
-        );
-      case 'In Progress':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-sky-50 text-sky-700 border border-sky-200">
-            <span className="w-1.5 h-1.5 rounded-full bg-sky-500 animate-pulse"></span>
-            In Progress
-          </span>
-        );
-      case 'Rejected':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200">
-            <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
-            Rejected
-          </span>
-        );
-      default:
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
-            Pending
-          </span>
-        );
+    if (status === 'Verified') {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+          Verified
+        </span>
+      );
     }
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200">
+        <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+        Rejected
+      </span>
+    );
   };
 
   // Export to Excel
@@ -367,33 +401,36 @@ const ClientRequest: React.FC = () => {
 
   // Download handler for Report PDF matching Enterprise Verification Report Docket
   const handleDownloadReport = async (rec: VerificationRecord) => {
-    const contributor = rec.verifierName || (rec.raw && rec.raw.Contributor) || "Securitas";
+    const contributor =
+      rec.verifierName ||
+      (rec.raw && (rec.raw.Contributor || rec.raw.contributor || rec.raw.Company)) ||
+      'Securitas';
     const employeeCode =
-      rec.employeeId ||
-      (rec.raw && (rec.raw.EmployeeCode || rec.raw.employeeId || rec.raw.EmpCode || rec.raw.EmployeeID)) ||
-      "";
+      (rec.employeeId !== '—' && rec.employeeId) ||
+      (rec.raw && (rec.raw.EmployeeCode || rec.raw.employeeId || rec.raw.empCode || rec.raw.EmpCode || rec.raw.EmployeeID)) ||
+      '';
 
     const recordKey = rec.requestId || rec.id;
     setDownloadingPdf((prev) => ({ ...prev, [recordKey]: true }));
 
     try {
-      // 1. Concurrently fetch application logo (Securitas) and contributor brand logo (e.g. TCS)
-      const [logoData, contributorLogoData] = await Promise.all([
+      // 1. Fetch Application Logo and Contributor Logo in parallel
+      const [logoData, clientLogoData] = await Promise.all([
         getLogoImageData(),
         getClientLogoData(contributor),
       ]);
 
-      // 2. Build certified verification report PDF matching the specification
-      const pdfBytes = buildCandidatePdf(rec, logoData, contributorLogoData);
+      // 2. Generate PDF document with complete candidate data populated
+      const pdfBytes = buildCandidatePdf(rec, logoData, clientLogoData);
 
-      // 3. Initiate browser download as a PDF file
+      // 3. Download generated PDF
       const blob = new Blob([pdfBytes as any], { type: 'application/pdf' });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      const safeEmpCode = (employeeCode || rec.requestId || rec.candidateName || 'Record')
+      const safeIdentifier = (employeeCode || rec.requestId || rec.candidateName || 'Record')
         .replace(/[^a-zA-Z0-9_-]/g, '_');
-      a.download = `Candidate_Report_${safeEmpCode}.pdf`;
+      a.download = `Candidate_Verification_Report_${safeIdentifier}.pdf`;
       document.body.appendChild(a);
       a.click();
 
@@ -404,20 +441,24 @@ const ClientRequest: React.FC = () => {
         window.URL.revokeObjectURL(url);
       }, 1000);
 
-      // 4. Fire background update ping to backend DownloadUpdatePDF endpoint if available
-      try {
-        fetch('https://worktrail.ai/api/DownloadUpdatePDF', {
-          method: 'POST',
-          headers: {
-            APIKEY: 'Securitas@#!1234',
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
+      // 4. Asynchronously notify backend DownloadUpdatePDF to record download
+      axios
+        .post(
+          'https://worktrail.ai/api/DownloadUpdatePDF',
+          {
             Contributor: contributor,
             EmployeeCode: employeeCode,
-          }),
-        }).catch(() => {});
-      } catch {}
+          },
+          {
+            headers: {
+              APIKEY: 'Securitas@#!1234',
+              'Content-Type': 'application/json',
+            },
+          }
+        )
+        .catch((err) => {
+          console.warn('[ClientRequest] Backend download tracking notice:', err);
+        });
     } catch (err: any) {
       console.error('[ClientRequest] Error generating PDF report:', err);
       alert('Failed to generate verification report. Please try again.');
@@ -471,7 +512,7 @@ const ClientRequest: React.FC = () => {
       </div>
 
       {/* 2. Stat Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Requests */}
         <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm flex items-center justify-between">
           <div>
@@ -484,39 +525,27 @@ const ClientRequest: React.FC = () => {
           </div>
         </div>
 
-        {/* Pending */}
-        <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm flex items-center justify-between">
-          <div>
-            <span className="text-xs font-bold uppercase tracking-wider text-amber-500">Pending</span>
-            <p className="text-2xl sm:text-3xl font-extrabold text-amber-600 mt-1">{pendingRequests}</p>
-            <span className="text-[11px] text-slate-500 mt-1 block">Awaiting partner</span>
-          </div>
-          <div className="w-11 h-11 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center shadow-xs">
-            <Clock className="w-5 h-5" />
-          </div>
-        </div>
-
-        {/* In Progress */}
-        <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm flex items-center justify-between">
-          <div>
-            <span className="text-xs font-bold uppercase tracking-wider text-sky-500">In Progress</span>
-            <p className="text-2xl sm:text-3xl font-extrabold text-sky-600 mt-1">{inProgressRequests}</p>
-            <span className="text-[11px] text-slate-500 mt-1 block">Under verification</span>
-          </div>
-          <div className="w-11 h-11 rounded-2xl bg-sky-50 text-sky-600 flex items-center justify-center shadow-xs">
-            <ShieldCheck className="w-5 h-5" />
-          </div>
-        </div>
-
         {/* Verified */}
         <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm flex items-center justify-between">
           <div>
             <span className="text-xs font-bold uppercase tracking-wider text-emerald-500">Verified</span>
             <p className="text-2xl sm:text-3xl font-extrabold text-emerald-600 mt-1">{verifiedRequests}</p>
-            <span className="text-[11px] text-slate-500 mt-1 block">{rejectedRequests} rejected</span>
+            <span className="text-[11px] text-emerald-600 font-semibold mt-1 block">Download Active</span>
           </div>
           <div className="w-11 h-11 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shadow-xs">
             <CheckCircle2 className="w-5 h-5" />
+          </div>
+        </div>
+
+        {/* Rejected */}
+        <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm flex items-center justify-between">
+          <div>
+            <span className="text-xs font-bold uppercase tracking-wider text-rose-500">Rejected</span>
+            <p className="text-2xl sm:text-3xl font-extrabold text-rose-600 mt-1">{rejectedRequests}</p>
+            <span className="text-[11px] text-rose-500 font-semibold mt-1 block">Download Inactive</span>
+          </div>
+          <div className="w-11 h-11 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center shadow-xs">
+            <AlertCircle className="w-5 h-5" />
           </div>
         </div>
 
@@ -560,7 +589,7 @@ const ClientRequest: React.FC = () => {
           <div className="flex flex-wrap items-center gap-3">
             {/* Status Pills */}
             <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-slate-200 text-xs font-bold">
-              {['All', 'Pending', 'In Progress', 'Verified', 'Rejected'].map((status) => (
+              {['All', 'Verified', 'Rejected'].map((status) => (
                 <button
                   key={status}
                   type="button"
@@ -670,17 +699,8 @@ const ClientRequest: React.FC = () => {
                     const isChecking = checkingStatusId === reqKey;
                     const feedback = statusFeedback[reqKey];
 
-                    // Extract Downloadstatus from .raw (preserved from API), handle both string and number "1" or Verified
-                    const downloadStatus = Boolean(
-                      (rec.raw && (
-                        String(rec.raw.Downloadstatus) === "1" ||
-                        String(rec.raw.downloadStatus) === "1" ||
-                        String(rec.raw.DownloadStatus) === "1" ||
-                        String(rec.raw.downloadstatus) === "1"
-                      )) ||
-                      rec.status === 'Verified' ||
-                      rec.status === 'Approved'
-                    );
+                    // Active download button when status is Verified
+                    const downloadStatus = rec.status === 'Verified' || (rec.raw && String(rec.raw.Downloadstatus) === "1");
                     const isDownloading = downloadingPdf[reqKey];
 
                     return (
@@ -768,7 +788,7 @@ const ClientRequest: React.FC = () => {
                         {/* Actions: Check Status & View Detail */}
                         <td className="px-6 py-4 text-right">
                           <div className="flex items-center justify-end gap-2">
-                            {/* Download Report Button (Show only when Downloadstatus is "1") */}
+                            {/* Download Report Button (Show only when Downloadstatus is "1" or 1 - 'Approved') */}
                             {downloadStatus && (
                               <button
                                 type="button"
@@ -831,17 +851,8 @@ const ClientRequest: React.FC = () => {
         const isCheckingModal = checkingStatusId === modalReqKey;
         const modalFeedback = statusFeedback[modalReqKey];
 
-        // Only show the Download Report in modal if the Downloadstatus is "1" or Verified
-        const downloadStatusModal = Boolean(
-          (selectedRecord.raw && (
-            String(selectedRecord.raw.Downloadstatus) === "1" ||
-            String(selectedRecord.raw.downloadStatus) === "1" ||
-            String(selectedRecord.raw.DownloadStatus) === "1" ||
-            String(selectedRecord.raw.downloadstatus) === "1"
-          )) ||
-          selectedRecord.status === 'Verified' ||
-          selectedRecord.status === 'Approved'
-        );
+        // Only show Download Report in modal if record is Verified / download active
+        const downloadStatusModal = selectedRecord.status === 'Verified' || (selectedRecord.raw && String(selectedRecord.raw.Downloadstatus) === "1");
         const isDownloadingModal = downloadingPdf[modalReqKey];
 
         return (
