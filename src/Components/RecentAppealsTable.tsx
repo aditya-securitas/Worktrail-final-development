@@ -535,7 +535,9 @@ export const RecentAppealsTable: React.FC<RecentAppealsTableProps> = ({
     }
   }
 
+  // -----
   // Upload handler
+  // Here is the new logic: Order ID for ClientDocumentUpdate should always come from the ClientEmpStatus data (which is in the .raw property of the record)
   const handleSubmitUpload = async () => {
     if (!uploadTargetRecord || !uploadLOAFile) {
       setUploadError('Please select LOA file.')
@@ -555,49 +557,35 @@ export const RecentAppealsTable: React.FC<RecentAppealsTableProps> = ({
         supportingDocsMime = r.mime
       }
 
-      // Make ABSOLUTELY SURE: EmployeeCode and OrderID (not orderId) are included and correct.
-      // Use data from the "raw" object if possible, so we always pick up the true original field names.
-      // Fallback to .employeeId/.orderId properties only if raw is missing.
+      // Always use the OrderID from the .raw object (from ClientEmpStatus/db), fallback to other fields as needed
+      let orderIdDb: string | undefined = (
+        uploadTargetRecord.raw?.OrderID ||
+        uploadTargetRecord.raw?.orderId ||
+        uploadTargetRecord.raw?.OrderId ||
 
-      let employeeCodeVal = null
-      let orderIdVal = null
-      if (uploadTargetRecord.raw) {
-        // Try all possible variations
-        employeeCodeVal =
-          uploadTargetRecord.raw.EmployeeCode ||
-          uploadTargetRecord.raw.employeeId ||
-          uploadTargetRecord.raw.EmpCode ||
-          uploadTargetRecord.raw.empCode ||
-          uploadTargetRecord.raw.EmployeeID ||
-          uploadTargetRecord.employeeId ||
-          ''
-        orderIdVal =
-          uploadTargetRecord.raw.OrderID ||
-          uploadTargetRecord.raw.orderId ||
-          uploadTargetRecord.raw.OrderId ||
-          uploadTargetRecord.raw.RequestId ||
-          uploadTargetRecord.raw.requestId ||
-          uploadTargetRecord.orderId ||
-          uploadTargetRecord.requestId ||
-          ''
-      } else {
-        employeeCodeVal = uploadTargetRecord.employeeId || ''
-        orderIdVal = uploadTargetRecord.orderId || uploadTargetRecord.requestId || ''
-      }
+        uploadTargetRecord.orderId ||
+      
+        undefined
+      )
 
       // Pass full dataUrl (with base64 header prefix) in payload
       const payload: any = {
-        EmployeeCode: employeeCodeVal,
-        OrderID: orderIdVal, // Make sure to use "OrderID" here, as required by backend
+        EmployeeCode: uploadTargetRecord.employeeId,
+        orderId: orderIdDb,
         Contributor: uploadTargetRecord.verifierName,
         LOA: loaDataUrl,
       }
+      // Debugging
+      console.log('EmployeeCode:', payload.EmployeeCode)
+      console.log('orderId from DB:', payload.orderId)
+      console.log('Contributor:', payload.Contributor)
+      console.log('LOA:', payload.LOA)
 
       if (supportingDocsDataUrl) {
         payload.SupportingDocs = supportingDocsDataUrl
       }
-      if (!payload.EmployeeCode || !payload.OrderID || !payload.Contributor || !payload.LOA) {
-        setUploadError('EmployeeCode, OrderID, Contributor, and LOA are required.')
+      if (!payload.EmployeeCode || !payload.orderId || !payload.Contributor || !payload.LOA) {
+        setUploadError('EmployeeCode, orderId, Contributor, and LOA are required.')
         setUploadLoading(false)
         return
       }
@@ -613,7 +601,7 @@ export const RecentAppealsTable: React.FC<RecentAppealsTableProps> = ({
         customHeaders['x-supportdocs-file-type'] = supportingDocsExt
         customHeaders['x-supportdocs-mime'] = supportingDocsMime
       }
-      console.log(payload)
+      console.log('Upload Payload:', payload)
       await axios.post(
         API_ENDPOINTS.clientDocumentUpdate || 'https://worktrail.ai/api/ClientDocumentUpdate',
         payload,

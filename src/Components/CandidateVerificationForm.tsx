@@ -3552,7 +3552,7 @@ function CandidateVerificationForm() {
                   Submit Another
                 </button>
 
-                <button
+                {/* <button
                   type="button"
                   onClick={() => {
                     setSubmissionSuccess(false)
@@ -3567,7 +3567,7 @@ function CandidateVerificationForm() {
                 >
                   <LayoutGrid className="w-3.5 h-3.5" />
                   <span>Go to Dashboard</span>
-                </button>
+                </button> */}
               </div>
             </div>
           </div>
