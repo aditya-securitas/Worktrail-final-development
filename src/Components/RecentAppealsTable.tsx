@@ -562,6 +562,12 @@ export const RecentAppealsTable: React.FC<RecentAppealsTableProps> = ({
         Contributor: uploadTargetRecord.verifierName,
         LOA: loaDataUrl,
       }
+      console.log(payload.EmployeeCode)
+      console.log(payload.orderId)
+      console.log(payload.Contributor)
+      console.log(payload.LOA)
+
+
       if (supportingDocsDataUrl) {
         payload.SupportingDocs = supportingDocsDataUrl
       }
