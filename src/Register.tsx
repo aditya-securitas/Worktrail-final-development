@@ -390,8 +390,9 @@ function Register({ onLogin }: RegisterProps) {
     try {
       const payload = {
         EmailID: registeredEmail.trim(),
-        OTP: regOtp.trim(),
+        otp: regOtp.trim(),
       }
+      console.log(payload)
       let response, data
       try {
         response = await axios.post(API_ENDPOINTS.auth.verifyRegistrationOtp, payload, {
