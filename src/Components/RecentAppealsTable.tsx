@@ -582,7 +582,7 @@ export const RecentAppealsTable: React.FC<RecentAppealsTableProps> = ({
         customHeaders['x-supportdocs-file-type'] = supportingDocsExt
         customHeaders['x-supportdocs-mime'] = supportingDocsMime
       }
-      
+      console.log(payload)
       await axios.post(
         API_ENDPOINTS.clientDocumentUpdate || 'https://worktrail.ai/api/ClientDocumentUpdate',
         payload,
