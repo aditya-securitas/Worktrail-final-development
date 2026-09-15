@@ -571,7 +571,7 @@ export const RecentAppealsTable: React.FC<RecentAppealsTableProps> = ({
       // Pass full dataUrl (with base64 header prefix) in payload
       const payload: any = {
         EmployeeCode: uploadTargetRecord.employeeId,
-        orderId: orderIdDb,
+        orderId:  uploadTargetRecord.raw?.OrderID,
         Contributor: uploadTargetRecord.verifierName,
         LOA: loaDataUrl,
       }
