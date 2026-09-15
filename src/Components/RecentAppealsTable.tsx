@@ -555,24 +555,49 @@ export const RecentAppealsTable: React.FC<RecentAppealsTableProps> = ({
         supportingDocsMime = r.mime
       }
 
+      // Make ABSOLUTELY SURE: EmployeeCode and OrderID (not orderId) are included and correct.
+      // Use data from the "raw" object if possible, so we always pick up the true original field names.
+      // Fallback to .employeeId/.orderId properties only if raw is missing.
+
+      let employeeCodeVal = null
+      let orderIdVal = null
+      if (uploadTargetRecord.raw) {
+        // Try all possible variations
+        employeeCodeVal =
+          uploadTargetRecord.raw.EmployeeCode ||
+          uploadTargetRecord.raw.employeeId ||
+          uploadTargetRecord.raw.EmpCode ||
+          uploadTargetRecord.raw.empCode ||
+          uploadTargetRecord.raw.EmployeeID ||
+          uploadTargetRecord.employeeId ||
+          ''
+        orderIdVal =
+          uploadTargetRecord.raw.OrderID ||
+          uploadTargetRecord.raw.orderId ||
+          uploadTargetRecord.raw.OrderId ||
+          uploadTargetRecord.raw.RequestId ||
+          uploadTargetRecord.raw.requestId ||
+          uploadTargetRecord.orderId ||
+          uploadTargetRecord.requestId ||
+          ''
+      } else {
+        employeeCodeVal = uploadTargetRecord.employeeId || ''
+        orderIdVal = uploadTargetRecord.orderId || uploadTargetRecord.requestId || ''
+      }
+
       // Pass full dataUrl (with base64 header prefix) in payload
       const payload: any = {
-        EmployeeCode: uploadTargetRecord.employeeId,
-        orderId: uploadTargetRecord.orderId,
+        EmployeeCode: employeeCodeVal,
+        OrderID: orderIdVal, // Make sure to use "OrderID" here, as required by backend
         Contributor: uploadTargetRecord.verifierName,
         LOA: loaDataUrl,
       }
-      console.log(payload.EmployeeCode)
-      console.log(payload.orderId)
-      console.log(payload.Contributor)
-      console.log(payload.LOA)
-
 
       if (supportingDocsDataUrl) {
         payload.SupportingDocs = supportingDocsDataUrl
       }
-      if (!payload.EmployeeCode || !payload.orderId || !payload.Contributor || !payload.LOA) {
-        setUploadError('EmployeeCode, orderId, Contributor, and LOA are required.')
+      if (!payload.EmployeeCode || !payload.OrderID || !payload.Contributor || !payload.LOA) {
+        setUploadError('EmployeeCode, OrderID, Contributor, and LOA are required.')
         setUploadLoading(false)
         return
       }

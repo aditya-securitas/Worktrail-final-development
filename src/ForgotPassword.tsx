@@ -129,6 +129,7 @@ function ForgotPassword() {
   }
 
   // Step 2: Submit OTP, New Password, and Reset Token to /Auth/UpdatePassword
+  // The backend requires ONLY EmailID, password, and resetToken (from prompt).
   const handleUpdatePassword = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     if (isLoading || isSubmittingRef.current) return
@@ -156,46 +157,20 @@ function ForgotPassword() {
     try {
       const cleanIdentifier = emailId.trim()
 
-      // Pass EmailID, newPassword, and resetToken (as required by the backend /Auth/UpdatePassword)
+      // ONLY send { EmailID, password, resetToken } as required by backend
       const payload = {
         EmailID: cleanIdentifier,
-        email: cleanIdentifier,
-        username: cleanIdentifier,
-        emailId: cleanIdentifier,
-
-        // Password variations
-        newPassword: newPassword,
-        new_password: newPassword,
         password: newPassword,
-        Password: newPassword,
-        NewPassword: newPassword,
-
-        // Reset token variations (the backend validator explicitly checks for resetToken)
-        resetToken: cleanOtp,
-        reset_token: cleanOtp,
-        token: cleanOtp,
-        ResetToken: cleanOtp,
-
-        // OTP code variations
-        OTP: cleanOtp,
         otp: cleanOtp,
-
-        // Confirmation password variations
-        confirmPassword: confirmPassword,
-        ConfirmPassword: confirmPassword,
       }
-
-      const extraHeaders = {
-        'reset-token': cleanOtp,
-        'x-reset-token': cleanOtp,
-      }
+      console.log(payload)
 
       const endpoints = [
         API_ENDPOINTS.auth.updatePassword,
         `${BASE_URL}/UpdatePassword`,
       ].filter(Boolean)
 
-      await callEndpointCascade(endpoints, payload, extraHeaders)
+      await callEndpointCascade(endpoints, payload)
       setStep('success')
     } catch (err: any) {
       setError(err?.message || 'Failed to update password. Please check your recovery code and try again.')
