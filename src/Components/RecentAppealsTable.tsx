@@ -186,15 +186,13 @@ export const RecentAppealsTable: React.FC<RecentAppealsTableProps> = ({
         }
 
         const rawEmpCode = item.EmployeeCode || item.employeeId || item.empCode || item.EmpCode || item.EmployeeID || ''
-        const rawOrderId = item.OrderID || item.orderId || item.OrderId || item.RequestId || item.requestId || ''
+        const rawOrderId = item.OrderID || item.orderId || item.OrderId || ''
         const rawContributor = item.Contributor || item.contributor || 'Securitas'
-        const recId = rawOrderId || `REQ-${idx + 1}`
-        const uniqueId = String(item.Sno || rawEmpCode || `${recId}-${idx}`)
+        const uniqueId = String(item.Sno || rawEmpCode || rawOrderId || `ORD-${idx + 1}`)
 
         return {
           id: uniqueId,
-          requestId: recId,
-          orderId: rawOrderId || recId,
+          orderId: rawOrderId || `ORD-${idx + 1}`,
           clientId: clientIdentifier,
           candidateName,
           employeeId: rawEmpCode || '—',
@@ -307,13 +305,13 @@ export const RecentAppealsTable: React.FC<RecentAppealsTableProps> = ({
         const q = searchQuery.toLowerCase().trim()
         const matchCandidate = String(r.candidateName || '').toLowerCase().includes(q)
         const matchEmp = String(r.employeeId || '').toLowerCase().includes(q)
-        const matchReq = String(r.requestId || '').toLowerCase().includes(q)
+        const matchOrderId = String(r.orderId || '').toLowerCase().includes(q)
         const matchClient = String(r.clientId || '').toLowerCase().includes(q)
         const matchOrg = String(r.verifierName || '').toLowerCase().includes(q)
         const matchEmail = String(r.candidateEmail || '').toLowerCase().includes(q)
         const matchPhone = String(r.contactNumber || '').toLowerCase().includes(q)
         const matchRole = String(r.designation || '').toLowerCase().includes(q)
-        if (!matchCandidate && !matchEmp && !matchReq && !matchClient && !matchOrg && !matchEmail && !matchPhone && !matchRole) {
+        if (!matchCandidate && !matchEmp && !matchOrderId && !matchClient && !matchOrg && !matchEmail && !matchPhone && !matchRole) {
           return false
         }
       }
@@ -393,19 +391,11 @@ export const RecentAppealsTable: React.FC<RecentAppealsTableProps> = ({
 
   // Live status check query against clientEmpStatus API
   const handleCheckStatus = async (rec: VerificationRecord) => {
-    const key = rec.requestId || rec.id
+    const key = rec.orderId || rec.id
     setCheckingStatusId(key)
     try {
       const email = (
-        user?.EmailID ||
-        user?.email ||
-        user?.Email ||
-        (user as any)?.emailId ||
-        (user?.username && user.username.includes('@') ? user.username : '') ||
-        rec.submittedBy ||
-        (rec as any)?.Clientemail ||
-        localStorage.getItem('worktrail_client_email') ||
-        'Client.worktrial@Securitas-india.com'
+        user?.EmailID 
       ).trim()
 
       const statusApiUrl = API_ENDPOINTS.clientEmpStatus || 'https://worktrail.ai/api/ClientEmpStatus'
@@ -425,11 +415,11 @@ export const RecentAppealsTable: React.FC<RecentAppealsTableProps> = ({
         : res.data?.data || res.data?.candidates || res.data?.records || []
 
       const match = rawList.find((item: any) => {
-        const itemReq = item.OrderID || item.orderId || item.RequestId || item.requestId
+        const itemOrderId = item.OrderID || item.orderId || item.OrderId
         const itemEmp = item.EmployeeCode || item.employeeId || item.EmpCode
-        const matchReq = itemReq && (itemReq === rec.orderId || itemReq === rec.requestId)
+        const matchOrder = itemOrderId && itemOrderId === rec.orderId
         const matchEmp = itemEmp && itemEmp === rec.employeeId
-        return matchReq || matchEmp
+        return matchOrder || matchEmp
       })
 
       if (match && (match.Status || match.status)) {
@@ -466,7 +456,7 @@ export const RecentAppealsTable: React.FC<RecentAppealsTableProps> = ({
       return {
         'S.No': i + 1,
         'Client ID': r.clientId || defaultClientId,
-        'Request ID': r.requestId,
+        'Order ID': r.orderId,
         'Candidate Name': r.candidateName,
         'Employee ID': r.employeeId,
         'Verifier Company': r.verifierName,
@@ -535,9 +525,7 @@ export const RecentAppealsTable: React.FC<RecentAppealsTableProps> = ({
     }
   }
 
-  // -----
   // Upload handler
-  // Here is the new logic: Order ID for ClientDocumentUpdate should always come from the ClientEmpStatus data (which is in the .raw property of the record)
   const handleSubmitUpload = async () => {
     if (!uploadTargetRecord || !uploadLOAFile) {
       setUploadError('Please select LOA file.')
@@ -557,32 +545,14 @@ export const RecentAppealsTable: React.FC<RecentAppealsTableProps> = ({
         supportingDocsMime = r.mime
       }
 
-      // Always use the OrderID from the .raw object (from ClientEmpStatus/db), fallback to other fields as needed
-      let orderIdDb: string | undefined = (
-        uploadTargetRecord.raw?.OrderID ||
-        uploadTargetRecord.raw?.orderId ||
-        uploadTargetRecord.raw?.OrderId ||
-
-        uploadTargetRecord.orderId ||
-      
-        undefined
-      )
-
       // Pass full dataUrl (with base64 header prefix) in payload
       const payload: any = {
         EmployeeCode: uploadTargetRecord.employeeId,
-        orderId:  uploadTargetRecord.raw?.OrderID,
+        orderId: uploadTargetRecord.orderId,
         Contributor: uploadTargetRecord.verifierName,
         LOA: loaDataUrl,
       }
-      // Debugging
-      console.log('EmployeeCode:', payload.EmployeeCode)
-      console.log('orderId from DB:', payload.orderId)
-      console.log('Contributor:', payload.Contributor)
-      console.log('LOA:', payload.LOA)
-
       console.log(payload)
-
       if (supportingDocsDataUrl) {
         payload.SupportingDocs = supportingDocsDataUrl
       }
@@ -603,7 +573,7 @@ export const RecentAppealsTable: React.FC<RecentAppealsTableProps> = ({
         customHeaders['x-supportdocs-file-type'] = supportingDocsExt
         customHeaders['x-supportdocs-mime'] = supportingDocsMime
       }
-      console.log('Upload Payload:', payload)
+      
       await axios.post(
         API_ENDPOINTS.clientDocumentUpdate || 'https://worktrail.ai/api/ClientDocumentUpdate',
         payload,
@@ -707,7 +677,7 @@ export const RecentAppealsTable: React.FC<RecentAppealsTableProps> = ({
           <table className="w-full text-left border-collapse whitespace-nowrap select-text">
             <thead>
               <tr className="bg-slate-50/70 border-b border-slate-100 text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
-                <th className="px-6 py-4">Request & Client ID</th>
+                <th className="px-6 py-4">Order ID & Client ID</th>
                 <th className="px-6 py-4">Candidate Profile</th>
                 <th className="px-6 py-4">Data Quality</th>
                 <th className="px-6 py-4">Target Verifier</th>
@@ -722,15 +692,15 @@ export const RecentAppealsTable: React.FC<RecentAppealsTableProps> = ({
                 filteredRecords.map((rec) => {
                   const analysis = analyzeCandidateData(rec)
                   const missingItems = analysis.items.filter((i) => i.status === 'missing')
-                  const reqKey = rec.requestId || rec.id
-                  const isChecking = checkingStatusId === reqKey
-                  const feedback = statusFeedback[reqKey]
+                  const orderKey = rec.orderId || rec.id
+                  const isChecking = checkingStatusId === orderKey
+                  const feedback = statusFeedback[orderKey]
                   return (
-                    <tr key={rec.id || rec.requestId} className="hover:bg-slate-50/80 transition-colors group">
+                    <tr key={rec.id || rec.orderId} className="hover:bg-slate-50/80 transition-colors group">
                       {/* ... Data columns ... */}
                       <td className="px-6 py-4">
                         <div className="flex flex-col">
-                          <span className=" font-bold text-[#0680A6]">{rec.requestId}</span>
+                          <span className=" font-bold text-[#0680A6]">{rec.orderId}</span>
                           <span className="inline-flex items-center gap-1 text-[10px]  font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md w-fit mt-1">
                             {rec.clientId || defaultClientId}
                           </span>
@@ -863,7 +833,7 @@ export const RecentAppealsTable: React.FC<RecentAppealsTableProps> = ({
                 <h3 className="text-base font-bold text-slate-900">
                   {uploadTargetRecord.candidateName}{" "}
                   <span className=" text-xs text-slate-400">
-                    ({uploadTargetRecord.requestId})
+                    ({uploadTargetRecord.orderId})
                   </span>
                 </h3>
                 <div className="text-xs text-slate-500 mt-0.5">
@@ -963,9 +933,9 @@ export const RecentAppealsTable: React.FC<RecentAppealsTableProps> = ({
       {/* Record Details Modal ... */}
       {selectedRecord && (() => {
         const modalAnalysis = analyzeCandidateData(selectedRecord)
-        const modalReqKey = selectedRecord.requestId || selectedRecord.id
-        const isCheckingModal = checkingStatusId === modalReqKey
-        const modalFeedback = statusFeedback[modalReqKey]
+        const modalOrderKey = selectedRecord.orderId || selectedRecord.id
+        const isCheckingModal = checkingStatusId === modalOrderKey
+        const modalFeedback = statusFeedback[modalOrderKey]
 
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
