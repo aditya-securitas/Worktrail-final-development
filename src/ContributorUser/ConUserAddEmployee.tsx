@@ -16,7 +16,9 @@ import {
     Filter,
     FileSpreadsheet,
     Info,
-    Sparkles
+    Sparkles,
+    Check,
+    AlertCircle
 } from "lucide-react";
 
 // Custom button style matching AddEmployee design system
@@ -196,6 +198,152 @@ function normalizeBulkRow(row: any, company: string): any {
     return normalized;
 }
 
+// Live Input Sanitizer
+const sanitizeInput = (name: string, value: string): string => {
+    switch (name) {
+        case "FirstName":
+        case "MiddleName":
+        case "LastName":
+            // Allow only letters and spaces
+            return value.replace(/[^a-zA-Z\s]/g, "");
+        case "MobileNo":
+            // Allow only digits, max 10 digits
+            return value.replace(/\D/g, "").slice(0, 10);
+        case "EmployeeCode":
+            // Auto-uppercase alphanumeric and allowed separators (-, _, /), max 25 chars
+            return value.toUpperCase().replace(/[^A-Z0-9\-_/]/g, "").slice(0, 25);
+        case "LastSalaryAnnual":
+            // Allow only digits
+            return value.replace(/\D/g, "").slice(0, 12);
+        default:
+            return value;
+    }
+};
+
+// Comprehensive Single Field Validator
+const validateSingleField = (name: string, value: any, currentForm: any): string => {
+    const val = typeof value === "string" ? value.trim() : value ? String(value).trim() : "";
+
+    switch (name) {
+        case "FirstName":
+            if (!val) return "First name is required";
+            if (!/^[a-zA-Z\s]+$/.test(val)) return "Only alphabetic characters allowed";
+            if (val.length < 2) return "First name must be at least 2 characters";
+            if (val.length > 50) return "First name cannot exceed 50 characters";
+            return "";
+
+        case "MiddleName":
+            if (!val) return "";
+            if (!/^[a-zA-Z\s]+$/.test(val)) return "Only alphabetic characters allowed";
+            if (val.length > 50) return "Middle name cannot exceed 50 characters";
+            return "";
+
+        case "LastName":
+            if (!val) return "Last name is required";
+            if (!/^[a-zA-Z\s]+$/.test(val)) return "Only alphabetic characters allowed";
+            if (val.length < 2) return "Last name must be at least 2 characters";
+            if (val.length > 50) return "Last name cannot exceed 50 characters";
+            return "";
+
+        case "Email":
+            if (!val) return "Email address is required";
+            if (!/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(val)) {
+                return "Enter a valid email address (e.g., name@company.com)";
+            }
+            return "";
+
+        case "MobileNo":
+            if (!val) return "Mobile number is required";
+            if (!/^[6-9]\d{9}$/.test(val)) {
+                return "Must be a valid 10-digit number starting with 6, 7, 8, or 9";
+            }
+            return "";
+
+        case "EmployeeCode":
+            if (!val) return "Employee code is required";
+            if (val.length < 2) return "Employee code must be at least 2 characters";
+            if (!/^[A-Z0-9\-_/]+$/i.test(val)) {
+                return "Can only contain alphanumeric characters, hyphens, and slashes";
+            }
+            if (val.length > 25) return "Employee code must not exceed 25 characters";
+            return "";
+
+        case "Department":
+            if (!val) return "Department is required";
+            if (val.length < 2) return "Department must be at least 2 characters";
+            if (val.length > 60) return "Department cannot exceed 60 characters";
+            return "";
+
+        case "LastPositionHeld":
+            if (!val) return "";
+            if (val.length < 2) return "Position must be at least 2 characters";
+            if (val.length > 60) return "Position must not exceed 60 characters";
+            return "";
+
+        case "DateOfJoining": {
+            if (!val) return "Date of Joining is required";
+            const doj = new Date(val);
+            if (isNaN(doj.getTime())) return "Please select a valid date";
+            if (currentForm.DateOfLeaving) {
+                const dol = new Date(currentForm.DateOfLeaving);
+                if (!isNaN(dol.getTime()) && doj > dol) {
+                    return "Date of Joining cannot be after Date of Leaving";
+                }
+            }
+            return "";
+        }
+
+        case "DateOfLeaving": {
+            if (!val) return "";
+            const dol = new Date(val);
+            if (isNaN(dol.getTime())) return "Please select a valid date";
+            if (currentForm.DateOfJoining) {
+                const doj = new Date(currentForm.DateOfJoining);
+                if (!isNaN(doj.getTime()) && dol < doj) {
+                    return "Date of Leaving cannot be before Date of Joining";
+                }
+            }
+            return "";
+        }
+
+        case "LastSalaryAnnual": {
+            if (!val) return "Annual salary is required";
+            const num = Number(val);
+            if (isNaN(num) || num <= 0) return "Enter a valid positive annual salary";
+            return "";
+        }
+
+        case "EmploymentType":
+            if (!val) return "Please select an employment type";
+            if (!["Full-Time", "Part-Time", "Intern", "Contract"].includes(val)) {
+                return "Please select a valid employment type";
+            }
+            return "";
+
+        case "ExitFormalities":
+            if (!val) return "Please select exit formalities status";
+            if (!["Completed", "Pending", "Ongoing"].includes(val)) {
+                return "Please select a valid option";
+            }
+            return "";
+
+        case "AnyBehaviourIssue":
+            if (!val) return "";
+            if (val.length > 500) return "Remarks cannot exceed 500 characters";
+            return "";
+
+        case "EligibilityToRehire":
+            if (!val) return "Please select eligibility to rehire";
+            if (!["Yes", "No"].includes(val)) {
+                return "Please select Yes or No";
+            }
+            return "";
+
+        default:
+            return "";
+    }
+};
+
 export default function ConUserAddEmployee() {
     const { user } = useAuth();
     const [activePanel, setActivePanel] = useState<"bulk" | "new" | "edit" | null>(null);
@@ -256,6 +404,8 @@ export default function ConUserAddEmployee() {
     const [editEmployee, setEditEmployee] = useState<any | null>(null);
     const [submittingNew, setSubmittingNew] = useState(false);
     const [submittingUpdate, setSubmittingUpdate] = useState(false);
+    const [errors, setErrors] = useState<Record<string, string>>({});
+    const [touched, setTouched] = useState<Record<string, boolean>>({});
 
     // Bulk upload states
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -277,6 +427,8 @@ export default function ConUserAddEmployee() {
         setActivePanel(null);
         setSelectedFile(null);
         setCompany(initialCompany);
+        setErrors({});
+        setTouched({});
         setForm({
             FirstName: "",
             MiddleName: "",
@@ -569,11 +721,81 @@ export default function ConUserAddEmployee() {
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
-        setForm((prev) => ({ ...prev, [name]: value }));
+        const sanitized = sanitizeInput(name, value);
+        const updatedForm = { ...form, [name]: sanitized };
+        setForm(updatedForm);
+
+        if (touched[name]) {
+            const fieldError = validateSingleField(name, sanitized, updatedForm);
+            setErrors((prev) => ({ ...prev, [name]: fieldError }));
+        }
+
+        // Cross-validate dates when either changes
+        if (name === "DateOfJoining" && touched.DateOfLeaving && updatedForm.DateOfLeaving) {
+            const dolErr = validateSingleField("DateOfLeaving", updatedForm.DateOfLeaving, updatedForm);
+            setErrors((prev) => ({ ...prev, DateOfLeaving: dolErr }));
+        }
+        if (name === "DateOfLeaving" && touched.DateOfJoining && updatedForm.DateOfJoining) {
+            const dojErr = validateSingleField("DateOfJoining", updatedForm.DateOfJoining, updatedForm);
+            setErrors((prev) => ({ ...prev, DateOfJoining: dojErr }));
+        }
+    };
+
+    const handleBlur = (name: string) => {
+        setTouched((prev) => ({ ...prev, [name]: true }));
+        const fieldError = validateSingleField(name, form[name as keyof typeof form], form);
+        setErrors((prev) => ({ ...prev, [name]: fieldError }));
     };
 
     const handleNewSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+
+        const fieldKeys = [
+            "FirstName",
+            "MiddleName",
+            "LastName",
+            "Email",
+            "MobileNo",
+            "Department",
+            "DateOfJoining",
+            "LastPositionHeld",
+            "DateOfLeaving",
+            "LastSalaryAnnual",
+            "EmployeeCode",
+            "ExitFormalities",
+            "EmploymentType",
+            "AnyBehaviourIssue",
+            "EligibilityToRehire"
+        ];
+
+        const newErrors: Record<string, string> = {};
+        const allTouched: Record<string, boolean> = {};
+
+        fieldKeys.forEach((key) => {
+            allTouched[key] = true;
+            const err = validateSingleField(key, form[key as keyof typeof form], form);
+            if (err) {
+                newErrors[key] = err;
+            }
+        });
+
+        setTouched(allTouched);
+        setErrors(newErrors);
+
+        if (Object.keys(newErrors).length > 0) {
+            const firstKey = Object.keys(newErrors)[0];
+            showToast(`Please correct the highlighted errors before submitting. (${newErrors[firstKey]})`, "error");
+
+            setTimeout(() => {
+                const el = document.querySelector(`[name="${firstKey}"]`) as HTMLElement | null;
+                if (el) {
+                    el.focus();
+                    el.scrollIntoView({ behavior: "smooth", block: "center" });
+                }
+            }, 50);
+            return;
+        }
+
         setSubmittingNew(true);
         try {
             const normalized = normalizeBulkRow(form, form.Contributor);
@@ -608,6 +830,8 @@ export default function ConUserAddEmployee() {
                 throw new Error(detail || `Failed to create employee (${response.status})`);
             }
             showToast("Employee record created successfully!", "success");
+            setErrors({});
+            setTouched({});
             setTimeout(() => handleBack(), 1000);
         } catch (err: any) {
             showToast(err?.message || "Submission failed", "error");
@@ -621,6 +845,8 @@ export default function ConUserAddEmployee() {
             showToast("You do not have permission to edit employee records.", "error");
             return;
         }
+        setErrors({});
+        setTouched({});
         setEditEmployee(row);
         setForm({
             FirstName: row.FirstName || "",
@@ -649,6 +875,53 @@ export default function ConUserAddEmployee() {
             showToast("You do not have permission to edit employee records.", "error");
             return;
         }
+
+        const fieldKeys = [
+            "FirstName",
+            "MiddleName",
+            "LastName",
+            "Email",
+            "MobileNo",
+            "Department",
+            "DateOfJoining",
+            "LastPositionHeld",
+            "DateOfLeaving",
+            "LastSalaryAnnual",
+            "EmployeeCode",
+            "ExitFormalities",
+            "EmploymentType",
+            "AnyBehaviourIssue",
+            "EligibilityToRehire"
+        ];
+
+        const newErrors: Record<string, string> = {};
+        const allTouched: Record<string, boolean> = {};
+
+        fieldKeys.forEach((key) => {
+            allTouched[key] = true;
+            const err = validateSingleField(key, form[key as keyof typeof form], form);
+            if (err) {
+                newErrors[key] = err;
+            }
+        });
+
+        setTouched(allTouched);
+        setErrors(newErrors);
+
+        if (Object.keys(newErrors).length > 0) {
+            const firstKey = Object.keys(newErrors)[0];
+            showToast(`Please correct the highlighted errors before submitting. (${newErrors[firstKey]})`, "error");
+
+            setTimeout(() => {
+                const el = document.querySelector(`[name="${firstKey}"]`) as HTMLElement | null;
+                if (el) {
+                    el.focus();
+                    el.scrollIntoView({ behavior: "smooth", block: "center" });
+                }
+            }, 50);
+            return;
+        }
+
         setSubmittingUpdate(true);
         try {
             const normalized = normalizeBulkRow(form, form.Contributor);
@@ -683,6 +956,8 @@ export default function ConUserAddEmployee() {
                 throw new Error(detail || `Update failed (${response.status})`);
             }
             showToast("Employee updated successfully!", "success");
+            setErrors({});
+            setTouched({});
             setTimeout(() => handleBack(), 1000);
         } catch (err: any) {
             showToast(err?.message || "Failed to update employee.", "error");
@@ -892,36 +1167,92 @@ export default function ConUserAddEmployee() {
         required: boolean = false,
         options?: string[]
     ) => {
+        const isTouched = touched[name];
+        const errorMsg = errors[name];
+        const hasError = Boolean(isTouched && errorMsg);
+        const isValid = Boolean(isTouched && !errorMsg && form[name]);
+
+        const minAttr = name === "DateOfLeaving" && form.DateOfJoining ? form.DateOfJoining : undefined;
+        const maxAttr = name === "DateOfJoining" && form.DateOfLeaving ? form.DateOfLeaving : undefined;
+
         return (
-            <div className="flex flex-col gap-1.5 text-left">
-                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                    {label} {required && <span className="text-rose-500">*</span>}
-                </label>
-                {options ? (
-                    <select
-                        name={name}
-                        value={form[name]}
-                        onChange={handleInputChange}
-                        className="w-full h-10 border border-slate-200 rounded-lg px-3 text-sm text-slate-800 bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 focus:outline-none transition-all"
-                        required={required}
+            <div className="flex flex-col gap-1.5 text-left relative">
+                <div className="flex items-center justify-between">
+                    <label
+                        htmlFor={`field-${name}`}
+                        className={`text-[10px] font-bold uppercase tracking-wider transition-colors ${
+                            hasError ? "text-rose-600 font-extrabold" : "text-slate-500"
+                        }`}
                     >
-                        <option value="" disabled hidden>{placeholder}</option>
-                        {options.map((opt) => (
-                            <option key={opt} value={opt} className="bg-white text-slate-800">
-                                {opt}
+                        {label} {required && <span className="text-rose-500">*</span>}
+                    </label>
+                    {isValid && (
+                        <span className="text-[10px] font-semibold text-emerald-600 flex items-center gap-0.5 animate-fade-in">
+                            <Check className="w-3 h-3 text-emerald-600 stroke-[3]" /> Valid
+                        </span>
+                    )}
+                </div>
+
+                <div className="relative">
+                    {options ? (
+                        <select
+                            id={`field-${name}`}
+                            name={name}
+                            value={form[name] || ""}
+                            onChange={handleInputChange}
+                            onBlur={() => handleBlur(name)}
+                            className={`w-full h-10 rounded-lg px-3 text-sm transition-all cursor-pointer ${
+                                hasError
+                                    ? "border-2 border-rose-500 bg-rose-50/20 text-rose-900 focus:border-rose-600 focus:ring-2 focus:ring-rose-500/20"
+                                    : isValid
+                                    ? "border border-emerald-400 bg-emerald-50/10 text-slate-800 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10"
+                                    : "border border-slate-200 text-slate-800 bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
+                            } focus:outline-none`}
+                        >
+                            <option value="" disabled hidden>
+                                {placeholder}
                             </option>
-                        ))}
-                    </select>
-                ) : (
-                    <input
-                        name={name}
-                        type={type}
-                        placeholder={placeholder}
-                        value={form[name]}
-                        onChange={handleInputChange}
-                        className="w-full h-10 border border-slate-200 rounded-lg px-3 text-sm text-slate-800 bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 focus:outline-none transition-all"
-                        required={required}
-                    />
+                            {options.map((opt) => (
+                                <option key={opt} value={opt} className="bg-white text-slate-800">
+                                    {opt}
+                                </option>
+                            ))}
+                        </select>
+                    ) : (
+                        <div className="relative flex items-center">
+                            <input
+                                id={`field-${name}`}
+                                name={name}
+                                type={type}
+                                placeholder={placeholder}
+                                value={form[name] || ""}
+                                min={minAttr}
+                                max={maxAttr}
+                                inputMode={name === "MobileNo" || name === "LastSalaryAnnual" ? "numeric" : undefined}
+                                onChange={handleInputChange}
+                                onBlur={() => handleBlur(name)}
+                                className={`w-full h-10 rounded-lg px-3 text-sm transition-all ${
+                                    hasError
+                                        ? "border-2 border-rose-500 bg-rose-50/20 text-rose-900 placeholder:text-rose-300 focus:border-rose-600 focus:ring-2 focus:ring-rose-500/20"
+                                        : isValid
+                                        ? "border border-emerald-400 bg-emerald-50/10 text-slate-800 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10"
+                                        : "border border-slate-200 text-slate-800 bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
+                                } focus:outline-none ${hasError && type !== "date" ? "pr-9" : ""}`}
+                            />
+                            {hasError && type !== "date" && (
+                                <div className="absolute right-3 pointer-events-none text-rose-500">
+                                    <AlertCircle className="w-4 h-4" />
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+
+                {hasError && (
+                    <p className="flex items-center gap-1 text-[11px] font-semibold text-rose-600 mt-0.5 animate-fade-in">
+                        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                        <span>{errorMsg}</span>
+                    </p>
                 )}
             </div>
         );
@@ -993,7 +1324,11 @@ export default function ConUserAddEmployee() {
                             <button
                                 type="button"
                                 className="flex items-center justify-center gap-1.5 sm:gap-2.5 h-10 sm:h-11 px-3 sm:px-6 bg-gradient-to-r from-[#10B981] to-[#5850EC] hover:brightness-110 hover:shadow-[0_4px_15px_rgba(8,33,54,0.25)] active:scale-[0.98] text-white font-bold text-[10px] sm:text-xs tracking-wider uppercase rounded-full transition-all shadow-md cursor-pointer select-none text-center"
-                                onClick={() => setActivePanel("new")}
+                                onClick={() => {
+                                    setErrors({});
+                                    setTouched({});
+                                    setActivePanel("new");
+                                }}
                             >
                                 <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
                                 <span className="truncate">Create New</span>
@@ -1250,6 +1585,7 @@ export default function ConUserAddEmployee() {
                             className="w-full flex flex-col items-stretch bg-transparent box-border"
                             autoComplete="off"
                             onSubmit={handleNewSubmit}
+                            noValidate
                         >
                             <h3 className="m-0 text-xl font-bold text-slate-800 text-left mb-1">
                                 Create New Employee
@@ -1326,6 +1662,7 @@ export default function ConUserAddEmployee() {
                             className="w-full flex flex-col items-stretch bg-transparent box-border"
                             autoComplete="off"
                             onSubmit={handleUpdateSubmit}
+                            noValidate
                         >
                             <h3 className="m-0 text-[1.35rem] font-bold text-slate-800 text-left mb-1">
                                 Update Employee Details

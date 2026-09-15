@@ -18,7 +18,8 @@ import {
   ShieldCheck,
   KeyRound,
   RefreshCw,
-  ArrowLeft
+  ArrowLeft,
+  Check
 } from 'lucide-react'
 import securitasLogo from './assets/Img/logo_b.png'
 
@@ -56,10 +57,142 @@ const emptyForm: RegisterForm = {
   confirmPassword: '' 
 }
 
+// Live Input Sanitizer
+const sanitizeInput = (field: keyof RegisterForm, value: string): string => {
+  switch (field) {
+    case 'firstName':
+    case 'lastName':
+    case 'city':
+    case 'state':
+    case 'country':
+      // Only alphabetic characters and spaces, max 50 chars
+      return value.replace(/[^a-zA-Z\s]/g, '').slice(0, 50)
+    case 'companyCode':
+      // Auto-uppercase alphanumeric and allowed separators (-, _, /), max 20 chars
+      return value.toUpperCase().replace(/[^A-Z0-9\-_/]/g, '').slice(0, 20)
+    case 'gstNo':
+      // Auto-uppercase alphanumeric, max 15 chars
+      return value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 15)
+    case 'zipCode':
+      // Digits only, max 6 chars (PIN Code)
+      return value.replace(/\D/g, '').slice(0, 6)
+    default:
+      return value
+  }
+}
+
+// Comprehensive Single Field Validator
+const validateSingleField = (
+  field: keyof RegisterForm,
+  value: string,
+  currentForm: RegisterForm,
+  accountType: AccountType
+): string => {
+  const val = (value || '').trim()
+
+  switch (field) {
+    case 'email':
+      if (!val) return 'Official email is required'
+      if (!/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(val)) {
+        return 'Enter a valid email address (e.g., name@company.com)'
+      }
+      return ''
+
+    case 'firstName':
+      if (!val) return 'First name is required'
+      if (!/^[a-zA-Z\s]+$/.test(val)) return 'Only alphabetic characters allowed'
+      if (val.length < 2) return 'First name must be at least 2 characters'
+      if (val.length > 50) return 'First name cannot exceed 50 characters'
+      return ''
+
+    case 'lastName':
+      if (!val) return 'Last name is required'
+      if (!/^[a-zA-Z\s]+$/.test(val)) return 'Only alphabetic characters allowed'
+      if (val.length < 2) return 'Last name must be at least 2 characters'
+      if (val.length > 50) return 'Last name cannot exceed 50 characters'
+      return ''
+
+    case 'companyName':
+      if (accountType === 'Contributor') {
+        if (!val) return 'Company name is required'
+        if (val.length < 2) return 'Company name must be at least 2 characters'
+        if (val.length > 100) return 'Company name cannot exceed 100 characters'
+      }
+      return ''
+
+    case 'companyCode':
+      if (!val) return ''
+      if (val.length < 2) return 'Company code must be at least 2 characters'
+      if (!/^[A-Z0-9\-_/]+$/i.test(val)) {
+        return 'Can only contain alphanumeric characters, hyphens, and slashes'
+      }
+      if (val.length > 20) return 'Company code must not exceed 20 characters'
+      return ''
+
+    case 'gstNo': {
+      if (!val) return ''
+      if (val.length !== 15) return 'GST number must be exactly 15 characters'
+      const gstRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/
+      if (!gstRegex.test(val)) {
+        return 'Enter a valid 15-character GSTIN (e.g., 07AAACS1122C1ZK)'
+      }
+      return ''
+    }
+
+    case 'address':
+      if (!val) return ''
+      if (val.length < 5) return 'Address must be at least 5 characters'
+      if (val.length > 250) return 'Address cannot exceed 250 characters'
+      return ''
+
+    case 'city':
+      if (!val) return ''
+      if (!/^[a-zA-Z\s]+$/.test(val)) return 'Only alphabetic characters allowed'
+      if (val.length < 2) return 'City must be at least 2 characters'
+      if (val.length > 50) return 'City cannot exceed 50 characters'
+      return ''
+
+    case 'state':
+      if (!val) return ''
+      if (!/^[a-zA-Z\s]+$/.test(val)) return 'Only alphabetic characters allowed'
+      if (val.length < 2) return 'State must be at least 2 characters'
+      if (val.length > 50) return 'State cannot exceed 50 characters'
+      return ''
+
+    case 'country':
+      if (!val) return ''
+      if (!/^[a-zA-Z\s]+$/.test(val)) return 'Only alphabetic characters allowed'
+      if (val.length < 2) return 'Country must be at least 2 characters'
+      if (val.length > 50) return 'Country cannot exceed 50 characters'
+      return ''
+
+    case 'zipCode':
+      if (!val) return ''
+      if (!/^\d{6}$/.test(val)) return 'PIN / ZIP code must be exactly 6 digits'
+      return ''
+
+    case 'password':
+      if (!val) return 'Password is required'
+      if (val.length < 6) return 'Password must be at least 6 characters'
+      if (val.length > 50) return 'Password cannot exceed 50 characters'
+      return ''
+
+    case 'confirmPassword':
+      if (!val) return 'Please confirm your password'
+      if (val !== currentForm.password) return 'Passwords do not match'
+      return ''
+
+    default:
+      return ''
+  }
+}
+
 function Register({ onLogin }: RegisterProps) {
   const navigate = useNavigate()
   const [accountType, setAccountType] = useState<AccountType>('Contributor')
   const [form, setForm] = useState<RegisterForm>(emptyForm)
+  const [errors, setErrors] = useState<Record<string, string>>({})
+  const [touched, setTouched] = useState<Record<string, boolean>>({})
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -84,23 +217,101 @@ function Register({ onLogin }: RegisterProps) {
     }
   }, [otpCountdown])
 
-  const updateField = (field: keyof RegisterForm, value: string) => 
-    setForm((current) => ({ ...current, [field]: value }))
+  const updateField = (field: keyof RegisterForm, rawValue: string) => {
+    const sanitized = sanitizeInput(field, rawValue)
+    const updatedForm = { ...form, [field]: sanitized }
+    setForm(updatedForm)
+
+    if (touched[field]) {
+      const err = validateSingleField(field, sanitized, updatedForm, accountType)
+      setErrors((prev) => ({ ...prev, [field]: err }))
+    }
+
+    if (field === 'password' && touched.confirmPassword && updatedForm.confirmPassword) {
+      const confirmErr = validateSingleField('confirmPassword', updatedForm.confirmPassword, updatedForm, accountType)
+      setErrors((prev) => ({ ...prev, confirmPassword: confirmErr }))
+    }
+    if (field === 'confirmPassword' && touched.password && updatedForm.password) {
+      const confirmErr = validateSingleField('confirmPassword', sanitized, updatedForm, accountType)
+      setErrors((prev) => ({ ...prev, confirmPassword: confirmErr }))
+    }
+  }
+
+  const handleBlur = (field: keyof RegisterForm) => {
+    setTouched((prev) => ({ ...prev, [field]: true }))
+    const err = validateSingleField(field, form[field], form, accountType)
+    setErrors((prev) => ({ ...prev, [field]: err }))
+
+    if (field === 'password' && touched.confirmPassword && form.confirmPassword) {
+      const confirmErr = validateSingleField('confirmPassword', form.confirmPassword, form, accountType)
+      setErrors((prev) => ({ ...prev, confirmPassword: confirmErr }))
+    }
+  }
 
   const handleTypeChange = (type: AccountType) => { 
     setAccountType(type)
     setError('')
     setSuccess('') 
+    setErrors({})
+    setTouched({})
   }
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setError('')
     setSuccess('')
-    if (form.password !== form.confirmPassword) { 
-      setError('Passwords do not match.')
-      return 
+
+    const relevantFields: (keyof RegisterForm)[] = accountType === 'Contributor'
+      ? [
+          'email',
+          'firstName',
+          'lastName',
+          'companyName',
+          'companyCode',
+          'gstNo',
+          'address',
+          'city',
+          'state',
+          'country',
+          'zipCode',
+          'password',
+          'confirmPassword'
+        ]
+      : [
+          'email',
+          'firstName',
+          'lastName',
+          'password',
+          'confirmPassword'
+        ]
+
+    const newErrors: Record<string, string> = {}
+    const allTouched: Record<string, boolean> = {}
+
+    relevantFields.forEach((field) => {
+      allTouched[field] = true
+      const err = validateSingleField(field, form[field], form, accountType)
+      if (err) {
+        newErrors[field] = err
+      }
+    })
+
+    setTouched(allTouched)
+    setErrors(newErrors)
+
+    if (Object.keys(newErrors).length > 0) {
+      const firstKey = relevantFields.find((f) => newErrors[f]) || Object.keys(newErrors)[0]
+      setError(`Please correct the highlighted errors before submitting. (${newErrors[firstKey]})`)
+      setTimeout(() => {
+        const el = document.querySelector(`[name="${firstKey}"]`) as HTMLElement | null
+        if (el) {
+          el.focus()
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }
+      }, 50)
+      return
     }
+
     setIsLoading(true)
     const username = `${form.firstName}_${form.lastName}`.trim().replace(/\s+/g, '_').toLowerCase()
     const payload = {
@@ -111,14 +322,14 @@ function Register({ onLogin }: RegisterProps) {
       email: form.email.trim(),
       FirstName: form.firstName.trim(),
       LastName: form.lastName.trim(),
-      CompanyName: accountType === 'Contributor' ? form.companyName : null,
-      CompanyCode: accountType === 'Contributor' ? form.companyCode : null,
-      GSTNumber: accountType === 'Contributor' ? form.gstNo : null,
-      Address: accountType === 'Contributor' ? form.address : null,
-      City: accountType === 'Contributor' ? form.city : null,
-      State: accountType === 'Contributor' ? form.state : null,
-      Country: accountType === 'Contributor' ? form.country : null,
-      ZIPcode: accountType === 'Contributor' ? form.zipCode : null,
+      CompanyName: accountType === 'Contributor' ? form.companyName.trim() : null,
+      CompanyCode: accountType === 'Contributor' && form.companyCode.trim() ? form.companyCode.trim() : null,
+      GSTNumber: accountType === 'Contributor' && form.gstNo.trim() ? form.gstNo.trim() : null,
+      Address: accountType === 'Contributor' && form.address.trim() ? form.address.trim() : null,
+      City: accountType === 'Contributor' && form.city.trim() ? form.city.trim() : null,
+      State: accountType === 'Contributor' && form.state.trim() ? form.state.trim() : null,
+      Country: accountType === 'Contributor' && form.country.trim() ? form.country.trim() : null,
+      ZIPcode: accountType === 'Contributor' && form.zipCode.trim() ? form.zipCode.trim() : null,
     }
     
     try {
@@ -197,6 +408,8 @@ function Register({ onLogin }: RegisterProps) {
 
       setIsVerified(true)
       setForm(emptyForm)
+      setErrors({})
+      setTouched({})
     } catch (err) {
       setOtpError(err instanceof Error ? err.message : 'Failed to verify registration code.')
     } finally {
@@ -287,20 +500,55 @@ function Register({ onLogin }: RegisterProps) {
     const isShowing = field === 'password' ? showPassword : showConfirmPassword
     const actualType = isPasswordField ? (isShowing ? 'text' : 'password') : type
 
+    const hasError = !!(touched[field] && errors[field])
+    const errorMsg = errors[field]
+    const isValid = !!touched[field] && !hasError && Boolean(form[field])
+
     return (
       <div className={`flex flex-col gap-1.5 w-full ${className}`}>
-        <label className="text-[10px] sm:text-[11px] font-bold tracking-wider text-slate-500 uppercase select-none">
-          {label} {required && <span className="text-rose-500">*</span>}
-        </label>
-        <div className="flex items-center gap-2.5 h-[46px] px-3.5 bg-slate-50/70 hover:bg-slate-50 focus-within:bg-white border border-slate-200/90 focus-within:border-[#42638C] focus-within:ring-2 focus-within:ring-slate-100 rounded-2xl transition-all shadow-2xs">
-          <Icon className="w-4 h-4 text-slate-400 shrink-0" />
+        <div className="flex items-center justify-between">
+          <label
+            htmlFor={`field-${field}`}
+            className={`text-[10px] sm:text-[11px] font-bold tracking-wider uppercase select-none transition-colors ${
+              hasError ? 'text-rose-600 font-extrabold' : 'text-slate-500'
+            }`}
+          >
+            {label} {required && <span className="text-rose-500">*</span>}
+          </label>
+          {isValid && (
+            <span className="text-[10px] font-semibold text-emerald-600 flex items-center gap-0.5 animate-fade-in">
+              <Check className="w-3 h-3 text-emerald-600 stroke-[3]" /> Valid
+            </span>
+          )}
+        </div>
+
+        <div
+          className={`flex items-center gap-2.5 h-[46px] px-3.5 rounded-2xl transition-all shadow-2xs ${
+            hasError
+              ? 'border-2 border-rose-500 bg-rose-50/20 text-rose-900 focus-within:border-rose-600 focus-within:ring-2 focus-within:ring-rose-500/20'
+              : isValid
+              ? 'border border-emerald-400 bg-emerald-50/10 focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/10'
+              : 'bg-slate-50/70 hover:bg-slate-50 focus-within:bg-white border border-slate-200/90 focus-within:border-[#42638C] focus-within:ring-2 focus-within:ring-slate-100'
+          }`}
+        >
+          <Icon
+            className={`w-4 h-4 shrink-0 transition-colors ${
+              hasError ? 'text-rose-500' : isValid ? 'text-emerald-500' : 'text-slate-400'
+            }`}
+          />
           <input
+            id={`field-${field}`}
+            name={field}
             type={actualType}
             value={form[field]}
             onChange={(event) => updateField(field, event.target.value)}
+            onBlur={() => handleBlur(field)}
             placeholder={placeholder}
-            required={required}
-            className="w-full text-slate-800 placeholder-slate-400 outline-none text-xs sm:text-sm bg-transparent font-medium"
+            inputMode={field === 'zipCode' ? 'numeric' : undefined}
+            autoComplete="off"
+            className={`w-full placeholder-slate-400 outline-none text-xs sm:text-sm bg-transparent font-medium ${
+              hasError ? 'text-rose-900' : 'text-slate-800'
+            }`}
           />
           {isPasswordField && (
             <button
@@ -316,6 +564,13 @@ function Register({ onLogin }: RegisterProps) {
             </button>
           )}
         </div>
+
+        {hasError && (
+          <p className="flex items-center gap-1 text-[11px] font-semibold text-rose-600 mt-0.5 animate-fade-in">
+            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+            <span>{errorMsg}</span>
+          </p>
+        )}
       </div>
     )
   }
@@ -509,7 +764,7 @@ function Register({ onLogin }: RegisterProps) {
       </div>
 
       {/* Form */}
-      <form onSubmit={handleSubmit} className="flex flex-col gap-3.5 w-full">
+      <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-3.5 w-full">
         {/* Responsive Grid for Form Fields */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-3.5 w-full">
           {/* Email Field */}
