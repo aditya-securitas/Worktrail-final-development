@@ -411,13 +411,10 @@ function Register({ onLogin }: RegisterProps) {
       }
       setIsVerified(true)
       setForm(emptyForm)
-<<<<<<< HEAD
-    } catch (err: any) {
-=======
+
       setErrors({})
       setTouched({})
     } catch (err) {
->>>>>>> 68e6031a66f060cd60c4537def556d9d89100509
       setOtpError(err instanceof Error ? err.message : 'Failed to verify registration code.')
     } finally {
       setOtpLoading(false)

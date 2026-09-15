@@ -559,10 +559,8 @@ function AddEmployee() {
             const rowsToSend = normalizedRows;
             console.log("Sending bulk JSON to API:", rowsToSend);
 
-            let apiRespJson: any;
             try {
-                const res = await axios.post(API_URL, rowsToSend, { headers: API_HEADERS });
-                apiRespJson = res.data;
+                await axios.post(API_URL, rowsToSend, { headers: API_HEADERS });
                 setUploading(false);
                 setSelectedFile(null);
                 setCompany(initialCompany);
@@ -574,21 +572,22 @@ function AddEmployee() {
             } catch (err: any) {
                 setUploading(false);
                 if (err.response) {
-                    // Error has HTTP response
-                    apiRespJson = err.response.data;
+                    const apiRespJson = err.response.data;
                     if (err.response.status === 409) {
                         const detail = typeof apiRespJson === "object"
                             ? (apiRespJson?.message || apiRespJson?.error || apiRespJson?.msg)
                             : apiRespJson;
-                        throw new Error(
+                        toast.error(
                             detail && detail.length < 200
                                 ? `Conflict (409): ${detail}`
                                 : "Conflict (409): One or more Employee Codes already exist in the database. Please ensure all Employee Codes are unique."
                         );
+                    } else {
+                        toast.error(`Bulk upload failed (${err.response.status}): ${typeof apiRespJson === "string" ? apiRespJson : JSON.stringify(apiRespJson)}`);
                     }
-                    throw new Error(`Bulk upload failed (${err.response.status}): ${typeof apiRespJson === "string" ? apiRespJson : JSON.stringify(apiRespJson)}`);
+                } else {
+                    toast.error(`Bulk upload failed: ${err?.message || "Unknown error"}`);
                 }
-                toast.error(`Bulk upload failed: ${err?.message || "Unknown error"}`);
                 if (selectedFile) {
                     console.log("Bulk upload error file:", selectedFile.name);
                 }
@@ -667,47 +666,40 @@ function AddEmployee() {
         console.log("Sending single record JSON to API:", payload);
 
         try {
-            let apiRespJson: any;
-            try {
-                const res = await axios.post(API_URL, payload, { headers: API_HEADERS });
-                apiRespJson = res.data;
-                setSubmittingNew(false);
-                setForm({
-                    FirstName: "",
-                    MiddleName: "",
-                    LastName: "",
-                    Email: "",
-                    MobileNo: "",
-                    Department: "",
-                    DateOfJoining: "",
-                    LastPositionHeld: "",
-                    DateOfLeaving: "",
-                    LastSalaryAnnual: "",
-                    EmployeeCode: "",
-                    ExitFormalities: "",
-                    EmploymentType: "",
-                    AnyBehaviourIssue: "",
-                    EligibilityToRehire: "",
-                    Contributor: initialCompany
-                });
+            await axios.post(API_URL, payload, { headers: API_HEADERS });
+            setSubmittingNew(false);
+            setForm({
+                FirstName: "",
+                MiddleName: "",
+                LastName: "",
+                Email: "",
+                MobileNo: "",
+                Department: "",
+                DateOfJoining: "",
+                LastPositionHeld: "",
+                DateOfLeaving: "",
+                LastSalaryAnnual: "",
+                EmployeeCode: "",
+                ExitFormalities: "",
+                EmploymentType: "",
+                AnyBehaviourIssue: "",
+                EligibilityToRehire: "",
+                Contributor: initialCompany
+            });
 
-                toast.success("New employee submitted!");
-                // --- Go back to main screen after success ---
-                setTimeout(() => {
-                    handleBack();
-                }, 1200); // Give user time to see toast
-            } catch (err: any) {
-                setSubmittingNew(false);
-                if (err.response) {
-                    apiRespJson = err.response.data;
-                    throw new Error(`Failed to add employee. ${err.response.statusText} - ${JSON.stringify(apiRespJson)}`);
-                }
-                toast.error(`New employee submission failed: ${err?.message || "Unknown error"}`);
-                console.log("Create new employee error JSON:", [normalizeBulkRow(form, form.Contributor)]);
-            }
+            toast.success("New employee submitted!");
+            // --- Go back to main screen after success ---
+            setTimeout(() => {
+                handleBack();
+            }, 1200); // Give user time to see toast
         } catch (err: any) {
             setSubmittingNew(false);
-            toast.error(`New employee submission failed: ${err?.message || "Unknown error"}`);
+            if (err.response) {
+                const apiRespJson = err.response.data;
+                toast.error(`Failed to add employee. ${err.response.statusText} - ${JSON.stringify(apiRespJson)}`);
+            } else {
+                toast.error(`New employee submission failed: ${err?.message || "Unknown error"}`);
+            }
             console.log("Create new employee error JSON:", [normalizeBulkRow(form, form.Contributor)]);
         }
     };
@@ -723,46 +715,40 @@ function AddEmployee() {
         console.log("Sending UPDATE employee JSON to API:", payload);
 
         try {
-            let apiRespJson: any;
-            try {
-                const res = await axios.post(API_URL, payload, { headers: API_HEADERS });
-                apiRespJson = res.data;
-                setSubmittingUpdate(false);
-                setForm({
-                    FirstName: "",
-                    MiddleName: "",
-                    LastName: "",
-                    Email: "",
-                    MobileNo: "",
-                    Department: "",
-                    DateOfJoining: "",
-                    LastPositionHeld: "",
-                    DateOfLeaving: "",
-                    LastSalaryAnnual: "",
-                    EmployeeCode: "",
-                    ExitFormalities: "",
-                    EmploymentType: "",
-                    AnyBehaviourIssue: "",
-                    EligibilityToRehire: "",
-                    Contributor: initialCompany
-                });
+            await axios.post(API_URL, payload, { headers: API_HEADERS });
+            setSubmittingUpdate(false);
+            setForm({
+                FirstName: "",
+                MiddleName: "",
+                LastName: "",
+                Email: "",
+                MobileNo: "",
+                Department: "",
+                DateOfJoining: "",
+                LastPositionHeld: "",
+                DateOfLeaving: "",
+                LastSalaryAnnual: "",
+                EmployeeCode: "",
+                ExitFormalities: "",
+                EmploymentType: "",
+                AnyBehaviourIssue: "",
+                EligibilityToRehire: "",
+                Contributor: initialCompany
+            });
 
-                toast.success("Employee updated!");
-                // After update, go back and refresh table (best effort)
-                setTimeout(() => {
-                    handleBack();
-                }, 1200);
-            } catch (err: any) {
-                setSubmittingUpdate(false);
-                if (err.response) {
-                    apiRespJson = err.response.data;
-                    throw new Error(`Failed to update employee. ${err.response.statusText} - ${JSON.stringify(apiRespJson)}`);
-                }
-                toast.error(`Update failed: ${err?.message || "Unknown error"}`);
-            }
+            toast.success("Employee updated!");
+            // After update, go back and refresh table (best effort)
+            setTimeout(() => {
+                handleBack();
+            }, 1200);
         } catch (err: any) {
             setSubmittingUpdate(false);
-            toast.error(`Update failed: ${err?.message || "Unknown error"}`);
+            if (err.response) {
+                const apiRespJson = err.response.data;
+                toast.error(`Failed to update employee. ${err.response.statusText} - ${JSON.stringify(apiRespJson)}`);
+            } else {
+                toast.error(`Update failed: ${err?.message || "Unknown error"}`);
+            }
         }
     };
 
@@ -787,31 +773,27 @@ function AddEmployee() {
         setAllEmployeesResults(null); // When searching, clear all employees
 
         try {
-            let res: any;
-            try {
-                res = await axios.post(SEARCH_API_URL, { EmployeeCode: searchEmployeeCode.trim() }, { headers: SEARCH_API_HEADERS });
-            } catch (err: any) {
-                if (err.response) {
-                    res = err.response;
-                } else {
-                    throw err;
-                }
-            }
+            const res = await axios.post(SEARCH_API_URL, { EmployeeCode: searchEmployeeCode.trim() }, { headers: SEARCH_API_HEADERS });
             const json: any = res.data || {};
-            if ((res.status === 200 || res.status === 201) && json && Array.isArray(json.data)) {
+            if (json && Array.isArray(json.data)) {
                 setSearchResults(json.data);
                 setActiveTable('search'); // Only show search table
                 if (json.data.length === 0) {
                     toast.warn("No employee found for this EmployeeCode.");
                 }
-            } else if((res.status === 200 || res.status === 201) && json && json.data && typeof json.data === 'object') {
+            } else if (json && json.data && typeof json.data === 'object') {
                 setSearchResults([json.data]);
                 setActiveTable('search');
             } else {
                 throw new Error(json?.message || "Employee not found.");
             }
         } catch (err: any) {
-            toast.error("Search failed: " + (err?.message || "Unknown error"));
+            const message = err.response
+                ? (typeof err.response.data === "object"
+                    ? (err.response.data?.message || `${err.response.status} ${err.response.statusText}`)
+                    : String(err.response.data))
+                : (err?.message || "Unknown error");
+            toast.error("Search failed: " + message);
             setSearchResults(null);
             setActiveTable(null);
         } finally {
@@ -840,18 +822,9 @@ function AddEmployee() {
         setActiveTable(null);
 
         try {
-            let res: any;
-            try {
-                res = await axios.post(ALL_EMPLOYEE_API_URL, { Contributor: contributorValue }, { headers: ALL_EMPLOYEE_API_HEADERS });
-            } catch (err: any) {
-                if (err.response) {
-                    res = err.response;
-                } else {
-                    throw err;
-                }
-            }
+            const res = await axios.post(ALL_EMPLOYEE_API_URL, { Contributor: contributorValue }, { headers: ALL_EMPLOYEE_API_HEADERS });
             let json: any = res.data || {};
-            if ((res.status === 200 || res.status === 201) && json && Array.isArray(json.data)) {
+            if (json && Array.isArray(json.data)) {
                 let list = json.data;
                 // Fallback attempt: if 0 records and was Securitas, try Securitas India
                 if (list.length === 0 && contributorValue === "Securitas") {
@@ -876,14 +849,19 @@ function AddEmployee() {
                 } else {
                     toast.success(`Found ${list.length} records for ${contributorValue}!`);
                 }
-            } else if((res.status === 200 || res.status === 201) && json && json.data && typeof json.data === 'object') {
+            } else if (json && json.data && typeof json.data === 'object') {
                 setAllEmployeesResults([json.data]);
                 setActiveTable('all');
             } else {
                 throw new Error(json?.message || "No employee data found.");
             }
         } catch (err: any) {
-            toast.error("AllEmployeeData fetch failed: " + (err?.message || "Unknown error"));
+            const message = err.response
+                ? (typeof err.response.data === "object"
+                    ? (err.response.data?.message || `${err.response.status} ${err.response.statusText}`)
+                    : String(err.response.data))
+                : (err?.message || "Unknown error");
+            toast.error("AllEmployeeData fetch failed: " + message);
             setAllEmployeesResults(null);
             setActiveTable(null);
         } finally {
