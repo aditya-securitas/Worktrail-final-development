@@ -581,6 +581,8 @@ export const RecentAppealsTable: React.FC<RecentAppealsTableProps> = ({
       console.log('Contributor:', payload.Contributor)
       console.log('LOA:', payload.LOA)
 
+      console.log(payload)
+
       if (supportingDocsDataUrl) {
         payload.SupportingDocs = supportingDocsDataUrl
       }
