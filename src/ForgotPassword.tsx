@@ -14,44 +14,47 @@ import {
 } from 'lucide-react'
 import securitasLogo from './assets/Img/logo_b.png'
 import { API_ENDPOINTS, BASE_URL } from './endpoint'
+import axios from 'axios'
 
 async function callEndpointCascade(endpoints: string[], payload: any, extraHeaders: Record<string, string> = {}) {
   let lastError = 'Request failed. Please try again.'
   for (const endpoint of endpoints) {
     if (!endpoint) continue
     try {
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 
-          APIKEY: 'Securitas@#!1234', 
+      const response = await axios.post(endpoint, payload, {
+        headers: {
+          APIKEY: 'Securitas@#!1234',
           'Content-Type': 'application/json',
           ...extraHeaders,
         },
-        body: JSON.stringify(payload),
-      })
-      const text = await res.text()
-      // Skip Express HTML 404
-      if (res.status === 404 || text.includes('Cannot POST') || text.includes('<!DOCTYPE html>')) {
+        validateStatus: () => true, // We handle errors manually below
+      });
+      const res = response;
+      const status = res.status;
+      const data = typeof res.data === 'object' ? res.data : { message: res.data };
+
+      // Axios returns binary/html directly as string in .data if response is not JSON (e.g. Express 404 HTML)
+      const isExpress404 = (typeof data === 'string' && (data.includes('Cannot POST') || data.includes('<!DOCTYPE html>')));
+      if (status === 404 || isExpress404) {
         continue
       }
-      let data: any
-      try {
-        data = JSON.parse(text)
-      } catch {
-        data = { message: text }
+
+      if (status < 200 || status >= 300) {
+        lastError = data?.message || `Request failed (${status})`;
+        continue;
       }
-      if (!res.ok) {
-        lastError = data?.message || `Request failed (${res.status})`
-        continue
-      }
-      // Check if backend returned HTTP 200 but logical failure
+
+      // Backend logical failure (non-http error)
       if (data && (data.status === false || data.success === false || data.loginStatus === false || data.updateStatus === false)) {
         lastError = data?.message || 'Operation failed. Please verify your details.'
         continue
       }
+
       return data
     } catch (err: any) {
-      lastError = err?.message || lastError
+      // Axios error: .response?.data may contain our message, else .message
+      let errMsg = err?.response?.data?.message || err?.message || lastError
+      lastError = errMsg
     }
   }
   throw new Error(lastError)

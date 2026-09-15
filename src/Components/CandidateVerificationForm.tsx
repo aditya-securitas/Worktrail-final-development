@@ -229,6 +229,7 @@ export const getRequestErrorMessage = (error: unknown, fallback: string): string
 }
 
 export type VerificationRecord = {
+  raw: boolean
   id: string
   requestId: string
   candidateName: string

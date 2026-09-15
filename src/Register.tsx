@@ -22,6 +22,9 @@ import {
 } from 'lucide-react'
 import securitasLogo from './assets/Img/logo_b.png'
 
+// ADD AXIOS IMPORT
+import axios from 'axios'
+
 type RegisterProps = { onLogin?: () => void }
 type AccountType = 'Contributor' | 'Client'
 type RegisterForm = {
@@ -122,39 +125,41 @@ function Register({ onLogin }: RegisterProps) {
     }
     
     try {
-      let result = await fetch(API_ENDPOINTS.auth.register, { 
-        method: 'POST', 
-        headers: { 
-          APIKEY: 'Securitas@#!1234', 
-          'Content-Type': 'application/json' 
-        }, 
-        body: JSON.stringify(payload) 
-      })
-      if (result.status === 404 && (API_ENDPOINTS.auth as any).registerLegacy) {
-        result = await fetch((API_ENDPOINTS.auth as any).registerLegacy, {
-          method: 'POST',
-          headers: {
-            APIKEY: 'Securitas@#!1234',
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(payload)
-        })
-      }
-      const text = await result.text()
-      let data: any
+      let result, data
       try {
-        data = JSON.parse(text)
-      } catch {
-        data = { message: text }
+        result = await axios.post(API_ENDPOINTS.auth.register, payload, {
+          headers: {
+            APIKEY: 'Securitas@#!1234', 
+            'Content-Type': 'application/json'
+          }
+        })
+        data = result.data
+      } catch (error: any) {
+        if (error.response && error.response.status === 404 && (API_ENDPOINTS.auth as any).registerLegacy) {
+          // Try legacy
+          try {
+            result = await axios.post((API_ENDPOINTS.auth as any).registerLegacy, payload, {
+              headers: {
+                APIKEY: 'Securitas@#!1234',
+                'Content-Type': 'application/json'
+              }
+            })
+            data = result.data
+          } catch (legacyError: any) {
+            const msg = legacyError?.response?.data?.message ?? legacyError?.message ?? "Registration failed"
+            throw new Error(msg)
+          }
+        } else {
+          const msg = error?.response?.data?.message ?? error?.message ?? "Registration failed"
+          throw new Error(msg)
+        }
       }
-      if (!result.ok) throw new Error(data.message || `Registration failed (${result.status})`)
-      
       // Successfully registered initial profile; transition to OTP verification
       setRegisteredEmail(form.email.trim())
       setAwaitingOtp(true)
       setOtpCountdown(45)
-      setOtpSuccess(data.message || `Verification code sent to ${form.email.trim()}`)
-    } catch (requestError) {
+      setOtpSuccess(data?.message || `Verification code sent to ${form.email.trim()}`)
+    } catch (requestError: any) {
       setError(requestError instanceof Error ? requestError.message : 'Unable to connect to registration service.')
     } finally { 
       setIsLoading(false) 
@@ -176,28 +181,26 @@ function Register({ onLogin }: RegisterProps) {
         EmailID: registeredEmail.trim(),
         OTP: regOtp.trim(),
       }
-      const response = await fetch(API_ENDPOINTS.auth.verifyRegistrationOtp, {
-        method: 'POST',
-        headers: {
-          APIKEY: 'Securitas@#!1234',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      })
-      const text = await response.text()
-      let data: any
+      let response, data
       try {
-        data = JSON.parse(text)
-      } catch {
-        data = { message: text }
+        response = await axios.post(API_ENDPOINTS.auth.verifyRegistrationOtp, payload, {
+          headers: {
+            APIKEY: 'Securitas@#!1234',
+            'Content-Type': 'application/json',
+          },
+        })
+        data = response.data
+        if (response.status < 200 || response.status >= 300) {
+          throw new Error(data?.message || `Invalid or expired verification code (${response.status})`)
+        }
+      } catch (error: any) {
+        const status = error?.response?.status
+        const msg = error?.response?.data?.message || error?.message || `Invalid or expired verification code${status ? ` (${status})` : ''}`
+        throw new Error(msg)
       }
-      if (!response.ok) {
-        throw new Error(data.message || `Invalid or expired verification code (${response.status})`)
-      }
-
       setIsVerified(true)
       setForm(emptyForm)
-    } catch (err) {
+    } catch (err: any) {
       setOtpError(err instanceof Error ? err.message : 'Failed to verify registration code.')
     } finally {
       setOtpLoading(false)
@@ -221,34 +224,38 @@ function Register({ onLogin }: RegisterProps) {
         FirstName: form.firstName,
         LastName: form.lastName,
       }
-      let response = await fetch(API_ENDPOINTS.auth.register, {
-        method: 'POST',
-        headers: {
-          APIKEY: 'Securitas@#!1234',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      })
-      if (response.status === 404 && (API_ENDPOINTS.auth as any).registerLegacy) {
-        response = await fetch((API_ENDPOINTS.auth as any).registerLegacy, {
-          method: 'POST',
+      let response, data
+      try {
+        response = await axios.post(API_ENDPOINTS.auth.register, payload, {
           headers: {
             APIKEY: 'Securitas@#!1234',
             'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(payload),
+          }
         })
+        data = response.data
+      } catch (error: any) {
+        if (error.response && error.response.status === 404 && (API_ENDPOINTS.auth as any).registerLegacy) {
+          // Try legacy
+          try {
+            response = await axios.post((API_ENDPOINTS.auth as any).registerLegacy, payload, {
+              headers: {
+                APIKEY: 'Securitas@#!1234',
+                'Content-Type': 'application/json',
+              }
+            })
+            data = response.data
+          } catch (legacyError: any) {
+            const msg = legacyError?.response?.data?.message || legacyError?.message || "Unable to resend code."
+            throw new Error(msg)
+          }
+        } else {
+          const msg = error?.response?.data?.message || error?.message || "Unable to resend code."
+          throw new Error(msg)
+        }
       }
-      const text = await response.text()
-      let data: any
-      try {
-        data = JSON.parse(text)
-      } catch {
-        data = { message: text }
-      }
-      setOtpSuccess(data.message || `A fresh code has been sent to ${registeredEmail}`)
+      setOtpSuccess(data?.message || `A fresh code has been sent to ${registeredEmail}`)
       setOtpCountdown(45)
-    } catch (err) {
+    } catch (err: any) {
       setOtpError(err instanceof Error ? err.message : 'Unable to resend code.')
     } finally {
       setOtpLoading(false)

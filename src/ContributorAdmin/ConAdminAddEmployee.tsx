@@ -3,27 +3,12 @@ import { useAuth } from "../useAuth";
 import {
   Search,
   Users,
-  Plus,
   Pencil,
   CheckCircle2,
   XCircle,
-  Calendar,
-  Building2,
   Filter,
-  UserCheck,
-  FileText,
-  Sparkles,
   X,
-  Briefcase,
-  Mail,
-  Phone,
   UserPlus,
-  ShieldCheck,
-  DollarSign,
-  TrendingUp,
-  UserCheck2,
-  Clock,
-  Check
 } from "lucide-react";
 
 // Signature button classes matching the core Worktrail design system
@@ -184,7 +169,7 @@ export default function ConAdminAddEmployee() {
         EmploymentType: form.EmploymentType || null,
         AnyBehaviourIssue: form.AnyBehaviourIssue || null,
         EligibilityToRehire: form.EligibilityToRehire || null,
-        Contributor: form.Contributor || user?.CompanyName || "Securitas India"
+        Contributor: form.Contributor || user?.CompanyName 
       }
     ];
 
@@ -235,7 +220,7 @@ export default function ConAdminAddEmployee() {
       EmploymentType: row.EmploymentType || "",
       AnyBehaviourIssue: row.AnyBehaviourIssue || "",
       EligibilityToRehire: row.EligibilityToRehire || "",
-      Contributor: row.Contributor || user?.CompanyName || "Securitas India"
+      Contributor: row.Contributor || user?.CompanyName 
     });
     setActivePanel("edit");
   };
