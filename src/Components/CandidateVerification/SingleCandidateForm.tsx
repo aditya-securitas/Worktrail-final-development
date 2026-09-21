@@ -19,6 +19,8 @@ import {
   Info,
 } from 'lucide-react'
 import { OrgLogo } from '../OrgLogo'
+import type { DynamicField } from './dynamicFields'
+import { getVisibleDynamicFields } from './dynamicFields'
 
 export interface SingleCandidateFormProps {
   selectedOrgName: string
@@ -26,7 +28,7 @@ export interface SingleCandidateFormProps {
   orgTotalPrice: number
   orgBasePrice: number
   orgGstAmount: number
-  dynamicColumns: string[]
+  dynamicFields: DynamicField[]
   contributorColName: string | null
   singleForm: { [k: string]: string }
   onFieldChange: (col: string, val: string) => void
@@ -51,7 +53,7 @@ export const SingleCandidateForm: React.FC<SingleCandidateFormProps> = ({
   orgTotalPrice,
   orgBasePrice,
   orgGstAmount,
-  dynamicColumns,
+  dynamicFields,
   contributorColName,
   singleForm,
   onFieldChange,
@@ -72,11 +74,13 @@ export const SingleCandidateForm: React.FC<SingleCandidateFormProps> = ({
   const effectivePayAmount = orgTotalPrice.toFixed(2)
   const basePayAmount = orgBasePrice.toFixed(2)
   const gstPayAmount = orgGstAmount.toFixed(2)
-  const nonContributorCols = dynamicColumns.filter((col) => col !== contributorColName)
+  const visibleFields = getVisibleDynamicFields(dynamicFields).filter(
+    (f) => !contributorColName || f.DBFieldName !== contributorColName
+  )
 
   // Group fields logically for exceptional usability
-  const personalFields = nonContributorCols.filter((col) => {
-    const lower = col.toLowerCase()
+  const personalFields = visibleFields.filter((f) => {
+    const lower = `${f.DBFieldName} ${f.DisplayFieldName}`.toLowerCase()
     return (
       lower.includes('name') ||
       lower.includes('first') ||
@@ -88,51 +92,51 @@ export const SingleCandidateForm: React.FC<SingleCandidateFormProps> = ({
     )
   })
 
-  const employmentFields = nonContributorCols.filter((col) => {
-    if (personalFields.includes(col)) return false
-    const lower = col.toLowerCase()
+  const employmentFields = visibleFields.filter((f) => {
+    if (personalFields.includes(f)) return false
+    const lower = `${f.DBFieldName} ${f.DisplayFieldName}`.toLowerCase()
     return (
       lower.includes('desig') ||
       lower.includes('role') ||
       lower.includes('dept') ||
       lower.includes('department') ||
       lower.includes('code') ||
+      lower.includes('person number') ||
       lower.includes('id') ||
       lower.includes('doj') ||
       lower.includes('dol') ||
       lower.includes('date') ||
       lower.includes('join') ||
       lower.includes('leav') ||
-      lower.includes('employ')
+      lower.includes('employ') ||
+      lower.includes('position')
     )
   })
 
-  const otherFields = nonContributorCols.filter(
-    (col) => !personalFields.includes(col) && !employmentFields.includes(col)
+  const otherFields = visibleFields.filter(
+    (f) => !personalFields.includes(f) && !employmentFields.includes(f)
   )
 
   // Helper to render individual dynamic input field
-  const renderFieldInput = (col: string) => {
-    const lower = col.toLowerCase()
-    const isDate = lower.includes('date') || lower.includes('doj') || lower.includes('dol')
+  const renderFieldInput = (field: DynamicField) => {
+    const col = field.DBFieldName
+    const labelFormatted = field.DisplayFieldName
+    const lower = `${field.DBFieldName} ${field.DisplayFieldName}`.toLowerCase()
+    const isDate = lower.includes('date') || lower.includes('doj') || lower.includes('dol') || lower.includes('joining') || lower.includes('leaving')
     const isEmail = lower.includes('email')
     const isPhone = lower.includes('phone') || lower.includes('mobile') || lower.includes('contact')
     const isSalary = lower.includes('salary') || lower.includes('ctc') || lower.includes('package')
     const isAmount = lower.includes('amount') || isSalary
-    const isCode = lower.includes('code') || lower.includes('id')
+    const isCode = lower.includes('code') || lower.includes('id') || lower.includes('person number')
     const isEmployeeId =
-      lower === 'employeecode' ||
-      lower === 'employeeid' ||
-      lower === 'employee_code' ||
-      lower === 'employee_id' ||
-      lower === 'employee code' ||
-      lower === 'employee id' ||
-      lower === 'empcode' ||
-      lower === 'empid' ||
-      (lower.includes('employee') && (lower.includes('code') || lower.includes('id'))) ||
-      lower === 'code'
+      lower.includes('employeecode') ||
+      lower.includes('employee code') ||
+      lower.includes('person number') ||
+      lower.includes('employeeid') ||
+      lower.includes('empcode') ||
+      (lower.includes('employee') && (lower.includes('code') || lower.includes('id')))
+    const isRemarks = lower.includes('remark') || lower.includes('comment')
     const fieldType = isDate ? 'date' : isEmail ? 'email' : isPhone ? 'tel' : isAmount ? 'number' : 'text'
-    const labelFormatted = col.replace(/([A-Z])/g, ' $1').trim()
 
     return (
       <div key={col} className="animate-fade-in-up">
@@ -164,35 +168,46 @@ export const SingleCandidateForm: React.FC<SingleCandidateFormProps> = ({
               <span className="text-xs font-mono font-black text-slate-500">#</span>
             ) : lower.includes('name') ? (
               <User className="w-4 h-4 text-cyan-600" />
-            ) : lower.includes('desig') || lower.includes('role') ? (
+            ) : lower.includes('desig') || lower.includes('role') || lower.includes('position') ? (
               <Briefcase className="w-4 h-4 text-teal-600" />
             ) : (
               <Sparkles className="w-4 h-4 text-teal-600" />
             )}
           </div>
-          <input
-            id={`dynamic_col_${col}`}
-            className="w-full pl-10 pr-4 py-3.5 rounded-2xl border-2 border-slate-200/90 bg-white focus:ring-4 focus:ring-teal-500/15 focus:border-[#0680A6] text-sm font-bold text-slate-900 shadow-2xs outline-none transition-all placeholder:text-slate-400 placeholder:font-normal hover:border-teal-300"
-            value={singleForm[col] ?? ''}
-            onChange={(e) => {
-              let val = e.target.value
-              if (isPhone) {
-                val = val.replace(/\D/g, '').slice(0, 10)
+          {isRemarks ? (
+            <textarea
+              id={`dynamic_col_${col}`}
+              className="w-full pl-10 pr-4 py-3.5 rounded-2xl border-2 border-slate-200/90 bg-white focus:ring-4 focus:ring-teal-500/15 focus:border-[#0680A6] text-sm font-bold text-slate-900 shadow-2xs outline-none transition-all placeholder:text-slate-400 placeholder:font-normal hover:border-teal-300 min-h-[88px] resize-y"
+              value={singleForm[col] ?? ''}
+              onChange={(e) => onFieldChange(col, e.target.value)}
+              placeholder={`Enter ${labelFormatted.toLowerCase()} (optional)`}
+              autoComplete="off"
+            />
+          ) : (
+            <input
+              id={`dynamic_col_${col}`}
+              className="w-full pl-10 pr-4 py-3.5 rounded-2xl border-2 border-slate-200/90 bg-white focus:ring-4 focus:ring-teal-500/15 focus:border-[#0680A6] text-sm font-bold text-slate-900 shadow-2xs outline-none transition-all placeholder:text-slate-400 placeholder:font-normal hover:border-teal-300"
+              value={singleForm[col] ?? ''}
+              onChange={(e) => {
+                let val = e.target.value
+                if (isPhone) {
+                  val = val.replace(/\D/g, '').slice(0, 10)
+                }
+                onFieldChange(col, val)
+              }}
+              required={isEmployeeId}
+              type={isPhone ? 'tel' : fieldType}
+              maxLength={isPhone ? 10 : undefined}
+              step={isAmount ? '0.01' : undefined}
+              min={isAmount ? '0' : undefined}
+              placeholder={
+                isPhone
+                  ? 'Enter 10-digit mobile number'
+                  : `Enter ${labelFormatted.toLowerCase()}${!isEmployeeId ? ' (optional)' : ''}`
               }
-              onFieldChange(col, val)
-            }}
-            required={isEmployeeId}
-            type={isPhone ? 'tel' : fieldType}
-            maxLength={isPhone ? 10 : undefined}
-            step={isAmount ? '0.01' : undefined}
-            min={isAmount ? '0' : undefined}
-            placeholder={
-              isPhone
-                ? 'Enter 10-digit mobile number'
-                : `Enter ${labelFormatted.toLowerCase()}${!isEmployeeId ? ' (optional)' : ''}`
-            }
-            autoComplete="off"
-          />
+              autoComplete="off"
+            />
+          )}
         </div>
         {isSalary && (
           <p className="text-[10px] text-slate-500 mt-1 pl-1 font-medium flex items-center gap-1">
@@ -567,12 +582,12 @@ export const SingleCandidateForm: React.FC<SingleCandidateFormProps> = ({
             disabled={
               paymentState === 'processing' ||
               paymentState === 'success' ||
-              !dynamicColumns.length
+              !visibleFields.length
             }
             className={`w-full sm:w-auto px-6 py-2.5 sm:py-3 rounded-xl text-xs sm:text-sm font-bold transition-all duration-200 select-none flex items-center justify-center gap-2 order-1 sm:order-2 ${
               paymentState === 'processing' ||
               paymentState === 'success' ||
-              !dynamicColumns.length
+              !visibleFields.length
                 ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
                 : 'bg-gradient-to-r from-[#10B981] to-[#5850EC] hover:brightness-110 hover:shadow-[0_8px_25px_rgba(16,185,129,0.3)] active:scale-[0.98] text-white cursor-pointer shadow-md'
             }`}

@@ -458,6 +458,7 @@ const ClientRequest: React.FC = () => {
             },
           }
         );
+        
       // After success, reload the table by refreshing data
       await loadRecords(true);
     } catch (err: any) {

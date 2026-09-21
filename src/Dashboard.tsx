@@ -31,6 +31,8 @@ import {
   type VerificationRecord
 } from './Components/CandidateVerificationForm'
 import { axios, API_ENDPOINTS } from './endpoint'
+import ConAdminAddEmployee from './ContributorAdmin/ConAdminAddEmployee'
+import ContributorServicerequest from './Components/ContributorServicerequest'
 
 const EXTERNAL_LINKS: Record<string, boolean> = {
   'Privacypolicy.tsx': true,
@@ -43,7 +45,7 @@ function MenuComponent({ item }: { item: MenuRoute | undefined }) {
   if (item.components === 'ServiceRequest.tsx') return <ServiceRequest />
   if (item.components === 'ServiceRequestReview.tsx') return <ServiceRequestReview />
   if (item.components === 'ConUserAddEmployee.tsx') return <ConUserAddEmployee />
-  if (item.components === 'ConAdminAddEmployee.tsx') return <ConUserAddEmployee />
+  if (item.components === 'ConAdminAddEmployee.tsx') return <ConAdminAddEmployee />
   if (item.components === 'AddEmployee.tsx') {
     const ut = (user?.Usertype || '').toLowerCase().trim().replace(/[\s_-]+/g, '')
     if (ut === 'contributor' || ut === 'contributoruser' || ut === 'contributoradmin' || ut === 'admincontributor') {
@@ -61,6 +63,7 @@ function MenuComponent({ item }: { item: MenuRoute | undefined }) {
   if (item.components === 'OtherServices.tsx') return <OtherServices />
   if (item.components === 'Invoice.tsx') return <Invoice />
   if (item.components === 'ConAdminUsermaster.tsx') return <ConAdminUsermaster />
+  if (item.components === 'ContributorServicerequest.tsx') return <ContributorServicerequest />
   return null
 }
 
@@ -115,12 +118,10 @@ function Dashboard() {
   const clientInfo = useMemo(() => {
     const idStr = user?.id ? `CL-${user.id}` : ''
     const nameStr =
-      user?.CompanyName ||
-      (user?.FirstName ? `${user.FirstName} ${user.LastName || ''}`.trim() : '') ||
-      'Enterprise Client'
+      user?.CompanyName 
     const emailStr = (
-      user?.email ||
       user?.Email ||
+      user?.Email ||  
       user?.username ||
       (user as any)?.Clientemail ||
       'Client.worktrial@Securitas-india.com'
@@ -142,14 +143,7 @@ function Dashboard() {
   const loadRecords = async () => {
     setIsRecordsLoading(true)
     const clientEmail = (
-      clientInfo.clientEmail ||
-      user?.EmailID ||
-      user?.email ||
-      user?.Email ||
-      (user as any)?.Clientemail ||
-      (user?.username && user.username.includes('@') ? user.username : '') ||
-      localStorage.getItem('worktrail_client_email') ||
-      'Client.worktrial@Securitas-india.com'
+      clientInfo.clientEmail 
     ).trim()
     const statusApiUrl = API_ENDPOINTS.clientEmpStatus || 'https://worktrail.ai/api/ClientEmpStatus'
     let clientEmpList: any[] = []

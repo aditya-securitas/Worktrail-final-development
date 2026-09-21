@@ -11,6 +11,8 @@ import {
   Check,
 } from 'lucide-react'
 import { OrgLogo } from '../OrgLogo'
+import type { DynamicField } from './dynamicFields'
+import { getVisibleDynamicFields } from './dynamicFields'
 
 export interface VerifierPickerProps {
   organizations: any[]
@@ -23,7 +25,7 @@ export interface VerifierPickerProps {
   orgError: string | null
   dynamicFieldLoading: boolean
   dynamicFieldError: string | null
-  dynamicColumns: string[]
+  dynamicFields: DynamicField[]
   contributorColName: string | null
   onSearchChange: (val: string) => void
   onToggleDropdown: () => void
@@ -45,7 +47,7 @@ export const VerifierPicker: React.FC<VerifierPickerProps> = ({
   orgError,
   dynamicFieldLoading,
   dynamicFieldError,
-  dynamicColumns,
+  dynamicFields,
   contributorColName,
   onSearchChange,
   onToggleDropdown,
@@ -74,7 +76,10 @@ export const VerifierPicker: React.FC<VerifierPickerProps> = ({
     return organizations.slice(0, 8)
   }, [organizations])
 
-  const activeAttributeCount = dynamicColumns.filter((c) => c !== contributorColName).length
+  const visibleFields = getVisibleDynamicFields(dynamicFields).filter(
+    (f) => !contributorColName || f.DBFieldName !== contributorColName
+  )
+  const activeAttributeCount = visibleFields.length
 
   return (
     <div className="w-full bg-white rounded-2xl shadow-sm border border-slate-200/80 p-5 sm:p-7 lg:p-8 relative transition-all duration-300 animate-fade-in-md">
@@ -316,14 +321,12 @@ export const VerifierPicker: React.FC<VerifierPickerProps> = ({
                       </span>
                     </div>
                     <div className="flex flex-wrap gap-1 pt-0.5">
-                      {dynamicColumns
-                        .filter((c) => c !== contributorColName)
-                        .map((col) => (
+                      {visibleFields.map((field) => (
                           <span
-                            key={col}
+                            key={field.DBFieldName}
                             className="px-2 py-0.5 text-[10px] font-medium bg-slate-50 text-slate-600 rounded border border-slate-200"
                           >
-                            {col}
+                            {field.DisplayFieldName}
                           </span>
                         ))}
                     </div>

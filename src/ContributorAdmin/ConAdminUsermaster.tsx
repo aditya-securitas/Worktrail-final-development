@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../useAuth";
+import axios from "axios";
 import {
   UserPlus,
   Users,
@@ -24,7 +25,6 @@ import {
   EyeOff
 } from "lucide-react";
 
-// Signature button classes matching the core Worktrail design system
 const primaryBtnClass =
   "inline-flex items-center justify-center gap-2 h-11 px-8 bg-gradient-to-r from-[#10B981] to-[#5850EC] hover:brightness-110 active:scale-[0.98] text-white font-bold text-xs tracking-wider uppercase rounded-full shadow-md hover:shadow-lg transition-all duration-200 cursor-pointer select-none outline-none disabled:grayscale disabled:opacity-50 disabled:cursor-not-allowed";
 
@@ -44,7 +44,6 @@ export interface ContributorAdminRow {
   UserMasterID?: number | string;
 }
 
-// Live Input Sanitizer
 const sanitizeInput = (name: string, value: string): string => {
   switch (name) {
     case "firstName":
@@ -52,35 +51,22 @@ const sanitizeInput = (name: string, value: string): string => {
     case "city":
     case "state":
     case "country":
-      // Only alphabetic characters and spaces, max 50 chars
       return value.replace(/[^a-zA-Z\s]/g, "").slice(0, 50);
-
     case "username":
-      // Lowercase alphanumeric with dots, underscores, hyphens, max 40 chars
       return value.toLowerCase().replace(/[^a-z0-9._-]/g, "").slice(0, 40);
-
     case "mobile":
-      // Numbers only, max 10 digits
       return value.replace(/\D/g, "").slice(0, 10);
-
     case "companyCode":
-      // Auto-uppercase alphanumeric and allowed separators (-, _, /), max 20 chars
       return value.toUpperCase().replace(/[^A-Z0-9\-_/]/g, "").slice(0, 20);
-
     case "gstNumber":
-      // Auto-uppercase alphanumeric, max 15 chars
       return value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 15);
-
     case "zipCode":
-      // Digits only, max 6 chars (PIN Code)
       return value.replace(/\D/g, "").slice(0, 6);
-
     default:
       return value;
   }
 };
 
-// Comprehensive Single Field Validator
 const validateSingleField = (name: string, value: string, currentForm: any): string => {
   const val = (value || "").trim();
 
@@ -186,7 +172,6 @@ export default function ConAdminUserMaster() {
   const { user } = useAuth();
   const [activeSection, setActiveSection] = useState<"add" | "manage">("add");
 
-  // Form State
   const [form, setForm] = useState({
     username: "",
     email: "",
@@ -224,6 +209,40 @@ export default function ConAdminUserMaster() {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
+  // Fetch Contributor Admins Data on page load and when CompanyName changes, using axios with companyName query param
+  useEffect(() => {
+    const fetchContributorAdmins = async () => {
+      if (!user?.CompanyName) {
+        setAdminData([]);
+        return;
+      }
+      setLoading(true);
+      try {
+        const companyName = encodeURIComponent(user.CompanyName);
+        const url = `https://worktrail.ai/api/ContributorAdminData?companyName=${companyName}`;
+        const response = await axios.get(url, {
+          headers: {
+            APIKEY: "Securitas@#!1234"
+          }
+        });
+        if (response.data && Array.isArray(response.data.data)) {
+          setAdminData(response.data.data);
+        } else {
+          setAdminData([]);
+        }
+        // Log the successful axios response
+        console.log("ContributorAdminData (with companyName) Axios API Response:", response.data);
+      } catch (error) {
+        setAdminData([]);
+        console.log("ContributorAdminData (with companyName) Axios API Error:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchContributorAdmins();
+    // Only on initial load & companyName change
+  }, [user?.CompanyName]);
+
   useEffect(() => {
     if (alertInfo) {
       const t = setTimeout(() => setAlertInfo(null), 4000);
@@ -241,47 +260,56 @@ export default function ConAdminUserMaster() {
     }
   }, [user]);
 
-  // Fetch Organizations
+  // Fetch Organizations using axios
   useEffect(() => {
     const fetchOrgs = async () => {
       try {
-        const res = await fetch("https://worktrail.ai/api/OrgmasterData", {
-          method: "GET",
+        const response = await axios.get("https://worktrail.ai/api/OrgmasterData", {
           headers: {
             "Content-Type": "application/json",
             APIKEY: "Securitas@#!1234"
           }
         });
-        const data = await res.json();
-        if (res.ok && data && Array.isArray(data.data)) {
-          setOrganizations(data.data);
+        if (response.data && Array.isArray(response.data.data)) {
+          setOrganizations(response.data.data);
         }
-      } catch {
-        // ignore
+        // Log organization data API response
+        console.log("OrgmasterData Axios API Response:", response.data);
+      } catch (err) {
+        // Log org fetch error
+        console.log("OrgmasterData Axios API Error:", err);
       }
     };
     fetchOrgs();
   }, []);
 
-  // Fetch Contributor Admins / Staff
+  // Fetch Contributor Admins / Staff using axios (same as initial load, but can be triggered on demand)
   const fetchAdmins = async () => {
+    if (!user?.CompanyName) {
+      setAdminData([]);
+      return;
+    }
     setLoading(true);
     try {
-      const companyName = user?.CompanyName ? encodeURIComponent(user.CompanyName) : "";
-      const url = `https://worktrail.ai/api/ContributorAdminData${companyName ? `?companyName=${companyName}` : ""}`;
-      const res = await fetch(url, {
-        method: "GET",
+      const companyName = encodeURIComponent(user.CompanyName);
+      const url = `https://worktrail.ai/api/ContributorAdminData?companyName=${companyName}`;
+      // Log the API URL for ContributorAdminData
+      console.log("Fetching ContributorAdminData API at:", url);
+      const response = await axios.get(url, {
         headers: {
           APIKEY: "Securitas@#!1234"
         }
       });
-      const data = await res.json();
-      if (res.ok && data && Array.isArray(data.data)) {
-        setAdminData(data.data);
+      // Log the response data from ContributorAdminData
+      console.log("ContributorAdminData Axios API Response:", response.data);
+      if (response.data && Array.isArray(response.data.data)) {
+        setAdminData(response.data.data);
       } else {
         setAdminData([]);
       }
-    } catch {
+    } catch (err) {
+      // Log the error
+      console.log("ContributorAdminData Axios API Error:", err);
       setAdminData([]);
     } finally {
       setLoading(false);
@@ -312,7 +340,7 @@ export default function ConAdminUserMaster() {
     setErrors((prev) => ({ ...prev, [name]: fieldError }));
   };
 
-  // Handle Form Submission
+  // Handle Form Submission using axios
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -393,27 +421,21 @@ export default function ConAdminUserMaster() {
       OrgMasterID: orgMasterId
     };
 
+    // Log the payload being sent to the Register API
+    console.log("Register API Payload:", payload);
+
     try {
-      const res = await fetch("https://worktrail.ai/api/Register", {
-        method: "POST",
+      const response = await axios.post("https://worktrail.ai/api/ContributorRegister", payload, {
         headers: {
           APIKEY: "Securitas@#!1234",
           "Content-Type": "application/json"
-        },
-        body: JSON.stringify(payload)
+        }
       });
 
-      if (!res.ok) {
-        let msg = "Failed to register contributor user.";
-        try {
-          const errData = await res.json();
-          msg = errData?.message || msg;
-        } catch {
-          msg = res.statusText || msg;
-        }
-        throw new Error(msg);
-      }
+      // Log the axios response
+      console.log("Register API Axios Response:", { status: response.status, data: response.data });
 
+      // Assuming a 2xx status is success
       setIsSubmitted(true);
       setErrors({});
       setTouched({});
@@ -421,8 +443,9 @@ export default function ConAdminUserMaster() {
       setSubmitting(false);
       fetchAdmins();
     } catch (err: any) {
+      console.log("Register API Axios Error:", err);
       setSubmitting(false);
-      // Local addition for instant UX
+      // Even if error, optimistic UI add
       setAdminData((prev) => [
         {
           id: Date.now(),
@@ -539,7 +562,7 @@ export default function ConAdminUserMaster() {
     );
   };
 
-  // Delete / Inactivate
+  // Delete / Inactivate using axios
   const handleDeleteConfirm = async () => {
     if (!pendingDelete) return;
     setDeleteLoading(true);
@@ -548,17 +571,23 @@ export default function ConAdminUserMaster() {
         id: String(pendingDelete.id),
         activestatus: "0"
       };
-      const res = await fetch("https://worktrail.ai/api/ContributorDelete", {
-        method: "POST",
+
+      console.log("ContributorDelete API Axios Payload:", payload);
+
+      const response = await axios.post("https://worktrail.ai/api/ContributorDelete", payload, {
         headers: {
           APIKEY: "Securitas@#!1234",
           "Content-Type": "application/json"
-        },
-        body: JSON.stringify(payload)
+        }
       });
 
-      if (!res.ok) {
-        throw new Error(`Delete failed: ${res.statusText}`);
+      // Log the Axios response
+      console.log("ContributorDelete API Axios Response:", { status: response.status, data: response.data });
+
+      if (!response || !(response.status >= 200 && response.status < 300)) {
+        throw new Error(
+          `Delete failed: ${response?.statusText || (response && response.status) || "Unknown error"}`
+        );
       }
 
       setAlertInfo({ type: "success", message: `Contributor "${pendingDelete.username}" marked as Inactive.` });
@@ -566,6 +595,8 @@ export default function ConAdminUserMaster() {
       setPendingDelete(null);
       fetchAdmins();
     } catch (err: any) {
+      // Log network/delete error
+      console.log("ContributorDelete API Axios Error:", err);
       setAdminData((prev) =>
         prev.map((u) => (u.id === pendingDelete.id ? { ...u, activestatus: "0" } : u))
       );
@@ -726,7 +757,6 @@ export default function ConAdminUserMaster() {
                 </div>
               </div>
 
-              {/* Section 2: Organization & Tax Identification */}
               <div className="space-y-4">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600 flex items-center gap-2 pb-2 border-b border-slate-100">
                   <Building2 className="w-4 h-4 text-[#0680A6]" />
@@ -739,7 +769,6 @@ export default function ConAdminUserMaster() {
                 </div>
               </div>
 
-              {/* Section 3: Office Location & Address */}
               <div className="space-y-4">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600 flex items-center gap-2 pb-2 border-b border-slate-100">
                   <MapPin className="w-4 h-4 text-[#0680A6]" />
@@ -755,7 +784,6 @@ export default function ConAdminUserMaster() {
                 </div>
               </div>
 
-              {/* Form Action Controls */}
               <div className="pt-6 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-end gap-3">
                 <button
                   type="button"

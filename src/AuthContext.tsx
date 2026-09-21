@@ -5,11 +5,10 @@ import {
   SUPERADMIN_MENU,
   ADMIN_MENU,
   FASCILATOR_MENU,
-  CONTRIBUTOR_MENU,
-  CONTRIBUTOR_ADMIN_MENU,
+  CONTRIBUTORUSER_MENU,
+  CONTRIBUTORADMIN_MENU,
   CLIENT_MENU,
-  type AuthUser,
-  type LoginResult
+  type AuthUser
 } from './auth-context'
 
 // Helper to map user types to their corresponding menus
@@ -17,12 +16,12 @@ const MENU_MAP: Record<string, any> = {
   superadmin: SUPERADMIN_MENU,
   admin: ADMIN_MENU,
   fascilator: FASCILATOR_MENU,
-  contributor: CONTRIBUTOR_MENU,
-  contributoruser: CONTRIBUTOR_MENU,
-  'contributor user': CONTRIBUTOR_MENU,
-  contributoradmin: CONTRIBUTOR_ADMIN_MENU,
-  admin_contributor: CONTRIBUTOR_ADMIN_MENU,
-  'contributor admin': CONTRIBUTOR_ADMIN_MENU,
+  contributor: CONTRIBUTORUSER_MENU,
+  contributoruser: CONTRIBUTORUSER_MENU,
+  'contributor user': CONTRIBUTORUSER_MENU,
+  contributoradmin: CONTRIBUTORADMIN_MENU,
+  admin_contributor: CONTRIBUTORADMIN_MENU,
+  'contributor admin': CONTRIBUTORADMIN_MENU,
   client: CLIENT_MENU
 }
 
@@ -40,8 +39,8 @@ function getMenuForUserType(usertype: string) {
   const ut = (usertype || '').toLowerCase().trim().replace(/[\s_-]+/g, '')
   if (ut.includes('superadmin')) return SUPERADMIN_MENU
   if (ut === 'admin') return ADMIN_MENU
-  if (ut.includes('contributoradmin') || ut.includes('admincontributor')) return CONTRIBUTOR_ADMIN_MENU
-  if (ut.includes('contributor')) return CONTRIBUTOR_MENU
+  if (ut.includes('contributoradmin') || ut.includes('admincontributor')) return CONTRIBUTORADMIN_MENU
+  if (ut.includes('contributoruser')) return CONTRIBUTORUSER_MENU
   if (ut.includes('fascilator')) return FASCILATOR_MENU
   if (ut.includes('client') || ut.includes('customer')) return CLIENT_MENU
   return []
@@ -302,11 +301,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               } catch {}
             }
             if (parsed.user) {
-              const finalEmail = (json as any)?.EmailID || (json as any)?.email || parsed.user.email || cleanIdentifier
+              const finalEmail = (json as any)?.EmailID || (json as any)?.email ||  cleanIdentifier
               if (finalEmail) {
-                parsed.user.email = finalEmail
-                parsed.user.Email = finalEmail
-                parsed.user.EmailID = finalEmail
                 localStorage.setItem('worktrail_client_email', finalEmail)
               }
               verifiedUser = parsed.user

@@ -1,5 +1,4 @@
 import React, { useState } from 'react'
-import * as XLSX from 'xlsx'
 import {
   Upload,
   Download,
@@ -11,16 +10,16 @@ import {
   Lock,
   RefreshCw,
   Search,
-  Check,
-  Building2,
 } from 'lucide-react'
 import { OrgLogo } from '../OrgLogo'
+import type { DynamicField } from './dynamicFields'
+import { getVisibleDynamicFields } from './dynamicFields'
 
 export interface BulkCandidateUploaderProps {
   selectedOrgName: string
   selectedOrgId: number | string
   orgTotalPrice: number
-  dynamicColumns: string[]
+  dynamicFields: DynamicField[]
   contributorColName: string | null
   bulkFile: File | null
   bulkRows: any[]
@@ -34,15 +33,19 @@ export interface BulkCandidateUploaderProps {
   onProceedToPayment: () => void
   onBack: () => void
   onChangeOrg: () => void
-  downloadSampleXlsx: (columns: string[], contributorCol: string | null, orgName: string) => void
-  downloadSampleExcel: (columns: string[], contributorCol: string | null) => void
+  downloadSampleXlsx: (
+    fields: DynamicField[],
+    contributorCol: string | null,
+    orgName: string
+  ) => void
+  downloadSampleExcel: (fields: DynamicField[], contributorCol: string | null) => void
 }
 
 export const BulkCandidateUploader: React.FC<BulkCandidateUploaderProps> = ({
   selectedOrgName,
   selectedOrgId,
   orgTotalPrice,
-  dynamicColumns,
+  dynamicFields,
   contributorColName,
   bulkFile,
   bulkRows,
@@ -62,7 +65,10 @@ export const BulkCandidateUploader: React.FC<BulkCandidateUploaderProps> = ({
   const [isDragging, setIsDragging] = useState(false)
   const [tableSearch, setTableSearch] = useState('')
 
-  const activeFieldsCount = dynamicColumns.filter((c) => c !== contributorColName).length
+  const visibleFields = getVisibleDynamicFields(dynamicFields).filter(
+    (f) => !contributorColName || f.DBFieldName !== contributorColName
+  )
+  const activeFieldsCount = visibleFields.length
   const batchTotalAmount = (bulkRows.length * orgTotalPrice).toFixed(2)
 
   // Filter preview rows by search query
@@ -72,9 +78,13 @@ export const BulkCandidateUploader: React.FC<BulkCandidateUploaderProps> = ({
     return Object.values(row).some((val) => String(val).toLowerCase().includes(q))
   })
 
-  // Table columns from dynamic columns or first row
-  const tableHeaders = dynamicColumns.filter((c) => c !== contributorColName)
-  const displayHeaders = tableHeaders.length > 0 ? tableHeaders : (bulkRows[0] ? Object.keys(bulkRows[0]) : [])
+  // Show DisplayFieldName headers; row values are keyed by DBFieldName after parse
+  const tableFields: DynamicField[] =
+    visibleFields.length > 0
+      ? visibleFields
+      : bulkRows[0]
+        ? Object.keys(bulkRows[0]).map((k) => ({ DBFieldName: k, DisplayFieldName: k }))
+        : []
 
   return (
     <div className="w-full bg-white/95 backdrop-blur-xl rounded-3xl shadow-xl shadow-slate-200/50 p-6 sm:p-10 lg:p-12 border border-teal-200/90 relative overflow-hidden transition-all duration-300 animate-fade-in-md">
@@ -158,9 +168,9 @@ export const BulkCandidateUploader: React.FC<BulkCandidateUploaderProps> = ({
                 type="button"
                 className="flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-emerald-600 to-teal-700 hover:brightness-105 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-600/20 transition-all cursor-pointer active:scale-98"
                 onClick={() =>
-                  downloadSampleXlsx(dynamicColumns, contributorColName, selectedOrgName)
+                  downloadSampleXlsx(dynamicFields, contributorColName, selectedOrgName)
                 }
-                disabled={!dynamicColumns.length}
+                disabled={!dynamicFields.length}
               >
                 <Download className="w-4 h-4" />
                 <span>Download Template (.XLSX)</span>
@@ -169,8 +179,8 @@ export const BulkCandidateUploader: React.FC<BulkCandidateUploaderProps> = ({
               <button
                 type="button"
                 className="flex items-center justify-center gap-2 px-4 py-3 bg-white border border-slate-200 hover:border-teal-300 text-slate-700 hover:text-teal-900 rounded-xl text-xs font-bold shadow-2xs transition-all cursor-pointer"
-                onClick={() => downloadSampleExcel(dynamicColumns, contributorColName)}
-                disabled={!dynamicColumns.length}
+                onClick={() => downloadSampleExcel(dynamicFields, contributorColName)}
+                disabled={!dynamicFields.length}
               >
                 <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
                 <span>Download Sample (.CSV)</span>
@@ -184,12 +194,12 @@ export const BulkCandidateUploader: React.FC<BulkCandidateUploaderProps> = ({
               Configured Verification Columns
             </span>
             <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto pr-1">
-              {tableHeaders.map((col) => (
+              {visibleFields.map((field) => (
                 <span
-                  key={col}
+                  key={field.DBFieldName}
                   className="px-2 py-0.5 text-[10px] font-semibold bg-slate-50 text-slate-700 rounded-md border border-slate-200"
                 >
-                  {col}
+                  {field.DisplayFieldName}
                 </span>
               ))}
             </div>
@@ -351,12 +361,12 @@ export const BulkCandidateUploader: React.FC<BulkCandidateUploaderProps> = ({
                     <th className="p-3 font-bold text-slate-600 uppercase tracking-wider text-[10px] w-12 text-center">
                       #
                     </th>
-                    {displayHeaders.map((hdr) => (
+                    {tableFields.map((field) => (
                       <th
-                        key={hdr}
+                        key={field.DBFieldName}
                         className="p-3 font-bold text-slate-700 uppercase tracking-wider text-[10px] whitespace-nowrap"
                       >
-                        {hdr}
+                        {field.DisplayFieldName}
                       </th>
                     ))}
                     <th className="p-3 font-bold text-slate-600 uppercase tracking-wider text-[10px] w-12 text-center">
@@ -370,12 +380,12 @@ export const BulkCandidateUploader: React.FC<BulkCandidateUploaderProps> = ({
                       <td className="p-3 text-slate-400 text-center font-mono text-[11px]">
                         {idx + 1}
                       </td>
-                      {displayHeaders.map((hdr) => (
+                      {tableFields.map((field) => (
                         <td
-                          key={hdr}
+                          key={field.DBFieldName}
                           className="p-3 text-slate-800 whitespace-nowrap max-w-xs truncate"
                         >
-                          {row[hdr] || '—'}
+                          {row[field.DBFieldName] || '—'}
                         </td>
                       ))}
                       <td className="p-3 text-center">

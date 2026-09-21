@@ -23,7 +23,6 @@ import {
 } from 'lucide-react'
 import securitasLogo from './assets/Img/logo_b.png'
 
-// ADD AXIOS IMPORT
 import axios from 'axios'
 
 type RegisterProps = { onLogin?: () => void }
@@ -44,6 +43,12 @@ type RegisterForm = {
   confirmPassword: string
 }
 
+type Organization = {
+  OrganizationID: number
+  OrganizationName: string
+  Amount?: number | null
+}
+
 const emptyForm: RegisterForm = { 
   email: '', 
   firstName: '', 
@@ -60,7 +65,7 @@ const emptyForm: RegisterForm = {
   confirmPassword: '' 
 }
 
-// Live Input Sanitizer
+// Live Input Sanitizer (companyName handled via select for Contributor)
 const sanitizeInput = (field: keyof RegisterForm, value: string): string => {
   switch (field) {
     case 'firstName':
@@ -68,16 +73,12 @@ const sanitizeInput = (field: keyof RegisterForm, value: string): string => {
     case 'city':
     case 'state':
     case 'country':
-      // Only alphabetic characters and spaces, max 50 chars
       return value.replace(/[^a-zA-Z\s]/g, '').slice(0, 50)
     case 'companyCode':
-      // Auto-uppercase alphanumeric and allowed separators (-, _, /), max 20 chars
       return value.toUpperCase().replace(/[^A-Z0-9\-_/]/g, '').slice(0, 20)
     case 'gstNo':
-      // Auto-uppercase alphanumeric, max 15 chars
       return value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 15)
     case 'zipCode':
-      // Digits only, max 6 chars (PIN Code)
       return value.replace(/\D/g, '').slice(0, 6)
     default:
       return value
@@ -118,8 +119,7 @@ const validateSingleField = (
     case 'companyName':
       if (accountType === 'Contributor') {
         if (!val) return 'Company name is required'
-        if (val.length < 2) return 'Company name must be at least 2 characters'
-        if (val.length > 100) return 'Company name cannot exceed 100 characters'
+        // Validation disables input so length/characters don't matter here
       }
       return ''
 
@@ -212,15 +212,57 @@ function Register({ onLogin }: RegisterProps) {
   const [isVerified, setIsVerified] = useState(false)
   const [otpCountdown, setOtpCountdown] = useState(0)
 
-  // Countdown timer for Registration OTP resend
+  // New: Organizations API states
+  const [orgs, setOrgs] = useState<Organization[]>([])
+  const [orgsLoading, setOrgsLoading] = useState(false)
+  const [orgsError, setOrgsError] = useState<string>('')
+
+  // Fetch organizations when in Contributor mode, or on mount if already Contributor
   useEffect(() => {
-    if (otpCountdown > 0) {
-      const timer = setTimeout(() => setOtpCountdown((c) => c - 1), 1000)
-      return () => clearTimeout(timer)
+    if (accountType === 'Contributor') {
+      setOrgsLoading(true)
+      setOrgsError('')
+      axios.get('https://worktrail.ai/api/OrgmasterData', {
+        headers: {
+          APIKEY: 'Securitas@#!1234'
+        }
+      })
+        .then((response) => {
+          if (Array.isArray(response?.data?.data)) {
+            setOrgs(response.data.data as Organization[])
+          } else {
+            setOrgs([])
+            setOrgsError('No organization data received.')
+          }
+        })
+        .catch((err) => {
+          setOrgs([])
+          setOrgsError('Failed to fetch organizations.')
+        })
+        .finally(() => setOrgsLoading(false))
     }
-  }, [otpCountdown])
+  }, [accountType])
+
+  // If switching type, clear companyName for Client
+  useEffect(() => {
+    if (accountType !== 'Contributor') {
+      setForm((f) => ({ ...f, companyName: '' }))
+      setErrors((prev) => ({ ...prev, companyName: '' }))
+    }
+  }, [accountType])
+
+  // Patch: If organizations loaded but companyName is missing, optionally pre-fill with first org (up to you)
+  // or leave blank and force selection
 
   const updateField = (field: keyof RegisterForm, rawValue: string) => {
+    // For companyName in Contributor, handled by select below
+    if (field === 'companyName' && accountType === 'Contributor') {
+      setForm({ ...form, companyName: rawValue })
+      if (touched.companyName) {
+        setErrors((prev) => ({ ...prev, companyName: validateSingleField('companyName', rawValue, { ...form, companyName: rawValue }, accountType) }))
+      }
+      return
+    }
     const sanitized = sanitizeInput(field, rawValue)
     const updatedForm = { ...form, [field]: sanitized }
     setForm(updatedForm)
@@ -257,6 +299,11 @@ function Register({ onLogin }: RegisterProps) {
     setSuccess('') 
     setErrors({})
     setTouched({})
+  }
+
+  // helper for userType value
+  const getUserTypeValue = (accType: AccountType) => {
+    return accType === 'Contributor' ? 'ContributorUser' : 'Client'
   }
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -317,15 +364,16 @@ function Register({ onLogin }: RegisterProps) {
 
     setIsLoading(true)
     const username = `${form.firstName}_${form.lastName}`.trim().replace(/\s+/g, '_').toLowerCase()
+    const userTypeValue = getUserTypeValue(accountType)
     const payload = {
       username,
       password: form.password,
-      UserType: accountType,
+      UserType: userTypeValue,
       EmailID: form.email.trim(),
       email: form.email.trim(),
       FirstName: form.firstName.trim(),
       LastName: form.lastName.trim(),
-      CompanyName: accountType === 'Contributor' ? form.companyName.trim() : null,
+      CompanyName: accountType === 'Contributor' ? form.companyName : null, // pass as selected organization name
       CompanyCode: accountType === 'Contributor' && form.companyCode.trim() ? form.companyCode.trim() : null,
       GSTNumber: accountType === 'Contributor' && form.gstNo.trim() ? form.gstNo.trim() : null,
       Address: accountType === 'Contributor' && form.address.trim() ? form.address.trim() : null,
@@ -365,7 +413,6 @@ function Register({ onLogin }: RegisterProps) {
           throw new Error(msg)
         }
       }
-      // Successfully registered initial profile; transition to OTP verification
       setRegisteredEmail(form.email.trim())
       setAwaitingOtp(true)
       setOtpCountdown(45)
@@ -412,7 +459,6 @@ function Register({ onLogin }: RegisterProps) {
       }
       setIsVerified(true)
       setForm(emptyForm)
-
       setErrors({})
       setTouched({})
     } catch (err) {
@@ -429,12 +475,12 @@ function Register({ onLogin }: RegisterProps) {
     setOtpSuccess('')
 
     try {
-      // Re-trigger registration or OTP dispatch
       const username = `${form.firstName}_${form.lastName}`.trim().replace(/\s+/g, '_').toLowerCase()
+      const userTypeValue = getUserTypeValue(accountType)
       const payload = {
         username,
         password: form.password,
-        UserType: accountType,
+        UserType: userTypeValue,
         EmailID: registeredEmail.trim(),
         FirstName: form.firstName,
         LastName: form.lastName,
@@ -496,6 +542,85 @@ function Register({ onLogin }: RegisterProps) {
     }
   }
 
+  // Custom input for companyName if Contributor, renders a select instead of input
+  const companyNameInput = (
+    required = false,
+    className = 'sm:col-span-2'
+  ) => {
+    const field: keyof RegisterForm = 'companyName'
+    const Icon = getIconForField(field)
+    const hasError = !!(touched[field] && errors[field])
+    const errorMsg = errors[field]
+    const isValid = !!touched[field] && !hasError && Boolean(form[field])
+
+    return (
+      <div className={`flex flex-col gap-1.5 w-full ${className}`}>
+        <div className="flex items-center justify-between">
+          <label
+            htmlFor={`field-${field}`}
+            className={`text-[10px] sm:text-[11px] font-bold tracking-wider uppercase select-none transition-colors ${
+              hasError ? 'text-rose-600 font-extrabold' : 'text-slate-500'
+            }`}
+          >
+            Company Name {required && <span className="text-rose-500">*</span>}
+          </label>
+          {isValid && (
+            <span className="text-[10px] font-semibold text-emerald-600 flex items-center gap-0.5 animate-fade-in">
+              <Check className="w-3 h-3 text-emerald-600 stroke-[3]" /> Valid
+            </span>
+          )}
+        </div>
+        <div
+          className={`flex items-center gap-2.5 h-[46px] px-3.5 rounded-2xl transition-all shadow-2xs ${
+            hasError
+              ? 'border-2 border-rose-500 bg-rose-50/20 text-rose-900 focus-within:border-rose-600 focus-within:ring-2 focus-within:ring-rose-500/20'
+              : isValid
+              ? 'border border-emerald-400 bg-emerald-50/10 focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/10'
+              : 'bg-slate-50/70 hover:bg-slate-50 focus-within:bg-white border border-slate-200/90 focus-within:border-[#42638C] focus-within:ring-2 focus-within:ring-slate-100'
+          }`}
+        >
+          <Icon
+            className={`w-4 h-4 shrink-0 transition-colors ${
+              hasError ? 'text-rose-500' : isValid ? 'text-emerald-500' : 'text-slate-400'
+            }`}
+          />
+          <select
+            id={`field-${field}`}
+            name={field}
+            value={form[field]}
+            onChange={(e) => updateField(field, e.target.value)}
+            onBlur={() => handleBlur(field)}
+            className={`w-full bg-transparent outline-none text-xs sm:text-sm font-medium placeholder-slate-400 ${
+              hasError ? 'text-rose-900' : 'text-slate-800'
+            }`}
+            disabled={orgsLoading}
+            required={required}
+          >
+            <option value="">Select organization...</option>
+            {orgs.map((org) => (
+              <option key={org.OrganizationID} value={org.OrganizationName}>{org.OrganizationName}</option>
+            ))}
+          </select>
+        </div>
+        {orgsLoading && (
+          <div className="text-xs text-slate-500 mt-0.5 animate-fade-in">Loading organizations...</div>
+        )}
+        {orgsError && (
+          <p className="flex items-center gap-1 text-[11px] font-semibold text-rose-600 mt-0.5 animate-fade-in">
+            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+            <span>{orgsError}</span>
+          </p>
+        )}
+        {hasError && (
+          <p className="flex items-center gap-1 text-[11px] font-semibold text-rose-600 mt-0.5 animate-fade-in">
+            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+            <span>{errorMsg}</span>
+          </p>
+        )}
+      </div>
+    )
+  }
+
   const input = (
     field: keyof RegisterForm, 
     label: string, 
@@ -504,6 +629,10 @@ function Register({ onLogin }: RegisterProps) {
     type = 'text',
     className = 'col-span-1'
   ) => {
+    // Use select for Contributor companyName
+    if (field === 'companyName' && accountType === 'Contributor') {
+      return companyNameInput(required, className)
+    }
     const Icon = getIconForField(field)
     const isPasswordField = field === 'password' || field === 'confirmPassword'
     const isShowing = field === 'password' ? showPassword : showConfirmPassword
@@ -530,7 +659,6 @@ function Register({ onLogin }: RegisterProps) {
             </span>
           )}
         </div>
-
         <div
           className={`flex items-center gap-2.5 h-[46px] px-3.5 rounded-2xl transition-all shadow-2xs ${
             hasError
@@ -573,7 +701,6 @@ function Register({ onLogin }: RegisterProps) {
             </button>
           )}
         </div>
-
         {hasError && (
           <p className="flex items-center gap-1 text-[11px] font-semibold text-rose-600 mt-0.5 animate-fade-in">
             <AlertCircle className="w-3.5 h-3.5 shrink-0" />
@@ -729,7 +856,6 @@ function Register({ onLogin }: RegisterProps) {
           alt="Securitas"
           className="h-7 sm:h-8 object-contain"
         />
-      
       </div>
 
       {/* Headings */}
@@ -786,7 +912,7 @@ function Register({ onLogin }: RegisterProps) {
           {/* Dynamic Contributor Fields */}
           {accountType === 'Contributor' && (
             <>
-              {input('companyName', 'Company Name', 'e.g. Acme Securitas Pvt Ltd', true, 'text', 'sm:col-span-2')}
+              {input('companyName', 'Company Name', 'Select company', true, 'text', 'sm:col-span-2')}
               {input('companyCode', 'Company Code', 'e.g. ACM-01', false, 'text', 'col-span-1')}
               {input('gstNo', 'GST Number', 'e.g. 07AAACS1122C1ZK', false, 'text', 'col-span-1')}
               {input('address', 'Office Address', 'Building, Street...', false, 'text', 'sm:col-span-2')}

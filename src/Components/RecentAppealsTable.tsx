@@ -21,7 +21,7 @@ import { OrgLogo } from './OrgLogo'
 import { useAuth } from '../useAuth';
 
 import {
-  analyzeCandidateData,
+  analyzeCandidateData as originalAnalyzeCandidateData,
   type VerificationRecord
 } from './CandidateVerificationForm'
 import { axios, API_ENDPOINTS } from '../endpoint'
@@ -63,6 +63,34 @@ interface RecentAppealsTableProps {
   refreshing?: boolean
   isClient?: boolean
   defaultClientId?: string
+}
+
+// Custom data analysis for LOA + SupportingDocs completeness only
+function analyzeLOACompleteness(record: VerificationRecord) {
+  // Only check for LOA and SupportingDocs
+  const loa = record.LOA || null
+  const docs = record.SupportingDocs || null
+  let missingCount = 0
+  const items: { fieldName: string; status: 'present' | 'missing' }[] = []
+  if (!loa) {
+    missingCount++
+    items.push({ fieldName: 'LOA', status: 'missing' })
+  } else {
+    items.push({ fieldName: 'LOA', status: 'present' })
+  }
+  if (!docs) {
+    missingCount++
+    items.push({ fieldName: 'Supporting Docs', status: 'missing' })
+  } else {
+    items.push({ fieldName: 'Supporting Docs', status: 'present' })
+  }
+  const maxCount = 2
+  const completenessPercent = Math.round(((maxCount - missingCount) / maxCount) * 100)
+  return {
+    missingCount,
+    completenessPercent,
+    items,
+  }
 }
 
 export const RecentAppealsTable: React.FC<RecentAppealsTableProps> = ({
@@ -268,9 +296,9 @@ export const RecentAppealsTable: React.FC<RecentAppealsTableProps> = ({
     return Array.from(new Set(records.map((r) => r.verifierName).filter(Boolean))) as string[]
   }, [records])
 
-  // Count of records with missing data
+  // Count of records with missing LOA or SupportingDocs
   const recordsWithMissingData = useMemo(() => {
-    return records.filter((r) => analyzeCandidateData(r).missingCount > 0).length
+    return records.filter((r) => analyzeLOACompleteness(r).missingCount > 0).length
   }, [records])
 
   // Presets for Date Filter
@@ -322,7 +350,7 @@ export const RecentAppealsTable: React.FC<RecentAppealsTableProps> = ({
         return false
       }
       if (selectedCompletenessFilter !== 'All') {
-        const analysis = analyzeCandidateData(r)
+        const analysis = analyzeLOACompleteness(r)
         if (selectedCompletenessFilter === 'Complete' && analysis.missingCount > 0) return false
         if (selectedCompletenessFilter === 'Missing' && analysis.missingCount === 0) return false
       }
@@ -448,7 +476,7 @@ export const RecentAppealsTable: React.FC<RecentAppealsTableProps> = ({
   const handleExportExcel = () => {
     if (filteredRecords.length === 0) return
     const rows = filteredRecords.map((r, i) => {
-      const analysis = analyzeCandidateData(r)
+      const analysis = analyzeLOACompleteness(r)
       const missingFields = analysis.items
         .filter((item) => item.status === 'missing')
         .map((item) => item.fieldName)
@@ -460,6 +488,8 @@ export const RecentAppealsTable: React.FC<RecentAppealsTableProps> = ({
         'Candidate Name': r.candidateName,
         'Employee ID': r.employeeId,
         'Verifier Company': r.verifierName,
+        'LOA': r.LOA || "-",
+        'SupportingDocs': r.SupportingDocs || "-",
         'Data Completeness': `${analysis.completenessPercent}%`,
         'Missing Fields': missingFields || 'None (Complete)',
         'Date of Joining': r.dateOfJoining,
@@ -625,7 +655,7 @@ export const RecentAppealsTable: React.FC<RecentAppealsTableProps> = ({
               </button>
             )}
 
-            <button
+            {/* <button
               type="button"
               onClick={() => {
                 loadRecords(true)
@@ -637,7 +667,7 @@ export const RecentAppealsTable: React.FC<RecentAppealsTableProps> = ({
             >
               <RefreshCw className={`w-3.5 h-3.5 text-slate-500 ${refreshing || refreshingState ? 'animate-spin' : ''}`} />
               <span className="hidden sm:inline">Refresh</span>
-            </button>
+            </button> */}
 
             <button
               type="button"
@@ -690,11 +720,16 @@ export const RecentAppealsTable: React.FC<RecentAppealsTableProps> = ({
             <tbody className="divide-y divide-slate-100 text-xs sm:text-sm">
               {filteredRecords.length > 0 ? (
                 filteredRecords.map((rec) => {
-                  const analysis = analyzeCandidateData(rec)
+                  // Only consider LOA/SupportingDocs completeness
+                  const analysis = analyzeLOACompleteness(rec)
                   const missingItems = analysis.items.filter((i) => i.status === 'missing')
                   const orderKey = rec.orderId || rec.id
                   const isChecking = checkingStatusId === orderKey
                   const feedback = statusFeedback[orderKey]
+
+                  // For upload button interactivity
+                  const isComplete = analysis.completenessPercent === 100
+
                   return (
                     <tr key={rec.id || rec.orderId} className="hover:bg-slate-50/80 transition-colors group">
                       {/* ... Data columns ... */}
@@ -722,7 +757,7 @@ export const RecentAppealsTable: React.FC<RecentAppealsTableProps> = ({
                               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                               Complete (100%)
                             </span>
-                            <span className="text-[10px] text-slate-400 mt-1">All fields present</span>
+                            <span className="text-[10px] text-slate-400 mt-1">All docs uploaded</span>
                           </div>
                         ) : (
                           <div className="flex flex-col">
@@ -734,7 +769,7 @@ export const RecentAppealsTable: React.FC<RecentAppealsTableProps> = ({
                               className="text-[10px] text-amber-700 font-medium mt-1 truncate max-w-[170px]"
                               title={missingItems.map((i) => i.fieldName).join(', ')}
                             >
-                              Missing: {missingItems.map((i) => i.fieldName.replace('Candidate ', '')).join(', ')}
+                              Missing: {missingItems.map((i) => i.fieldName).join(', ')}
                             </span>
                           </div>
                         )}
@@ -768,7 +803,7 @@ export const RecentAppealsTable: React.FC<RecentAppealsTableProps> = ({
                       </td>
                       <td className="px-6 py-4 text-right">
                         <div className="flex items-center justify-end gap-2">
-                          <button
+                          {/* <button
                             type="button"
                             onClick={() => handleCheckStatus(rec)}
                             disabled={isChecking}
@@ -777,7 +812,7 @@ export const RecentAppealsTable: React.FC<RecentAppealsTableProps> = ({
                           >
                             <RefreshCw className={`w-3.5 h-3.5 ${isChecking ? 'animate-spin text-sky-600' : 'text-sky-500'}`} />
                             <span>{isChecking ? 'Checking...' : 'Check Status'}</span>
-                          </button>
+                          </button> */}
                           <button
                             type="button"
                             onClick={() => setSelectedRecord(rec)}
@@ -793,9 +828,21 @@ export const RecentAppealsTable: React.FC<RecentAppealsTableProps> = ({
                       <td className="px-6 py-4 text-right">
                         <button
                           type="button"
-                          onClick={() => handleOpenUploadModal(rec)}
-                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 transition-all shadow-2xs cursor-pointer`}
-                          title="Upload LOA and Supporting Docs"
+                          onClick={() => !isComplete && handleOpenUploadModal(rec)}
+                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 transition-all shadow-2xs
+                            ${isComplete
+                              ? 'cursor-not-allowed opacity-40 pointer-events-none'
+                              : 'cursor-pointer'
+                            }
+                          `}
+                          title={
+                            isComplete
+                              ? "All docs complete. No upload needed."
+                              : "Upload LOA and Supporting Docs"
+                          }
+                          disabled={isComplete}
+                          aria-disabled={isComplete}
+                          style={isComplete ? { pointerEvents: "none", opacity: 0.4 } : {}}
                         >
                           <UploadCloud className="w-4 h-4" />
                           <span>
@@ -932,7 +979,7 @@ export const RecentAppealsTable: React.FC<RecentAppealsTableProps> = ({
       )}
       {/* Record Details Modal ... */}
       {selectedRecord && (() => {
-        const modalAnalysis = analyzeCandidateData(selectedRecord)
+        const modalAnalysis = analyzeLOACompleteness(selectedRecord)
         const modalOrderKey = selectedRecord.orderId || selectedRecord.id
         const isCheckingModal = checkingStatusId === modalOrderKey
         const modalFeedback = statusFeedback[modalOrderKey]

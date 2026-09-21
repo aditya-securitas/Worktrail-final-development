@@ -56,6 +56,21 @@ import { VerifierPicker } from './CandidateVerification/VerifierPicker'
 import { SingleCandidateForm } from './CandidateVerification/SingleCandidateForm'
 import { BulkCandidateUploader } from './CandidateVerification/BulkCandidateUploader'
 import { PaymentModal } from './CandidateVerification/PaymentModal'
+import type { DynamicField } from './CandidateVerification/dynamicFields'
+import {
+  getVisibleDynamicFields,
+  isContributorField,
+  mapRowToDbFieldKeys,
+  parseDynamicFieldsFromApi,
+} from './CandidateVerification/dynamicFields'
+
+export type { DynamicField } from './CandidateVerification/dynamicFields'
+export {
+  getVisibleDynamicFields,
+  isContributorField,
+  mapRowToDbFieldKeys,
+  parseDynamicFieldsFromApi,
+} from './CandidateVerification/dynamicFields'
 
 declare global {
   interface Window {
@@ -89,7 +104,7 @@ interface RazorpayPaymentResponse {
 
 export type Step = 'organization' | 'verificationType' | 'single' | 'bulk'
 
-const DYNAMIC_FIELD_API = 'https://worktrail.ai/api/ClientDynamicfield'
+const DYNAMIC_FIELD_API = 'https://worktrail.ai/api/ContributorAdminFormDynamic'
 const DYNAMIC_FIELD_API_KEY = 'Securitas@#!1234'
 
 /**
@@ -990,12 +1005,13 @@ export function normalizeBulkCandidateRow(row: any): {
 export { OrgLogo, getDynamicBrandDomain, getOrgLogoUrl } from './OrgLogo'
 
 
-// Download Sample CSV with dynamic fields (excluding Contributor)
-export const downloadSampleExcel = (columns: string[], contributorCol: string | null) => {
-  const fields = contributorCol
-    ? columns.filter((col) => col.toLowerCase() !== contributorCol.toLowerCase())
-    : columns
-  const csvHeaders = fields.join(',') + '\n'
+// Download Sample CSV with dynamic fields (DisplayFieldName headers, excluding Contributor)
+export const downloadSampleExcel = (
+  fields: DynamicField[],
+  _contributorCol: string | null = null
+) => {
+  const visible = getVisibleDynamicFields(fields)
+  const csvHeaders = visible.map((f) => f.DisplayFieldName).join(',') + '\n'
   const blob = new Blob([csvHeaders], { type: 'text/csv' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
@@ -1007,38 +1023,42 @@ export const downloadSampleExcel = (columns: string[], contributorCol: string | 
   URL.revokeObjectURL(url)
 }
 
-// Download Sample XLSX with dynamic fields & sample row
+// Download Sample XLSX with DisplayFieldName headers & sample row
 export const downloadSampleXlsx = (
-  columns: string[],
-  contributorCol: string | null,
+  fields: DynamicField[],
+  _contributorCol: string | null,
   orgName: string
 ) => {
-  const fields = contributorCol
-    ? columns.filter((col) => col.toLowerCase() !== contributorCol.toLowerCase())
-    : columns
-  if (fields.length === 0) return
+  const visible = getVisibleDynamicFields(fields)
+  if (visible.length === 0) return
 
   const sampleRow: Record<string, string> = {}
-  fields.forEach((col) => {
-    const lower = col.toLowerCase()
+  const headers = visible.map((f) => f.DisplayFieldName)
+
+  visible.forEach((f) => {
+    const col = f.DisplayFieldName
+    const lower = `${f.DBFieldName} ${f.DisplayFieldName}`.toLowerCase()
     if (lower.includes('name') || lower.includes('first')) sampleRow[col] = 'Aarav'
     else if (lower.includes('last') && !lower.includes('salary')) sampleRow[col] = 'Sharma'
     else if (lower.includes('email')) sampleRow[col] = 'aarav.sharma@example.com'
     else if (lower.includes('mobile') || lower.includes('phone') || lower.includes('contact'))
       sampleRow[col] = '9823411223'
-    else if (lower.includes('code') || lower.includes('id')) sampleRow[col] = 'EMP-1001'
-    else if (lower.includes('date') || lower.includes('joining') || lower.includes('doj'))
+    else if (lower.includes('code') || lower.includes('person number') || lower.includes('id'))
+      sampleRow[col] = 'EMP-1001'
+    else if (lower.includes('joining') || lower.includes('doj'))
       sampleRow[col] = '2022-01-15'
     else if (lower.includes('leaving') || lower.includes('dol')) sampleRow[col] = 'Present'
-    else if (lower.includes('desig') || lower.includes('role')) sampleRow[col] = 'Senior Software Engineer'
+    else if (lower.includes('desig') || lower.includes('role') || lower.includes('position'))
+      sampleRow[col] = 'Senior Software Engineer'
     else if (lower.includes('dept')) sampleRow[col] = 'Digital Solutions'
+    else if (lower.includes('remark') || lower.includes('comment')) sampleRow[col] = 'No issues'
     else if (lower.includes('salary') || lower.includes('ctc') || lower.includes('package'))
       sampleRow[col] = '850000'
     else if (lower.includes('amount')) sampleRow[col] = '50000'
     else sampleRow[col] = 'Sample Data'
   })
 
-  const worksheet = XLSX.utils.json_to_sheet([sampleRow], { header: fields })
+  const worksheet = XLSX.utils.json_to_sheet([sampleRow], { header: headers })
   const workbook = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(workbook, worksheet, 'Bulk_Verification')
   const safeOrg = (orgName || 'organization').toLowerCase().replace(/[^a-z0-9]/g, '_')
@@ -1162,9 +1182,9 @@ function CandidateVerificationForm() {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
-  // Dynamic Fields Schema State
-  const [dynamicColumns, setDynamicColumns] = useState<string[]>([])
-  const [contributorColName, setContributorColName] = useState<string | null>(null)
+  // Dynamic Fields Schema State (DBFieldName for submit, DisplayFieldName for UI)
+  const [dynamicFields, setDynamicFields] = useState<DynamicField[]>([])
+  const [contributorColName, setContributorColName] = useState<string | null>('Contributor')
   const [dynamicFieldLoading, setDynamicFieldLoading] = useState(false)
   const [dynamicFieldError, setDynamicFieldError] = useState<string | null>(null)
 
@@ -1568,14 +1588,14 @@ function CandidateVerificationForm() {
     fetchOrgs()
   }, [])
 
-  // Load dynamic columns when selected organization changes
+  // Load dynamic fields from API whenever selected organization changes
   useEffect(() => {
     const fetchDynamicFields = async () => {
       setDynamicFieldLoading(true)
       setDynamicFieldError(null)
-      setDynamicColumns([])
+      setDynamicFields([])
       setSingleForm({})
-      setContributorColName(null)
+      setContributorColName('Contributor')
 
       if (!selectedOrgId || !selectedOrgName) {
         setDynamicFieldLoading(false)
@@ -1586,7 +1606,7 @@ function CandidateVerificationForm() {
         const response = await axios.post(
           DYNAMIC_FIELD_API,
           {
-            contributor: selectedOrgName,
+            Contributor: selectedOrgName,
           },
           {
             headers: {
@@ -1596,71 +1616,37 @@ function CandidateVerificationForm() {
           }
         )
 
-        if (response.data && Array.isArray(response.data.columns) && response.data.columns.length > 0) {
-          const contribCol = response.data.columns.find(
-            (col: string) => col.toLowerCase() === 'contributor'
+        const parsed = parseDynamicFieldsFromApi(response.data)
+        if (parsed.length === 0) {
+          setDynamicFields([])
+          setSingleForm({})
+          setDynamicFieldError(
+            'No dynamic fields returned for this contributor. Please try another organization or contact support.'
           )
-          setContributorColName(contribCol || null)
-          setDynamicColumns(response.data.columns)
-
-          // Dynamically extract organization amount from ClientDynamicfield API or OrgmasterData
-          const orgInList = organizations.find((o) => o.OrganizationID === selectedOrgId)
-          const dynamicAmt = parseApiAmount(response.data) || parseApiAmount(orgInList)
-          updatePricingFromAmount(dynamicAmt)
-
-          // Initialize values for non-contributor fields
-          const initial = response.data.columns.reduce(
-            (acc: { [k: string]: string }, k: string) => {
-              if (k !== contribCol) acc[k] = ''
-              return acc
-            },
-            {}
-          )
-          setSingleForm(initial)
-        } else {
-          // Fallback schema if API returns empty columns
-          const fallbackCols = [
-            'FirstName',
-            'LastName',
-            'EmployeeCode',
-            'Email',
-            'MobileNo',
-            'DateOfJoining',
-            'Designation',
-            'Department',
-            'Contributor',
-          ]
-          setContributorColName('Contributor')
-          setDynamicColumns(fallbackCols)
-          const initial = fallbackCols.reduce((acc: { [k: string]: string }, k: string) => {
-            if (k !== 'Contributor') acc[k] = ''
-            return acc
-          }, {})
-          setSingleForm(initial)
+          return
         }
+
+        const contrib = parsed.find((f) => isContributorField(f))
+        setContributorColName(contrib?.DBFieldName || 'Contributor')
+        setDynamicFields(parsed)
+        const initial = getVisibleDynamicFields(parsed).reduce(
+          (acc: { [k: string]: string }, f) => {
+            acc[f.DBFieldName] = ''
+            return acc
+          },
+          {}
+        )
+        setSingleForm(initial)
+
+        const orgInList = organizations.find((o) => o.OrganizationID === selectedOrgId)
+        const dynamicAmt = parseApiAmount(response.data) || parseApiAmount(orgInList)
+        updatePricingFromAmount(dynamicAmt)
       } catch (err: unknown) {
+        setDynamicFields([])
+        setSingleForm({})
         setDynamicFieldError(
           getRequestErrorMessage(err, 'Failed to load dynamic fields for selected verifier.')
         )
-        // Fallback default columns so form remains functional
-        const fallbackCols = [
-          'FirstName',
-          'LastName',
-          'EmployeeCode',
-          'Email',
-          'MobileNo',
-          'DateOfJoining',
-          'Designation',
-          'Department',
-          'Contributor',
-        ]
-        setContributorColName('Contributor')
-        setDynamicColumns(fallbackCols)
-        const initial = fallbackCols.reduce((acc: { [k: string]: string }, k: string) => {
-          if (k !== 'Contributor') acc[k] = ''
-          return acc
-        }, {})
-        setSingleForm(initial)
       } finally {
         setDynamicFieldLoading(false)
       }
@@ -1670,6 +1656,59 @@ function CandidateVerificationForm() {
       fetchDynamicFields()
     }
   }, [selectedOrgId, selectedOrgName])
+
+  /** Re-fetch dynamic fields from API before opening single/bulk forms */
+  const loadDynamicFieldsForContributor = useCallback(async (): Promise<boolean> => {
+    if (!selectedOrgName) {
+      setDynamicFieldError('Please select an organization first.')
+      return false
+    }
+    setDynamicFieldLoading(true)
+    setDynamicFieldError(null)
+    try {
+      const response = await axios.post(
+        DYNAMIC_FIELD_API,
+        { Contributor: selectedOrgName },
+        {
+          headers: {
+            APIKEY: DYNAMIC_FIELD_API_KEY,
+            'Content-Type': 'application/json',
+          },
+        }
+      )
+      const parsed = parseDynamicFieldsFromApi(response.data)
+      if (parsed.length === 0) {
+        setDynamicFields([])
+        setSingleForm({})
+        setDynamicFieldError(
+          'No dynamic fields returned for this contributor. Please try again.'
+        )
+        return false
+      }
+      const contrib = parsed.find((f) => isContributorField(f))
+      setContributorColName(contrib?.DBFieldName || 'Contributor')
+      setDynamicFields(parsed)
+      setSingleForm((prev) => {
+        const next: { [k: string]: string } = {}
+        getVisibleDynamicFields(parsed).forEach((f) => {
+          next[f.DBFieldName] = prev[f.DBFieldName] ?? ''
+        })
+        return next
+      })
+      const orgInList = organizations.find((o) => o.OrganizationID === selectedOrgId)
+      const dynamicAmt = parseApiAmount(response.data) || parseApiAmount(orgInList)
+      updatePricingFromAmount(dynamicAmt)
+      return true
+    } catch (err: unknown) {
+      setDynamicFields([])
+      setDynamicFieldError(
+        getRequestErrorMessage(err, 'Failed to load dynamic fields for selected verifier.')
+      )
+      return false
+    } finally {
+      setDynamicFieldLoading(false)
+    }
+  }, [selectedOrgId, selectedOrgName, organizations])
 
   // Close search dropdown on outside click
   useEffect(() => {
@@ -1801,8 +1840,8 @@ function CandidateVerificationForm() {
       paymentId,
       orderId,
       clientId: clientInfo.clientId,
-      customFields: { ...payload, [contributorColName || 'Contributor']: selectedOrgName },
-      dynamicData: { ...payload, [contributorColName || 'Contributor']: selectedOrgName },
+      customFields: { ...payload, Contributor: selectedOrgName },
+      dynamicData: { ...payload, Contributor: selectedOrgName },
     }
 
     // 1. Prepare and persist record to Database API
@@ -1817,7 +1856,7 @@ function CandidateVerificationForm() {
     const candidateApiObject = {
       FirstName: String(fName).trim(),
       MiddleName: mName ? String(mName).trim() : null,
-      LastName: String(lName).trim(),
+      //LastName: String(lName).trim(),
       Email: candEmail ? String(candEmail).trim() : null,
       MobileNo: candPhone ? String(candPhone).trim() : null,
       Department: String(dept).trim(),
@@ -1844,6 +1883,7 @@ function CandidateVerificationForm() {
     const candidates = [candidateApiObject]
     const isClient = user?.Usertype?.toLowerCase() === 'client'
     const clientEmail = (paymentSender.email || (isClient ? (user?.email || user?.Email || user?.username) : '') || candEmail || 'client@worktrail.ai').trim()
+console.log(candidates)
 
     try {
       await axios.post(
@@ -2026,13 +2066,14 @@ function CandidateVerificationForm() {
     try {
       const payAmount = customPayAmount || orgTotalPrice
 
-      // Prepare payload: inject contributor from selectedOrgName
+      // Prepare payload with DBFieldName keys; always inject Contributor
       const payload: { [k: string]: any } = {
         ...singleForm,
         organizationId: selectedOrgId,
         amount: payAmount,
+        Contributor: selectedOrgName,
       }
-      if (contributorColName) {
+      if (contributorColName && contributorColName !== 'Contributor') {
         payload[contributorColName] = selectedOrgName
       }
       if (loaDocument) {
@@ -2186,7 +2227,13 @@ function CandidateVerificationForm() {
       const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
       const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json<{ [key: string]: unknown }>(firstSheet, { defval: "" })
-        .map(row => Object.fromEntries(Object.entries(row).map(([key, value]) => [key, String(value ?? "")])));
+        .map(row => {
+          const stringRow = Object.fromEntries(
+            Object.entries(row).map(([key, value]) => [key, String(value ?? "")])
+          )
+          // Map DisplayFieldName headers → DBFieldName keys for submit
+          return mapRowToDbFieldKeys(stringRow, dynamicFields)
+        });
       if (!rows.length) throw new Error("The uploaded file has no candidate rows.");
       setBulkRows(rows);
       setShowBulkPreview(true);
@@ -2262,8 +2309,8 @@ function CandidateVerificationForm() {
           paymentId,
           orderId,
           clientId: clientInfo.clientId,
-          customFields: { ...row, [contributorColName || 'Contributor']: selectedOrgName },
-          dynamicData: { ...row, [contributorColName || 'Contributor']: selectedOrgName },
+          customFields: { ...row, Contributor: selectedOrgName },
+          dynamicData: { ...row, Contributor: selectedOrgName },
         }
       })
 
@@ -2279,7 +2326,7 @@ function CandidateVerificationForm() {
         const parts = String(rawName).trim().split(/\s+/)
         const fName = row['FirstName'] || parts[0] || 'Candidate'
         const mName = row['MiddleName'] || row['Middle Name'] || (parts.length > 2 ? parts.slice(1, -1).join(' ') : '')
-        const lName = row['LastName'] || row['Last Name'] || (parts.length > 1 ? parts.slice(-1)[0] : '')
+        //const lName = row['LastName'] || row['Last Name'] || (parts.length > 1 ? parts.slice(-1)[0] : '')
         const eCode =
           row['EmployeeCode'] ||
           row['Employee Code'] ||
@@ -2333,11 +2380,14 @@ function CandidateVerificationForm() {
           EmploymentType: employmentType,
           ExitFormalities: String(exitFormalities).trim(),
           FirstName: String(fName).trim(),
-          LastName: String(lName).trim(),
+          //LastName: String(lName).trim(),
           LastPositionHeld: String(desig).trim(),
           LastSalaryAnnual: lastSalaryAnnual,
           MiddleName: String(mName).trim(),
           MobileNo: String(phone).replace(/\D/g, '') || cleanPhone(phone),
+          // Dynamic fields from template (DBFieldName keys)
+          ...row,
+          Contributor: selectedOrgName,
         }
       })
 
@@ -2568,7 +2618,7 @@ function CandidateVerificationForm() {
       orgError={orgError}
       dynamicFieldLoading={dynamicFieldLoading}
       dynamicFieldError={dynamicFieldError}
-      dynamicColumns={dynamicColumns}
+      dynamicFields={dynamicFields}
       contributorColName={contributorColName}
       onSearchChange={setSearchQuery}
       onToggleDropdown={() => setIsDropdownOpen((prev) => !prev)}
@@ -2651,9 +2701,10 @@ function CandidateVerificationForm() {
               ? 'border-[#0680A6] bg-gradient-to-b from-teal-50/60 to-white ring-4 ring-[#0680A6]/10 scale-[1.01] shadow-xl shadow-teal-900/10'
               : 'border-slate-200/90 bg-white hover:border-[#0680A6]/60 hover:bg-teal-50/20 hover:-translate-y-1 shadow-sm'
           }`}
-          onClick={() => {
+          onClick={async () => {
             setVerificationType('single')
-            setStep('single')
+            const ok = await loadDynamicFieldsForContributor()
+            if (ok) setStep('single')
           }}
           disabled={dynamicFieldLoading}
         >
@@ -2677,7 +2728,7 @@ function CandidateVerificationForm() {
                 <div className="w-4 h-4 rounded-full bg-teal-100 text-teal-800 flex items-center justify-center shrink-0">
                   <Check className="w-2.5 h-2.5 stroke-[3]" />
                 </div>
-                <span>Pre-configured dynamic inputs ({dynamicColumns.filter(c => c !== contributorColName).length} attributes)</span>
+                <span>Pre-configured dynamic inputs ({getVisibleDynamicFields(dynamicFields).length} attributes)</span>
               </li>
               <li className="flex items-center gap-2.5">
                 <div className="w-4 h-4 rounded-full bg-teal-100 text-teal-800 flex items-center justify-center shrink-0">
@@ -2714,9 +2765,10 @@ function CandidateVerificationForm() {
               ? 'border-teal-600 bg-gradient-to-b from-emerald-50/60 to-white ring-4 ring-emerald-500/10 scale-[1.01] shadow-xl shadow-teal-900/10'
               : 'border-slate-200/90 bg-white hover:border-emerald-500/60 hover:bg-emerald-50/20 hover:-translate-y-1 shadow-sm'
           }`}
-          onClick={() => {
+          onClick={async () => {
             setVerificationType('bulk')
-            setStep('bulk')
+            const ok = await loadDynamicFieldsForContributor()
+            if (ok) setStep('bulk')
           }}
           disabled={dynamicFieldLoading}
         >
@@ -2770,26 +2822,31 @@ function CandidateVerificationForm() {
         </button>
       </div>
 
+      {dynamicFieldError && (
+        <div className="mt-6 p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs sm:text-sm font-bold flex items-center gap-2.5 relative z-10">
+          <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+          <span>{dynamicFieldError}</span>
+        </div>
+      )}
+
       {/* Dynamic Fields Preview Ribbon */}
-      {dynamicColumns.length > 0 && (
+      {getVisibleDynamicFields(dynamicFields).length > 0 && (
         <div className="mt-8 p-5 bg-slate-50/80 rounded-2xl border border-slate-200/90 relative z-10">
           <div className="flex items-center justify-between mb-2.5">
             <span className="text-[11px] font-black uppercase tracking-wider text-slate-500">
-              Loaded Verifier Attributes ({dynamicColumns.filter((c) => c !== contributorColName).length} Fields)
+              Loaded Verifier Attributes ({getVisibleDynamicFields(dynamicFields).length} Fields)
             </span>
             <span className="text-[10px] text-teal-800 font-black bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200">
               Dynamic Enterprise Schema Active
             </span>
           </div>
           <div className="flex flex-wrap gap-1.5">
-            {dynamicColumns
-              .filter((c) => c !== contributorColName)
-              .map((col) => (
+            {getVisibleDynamicFields(dynamicFields).map((field) => (
                 <span
-                  key={col}
+                  key={field.DBFieldName}
                   className="px-3 py-1 text-xs font-bold bg-white text-slate-700 rounded-xl border border-slate-200 shadow-2xs"
                 >
-                  {col}
+                  {field.DisplayFieldName}
                 </span>
               ))}
           </div>
@@ -2817,7 +2874,7 @@ function CandidateVerificationForm() {
       orgTotalPrice={orgTotalPrice}
       orgBasePrice={orgBasePrice}
       orgGstAmount={orgGstAmount}
-      dynamicColumns={dynamicColumns}
+      dynamicFields={dynamicFields}
       contributorColName={contributorColName}
       singleForm={singleForm}
       onFieldChange={(col, val) => setSingleForm((f) => ({ ...f, [col]: val }))}
@@ -2843,7 +2900,7 @@ function CandidateVerificationForm() {
       selectedOrgName={selectedOrgName}
       selectedOrgId={selectedOrgId}
       orgTotalPrice={orgTotalPrice}
-      dynamicColumns={dynamicColumns}
+      dynamicFields={dynamicFields}
       contributorColName={contributorColName}
       bulkFile={bulkFile}
       bulkRows={bulkRows}
@@ -3019,15 +3076,17 @@ function CandidateVerificationForm() {
         {/* Stepper Navigation */}
         <Stepper
           step={step}
-          onStepClick={(targetStep) => {
+          onStepClick={async (targetStep) => {
             if (targetStep === 'organization') setStep('organization')
             else if (targetStep === 'verificationType' && selectedOrgId) setStep('verificationType')
             else if (targetStep === 'single' && selectedOrgId) {
               setVerificationType('single')
-              setStep('single')
+              const ok = await loadDynamicFieldsForContributor()
+              if (ok) setStep('single')
             } else if (targetStep === 'bulk' && selectedOrgId) {
               setVerificationType('bulk')
-              setStep('bulk')
+              const ok = await loadDynamicFieldsForContributor()
+              if (ok) setStep('bulk')
             }
           }}
         />
