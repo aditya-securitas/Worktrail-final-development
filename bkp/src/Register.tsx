@@ -328,16 +328,6 @@ function Register({ onLogin }: RegisterProps) {
     return accType === 'Contributor' ? 'ContributorUser' : 'Client'
   }
 
-  // New helper: get OrgMasterID by selected organization name
-  const getOrgMasterIDByOrgName = (orgName: string | undefined) => {
-    if (!orgName) return null
-    const org = orgs.find(o => o.OrganizationName === orgName)
-    if (org && typeof org.OrganizationID === 'number') {
-      return org.OrganizationID
-    }
-    return null
-  }
-
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setError('')
@@ -398,9 +388,7 @@ function Register({ onLogin }: RegisterProps) {
     setIsLoading(true)
     const username = `${form.firstName}_${form.lastName}`.trim().replace(/\s+/g, '_').toLowerCase()
     const userTypeValue = getUserTypeValue(accountType)
-
-    // Attach OrgMasterID and UserMasterID 3 for contributor, else don't send
-    let payload: any = {
+    const payload = {
       username,
       password: form.password,
       UserType: userTypeValue,
@@ -416,13 +404,6 @@ function Register({ onLogin }: RegisterProps) {
       State: accountType === 'Contributor' && form.state.trim() ? form.state.trim() : null,
       Country: accountType === 'Contributor' && form.country.trim() ? form.country.trim() : null,
       ZIPcode: accountType === 'Contributor' && form.zipCode.trim() ? form.zipCode.trim() : null,
-    }
-
-    if (accountType === 'Contributor') {
-      // Always pass UserMasterID: 3 and OrgMasterID from API as per user's selection.
-      payload.UserMasterID = 3
-      const orgMasterID = getOrgMasterIDByOrgName(form.companyName)
-      payload.OrgMasterID = orgMasterID
     }
     
     try {
@@ -481,7 +462,7 @@ function Register({ onLogin }: RegisterProps) {
         EmailID: registeredEmail.trim(),
         otp: regOtp.trim(),
       }
-      // no changes here
+      console.log(payload)
       let response, data
       try {
         response = await axios.post(API_ENDPOINTS.auth.verifyRegistrationOtp, payload, {
@@ -519,7 +500,7 @@ function Register({ onLogin }: RegisterProps) {
     try {
       const username = `${form.firstName}_${form.lastName}`.trim().replace(/\s+/g, '_').toLowerCase()
       const userTypeValue = getUserTypeValue(accountType)
-      let payload: any = {
+      const payload = {
         username,
         password: form.password,
         UserType: userTypeValue,
@@ -527,12 +508,6 @@ function Register({ onLogin }: RegisterProps) {
         FirstName: form.firstName,
         LastName: form.lastName,
       }
-      // For Contributor send UserMasterID: 3 and OrgMasterID
-      if (accountType === 'Contributor') {
-        payload.UserMasterID = 3
-        payload.OrgMasterID = getOrgMasterIDByOrgName(form.companyName)
-      }
-
       let response, data
       try {
         response = await axios.post(API_ENDPOINTS.auth.register, payload, {

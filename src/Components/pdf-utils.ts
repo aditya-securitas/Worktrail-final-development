@@ -415,227 +415,503 @@ function cleanValue(val: any, fallback = 'N/A'): string {
   return str
 }
 
+export interface PdfReportOptions {
+  contributorData?: any
+  status?: string
+  overallRemarks?: string
+  fieldChecks?: Record<string, { verified?: boolean | null; remarks?: string }>
+  comparisonFields?: Array<{
+    id: string
+    label: string
+    clientVal: any
+    contributorVal: any
+    isDynamic?: boolean
+  }>
+  reviewerName?: string
+  hasDiscrepancy?: boolean
+}
+
+function wrapPdfLines(text: string, maxChars: number = 80): string[] {
+  if (!text) return []
+  const clean = String(text).replace(/[\r\n]+/g, ' ').trim()
+  if (!clean) return []
+  const words = clean.split(/\s+/)
+  const lines: string[] = []
+  let current = ''
+  for (const w of words) {
+    if ((current + ' ' + w).trim().length <= maxChars) {
+      current = (current + ' ' + w).trim()
+    } else {
+      if (current) lines.push(current)
+      current = w
+    }
+  }
+  if (current) lines.push(current)
+  return lines
+}
+
 export function buildCandidatePdf(
   rec: VerificationRecord,
   logoData?: LogoImageData | null,
-  clientLogoData?: LogoImageData | null
+  clientLogoData?: LogoImageData | null,
+  options?: PdfReportOptions
 ): Uint8Array {
   const raw = (rec as any).raw || {}
+  const contr = options?.contributorData || {}
 
-  // 1. Resolve raw candidate fields with comprehensive fallback
+  // 1. Resolve candidate fields with clean, dynamic fallback (NO dummy values)
   const candNameRaw =
-    cleanValue(rec.candidateName !== 'Candidate' ? rec.candidateName : null) !== 'N/A'
+    cleanValue(rec.candidateName && rec.candidateName !== 'Candidate' ? rec.candidateName : null) !== 'N/A'
       ? rec.candidateName
       : cleanValue([raw.FirstName, raw.MiddleName, raw.LastName].filter(Boolean).join(' ')) !== 'N/A'
       ? [raw.FirstName, raw.MiddleName, raw.LastName].filter(Boolean).join(' ')
-      : cleanValue(raw.CandidateName || raw.Name || raw.EmpName, rec.candidateName || 'Candidate')
+      : cleanValue(
+          contr.CandidateName || contr.candidateName || raw.CandidateName || raw.Name || raw.EmpName,
+          rec.candidateName || 'Candidate'
+        )
 
   const empIdRaw =
     cleanValue(rec.employeeId) !== 'N/A'
       ? rec.employeeId
-      : cleanValue(raw.EmployeeCode || raw.employeeId || raw.empCode || raw.EmpCode || raw.EmployeeID, 'N/A')
+      : cleanValue(
+          contr.EmployeeCode || contr.employeeId || contr.EmpCode || raw.EmployeeCode || raw.employeeId || raw.empCode || raw.EmpCode || raw.EmployeeID,
+          'N/A'
+        )
 
   const reqIdRaw =
     cleanValue(rec.requestId) !== 'N/A'
       ? rec.requestId
-      : cleanValue(rec.orderId || raw.OrderID || raw.orderId || raw.RequestId || raw.requestId || rec.id, 'VR-REQ')
+      : cleanValue(rec.orderId || raw.OrderID || raw.orderId || raw.RequestId || raw.requestId || rec.id, '—')
 
   const verifierNameRaw =
     cleanValue(rec.verifierName) !== 'N/A'
       ? rec.verifierName
-      : cleanValue(raw.Contributor || raw.contributor || raw.Company, 'Securitas')
+      : cleanValue(
+          contr.Company || contr.Contributor || contr.contributor || raw.Contributor || raw.contributor || raw.Company,
+          'Enterprise Verifier'
+        )
 
   const designationRaw =
     cleanValue(rec.designation) !== 'N/A'
       ? rec.designation
-      : cleanValue(raw.LastPositionHeld || raw.Designation || raw.designation || raw.Position, 'N/A')
+      : cleanValue(
+          contr.LastPositionHeld || contr.Designation || contr.designation || raw.LastPositionHeld || raw.Designation || raw.designation || raw.Position,
+          'Not Specified'
+        )
 
   const departmentRaw =
-    cleanValue(rec.department, 'General') !== 'N/A'
+    cleanValue(rec.department) !== 'N/A'
       ? rec.department!
-      : cleanValue(raw.Department || raw.department, 'General')
+      : cleanValue(contr.Department || contr.department || raw.Department || raw.department, 'Not Specified')
 
   const dojRaw =
     cleanValue(rec.dateOfJoining) !== 'N/A'
       ? rec.dateOfJoining
-      : cleanValue(raw.DateOfJoining || raw.dateOfJoining || raw.DOJ, 'N/A')
+      : cleanValue(contr.DateOfJoining ? String(contr.DateOfJoining).split('T')[0] : raw.DateOfJoining || raw.dateOfJoining || raw.DOJ, 'Not Specified')
 
   const rawDol =
     cleanValue(rec.dateOfLeaving) !== 'N/A'
       ? rec.dateOfLeaving
-      : cleanValue(raw.DateOfLeaving || raw.dateOfLeaving || raw.DOL, '')
-  const isCurrentlyEmployed = rec.isCurrentlyEmployed ?? (!rawDol || rawDol === 'N/A')
-  const dolRaw = isCurrentlyEmployed ? 'Present' : (rawDol || 'N/A')
-  const employedStatus = isCurrentlyEmployed ? 'Currently Employed' : 'Relieved'
+      : cleanValue(contr.DateOfLeaving ? String(contr.DateOfLeaving).split('T')[0] : raw.DateOfLeaving || raw.dateOfLeaving || raw.DOL, '')
+
+  const isCurrentlyEmployed = rec.isCurrentlyEmployed ?? (contr.IsCurrentlyEmployed || !rawDol || rawDol === 'N/A' || String(rawDol).toLowerCase() === 'present')
+  const dolRaw = isCurrentlyEmployed ? 'Present / Active' : (rawDol || 'N/A')
+  const employedStatus = isCurrentlyEmployed ? 'Currently Employed' : 'Relieved / Ex-Employee'
 
   const contactRaw =
     cleanValue(rec.contactNumber) !== 'N/A'
       ? rec.contactNumber
-      : cleanValue(raw.MobileNo || raw.mobileNo || raw.Mobile || raw.Phone || raw.ContactNo, 'N/A')
+      : cleanValue(contr.MobileNo || contr.mobileNo || raw.MobileNo || raw.mobileNo || raw.Mobile || raw.Phone || raw.ContactNo, 'Not Provided')
 
   const candEmailRaw =
     cleanValue(rec.candidateEmail) !== 'N/A'
       ? rec.candidateEmail
-      : cleanValue(raw.Email || raw.email || raw.EmailID || raw.Clientemail, 'N/A')
+      : cleanValue(contr.Email || contr.email || raw.Email || raw.email || raw.EmailID || raw.Clientemail, 'Not Provided')
 
-  const remarksRaw =
-    cleanValue(rec.remarks && rec.remarks !== 'Confirmed relieving date and integrity' ? rec.remarks : null) !== 'N/A'
-      ? rec.remarks
-      : cleanValue(
-          raw.Remarks || raw.remarks,
-          raw.AnyBehaviourIssue
-            ? `Behaviour: ${raw.AnyBehaviourIssue}`
-            : 'Confirmed relieving date and integrity clearance'
-        )
-
-  let rawSubmitted = cleanValue(rec.submittedBy || raw.Clientemail, 'SecuritasClient')
-  if (rawSubmitted.includes('@')) {
-    const prefix = rawSubmitted.split('@')[0]
-    rawSubmitted = prefix.length > 20 ? 'SecuritasClient' : prefix
+  // 2. Remarks handling - dynamic from reviewer and field checks, NO dummy strings
+  let baseRemarks = cleanValue(options?.overallRemarks || rec.remarks || raw.Remarks || raw.remarks, '')
+  if (baseRemarks === 'Confirmed relieving date and integrity' || baseRemarks === 'Confirmed relieving date and integrity clearance') {
+    baseRemarks = ''
   }
+
+  // Collect any field-level notes from fieldChecks
+  const fieldRemarks: string[] = []
+  if (options?.fieldChecks) {
+    Object.entries(options.fieldChecks).forEach(([fId, check]) => {
+      if (check.remarks && check.remarks.trim()) {
+        const label = fId.replace(/([A-Z])/g, ' $1').replace(/^./, (s) => s.toUpperCase())
+        fieldRemarks.push(`${label}: ${check.remarks.trim()}`)
+      }
+    })
+  }
+
+  let finalRemarks = baseRemarks
+  if (fieldRemarks.length > 0) {
+    const extra = fieldRemarks.join('; ')
+    finalRemarks = finalRemarks ? `${finalRemarks} | ${extra}` : extra
+  }
+  if (!finalRemarks) {
+    finalRemarks = 'No audit remarks recorded.'
+  }
+
+  const rawSubmitted = cleanValue(rec.submittedBy || raw.Clientemail || contr.Clientemail, 'Authorized Client')
 
   const submittedAtRaw =
     cleanValue(rec.submittedAt) !== 'N/A'
       ? rec.submittedAt
-      : cleanValue(raw.CreatedAt, new Date().toISOString().split('T')[0])
+      : cleanValue(raw.CreatedAt ? String(raw.CreatedAt).split('T')[0] : null, new Date().toISOString().split('T')[0])
 
-  const status = rec.status || 'Verified'
-  const isVerified = status === 'Verified' || status === 'Approved'
+  // 3. Status determination with strict 3-way color scheme:
+  // Verified = Green, Rejected = Red, Found Discrepancy = Orange
+  const rawStatus = String(options?.status || rec.status || raw.Status || 'Verified').trim()
+  const statusLower = rawStatus.toLowerCase()
+
+  let statusType: 'verified' | 'rejected' | 'discrepancy' = 'verified'
+  let statusBadgeTitle = 'VERIFIED'
+
+  if (
+    statusLower.includes('reject') ||
+    statusLower === 'failed' ||
+    statusLower === 'not verified'
+  ) {
+    statusType = 'rejected'
+    statusBadgeTitle = 'REJECTED'
+  } else if (
+    statusLower.includes('discrep') ||
+    statusLower.includes('mismatch') ||
+    statusLower.includes('found') ||
+    statusLower.includes('appeal') ||
+    statusLower.includes('flag') ||
+    options?.hasDiscrepancy === true
+  ) {
+    statusType = 'discrepancy'
+    statusBadgeTitle = 'FOUND DISCREPANCY'
+  } else if (
+    statusLower.includes('verif') ||
+    statusLower.includes('approv') ||
+    statusLower.includes('clean') ||
+    statusLower.includes('passed')
+  ) {
+    statusType = 'verified'
+    statusBadgeTitle = 'VERIFIED'
+  } else {
+    // Check if comparisonFields have mismatches
+    const hasAnyMismatch = options?.comparisonFields?.some((f) => {
+      const c = String(f.clientVal || '').trim().toLowerCase()
+      const r = String(f.contributorVal || '').trim().toLowerCase()
+      return c && r && c !== '—' && r !== 'data not found' && c !== r
+    })
+    if (hasAnyMismatch) {
+      statusType = 'discrepancy'
+      statusBadgeTitle = 'FOUND DISCREPANCY'
+    } else {
+      statusType = 'verified'
+      statusBadgeTitle = 'VERIFIED'
+    }
+  }
 
   let s = ''
 
-  // 1. Top Decorative Bar
-  s += '0.012 0.122 0.188 rg 40 805 515 3 re f\n'
+  // Top Decorative Bar (Securitas / Platform Brand Navy)
+  s += '0.012 0.122 0.188 rg 40 806 515 3 re f\n'
 
-  // 2. Left Platform Branding (Securitas Logo Image or Vector Fallback)
+  // Platform Branding
   if (logoData) {
     const imgH = 34
     const imgW = Math.min(130, Math.round(imgH * (logoData.width / logoData.height)))
-    s += `q\n${imgW} 0 0 ${imgH} 40 764 cm\n/Im1 Do\nQ\n`
-    s += 'BT /F2 7.5 Tf 0.39 0.45 0.55 rg 40 752 Td (ENTERPRISE CANDIDATE VERIFICATION REPORT) Tj ET\n'
+    s += `q\n${imgW} 0 0 ${imgH} 40 766 cm\n/Im1 Do\nQ\n`
+    s += 'BT /F2 7.5 Tf 0.39 0.45 0.55 rg 40 754 Td (OFFICIAL EMPLOYMENT VERIFICATION REPORT) Tj ET\n'
   } else {
-    // 3 iconic red circles of Securitas
     s += '0.94 0.1 0.18 rg\n'
     s += pdfCircle(48, 788, 5.5)
     s += pdfCircle(63, 788, 5.5)
     s += pdfCircle(78, 788, 5.5)
-    s += 'BT /F1 14 Tf 0.03 0.13 0.21 rg 40 768 Td (Securitas) Tj ET\n'
-    s += 'BT /F2 7.5 Tf 0.39 0.45 0.55 rg 40 754 Td (ENTERPRISE CANDIDATE VERIFICATION REPORT) Tj ET\n'
+    s += 'BT /F1 14 Tf 0.03 0.13 0.21 rg 40 768 Td (Worktrail) Tj ET\n'
+    s += 'BT /F2 7.5 Tf 0.39 0.45 0.55 rg 40 754 Td (OFFICIAL EMPLOYMENT VERIFICATION REPORT) Tj ET\n'
   }
 
-  // 3. Right Client/Contributor Logo Image
+  // Client / Enterprise Logo on Right
   if (clientLogoData) {
     const clH = 34
     const clW = Math.min(145, Math.round(clH * (clientLogoData.width / clientLogoData.height)))
     const clX = 555 - clW
     const imgRef = logoData ? '/Im2' : '/Im1'
-    s += `q\n${clW} 0 0 ${clH} ${clX} 764 cm\n${imgRef} Do\nQ\n`
-    s += `BT /F1 7.5 Tf 0.06 0.09 0.16 rg ${clX} 752 Td (TARGET ENTERPRISE CLIENT) Tj ET\n`
+    s += `q\n${clW} 0 0 ${clH} ${clX} 766 cm\n${imgRef} Do\nQ\n`
+    s += `BT /F1 7.5 Tf 0.06 0.09 0.16 rg ${clX} 754 Td (TARGET ENTERPRISE CLIENT) Tj ET\n`
   }
 
-  // 4. Candidate Profile Summary Box
-  s += '0.96 0.97 0.98 rg 40 676 515 64 re f\n'
-  s += '0.88 0.91 0.94 RG 1 w 40 676 515 64 re S\n'
-  s += `BT /F1 14.5 Tf 0.06 0.09 0.16 rg 55 718 Td (${escapePdfText(candNameRaw)}) Tj ET\n`
-  s += `BT /F2 8.5 Tf 0.39 0.45 0.55 rg 55 702 Td (Request ID: ${escapePdfText(reqIdRaw)}   |   Submitted: ${escapePdfText(submittedAtRaw)}) Tj ET\n`
+  // Candidate Profile Summary Box
+  s += '0.96 0.97 0.98 rg 40 678 515 64 re f\n'
+  s += '0.88 0.91 0.94 RG 1 w 40 678 515 64 re S\n'
+  s += `BT /F1 14 Tf 0.06 0.09 0.16 rg 55 720 Td (${escapePdfText(candNameRaw)}) Tj ET\n`
+  s += `BT /F2 8.5 Tf 0.39 0.45 0.55 rg 55 704 Td (Request ID: ${escapePdfText(reqIdRaw)}   |   Submitted: ${escapePdfText(submittedAtRaw)}) Tj ET\n`
 
-  // Dynamic spacing between Employee ID and Verifier so they never overlap
   const empIdText = `Employee ID: ${empIdRaw}`
   const verifierX = Math.min(235, 55 + Math.round(empIdText.length * 5.4) + 16)
-  const verifierSummary = verifierNameRaw.length > 36 ? verifierNameRaw.slice(0, 34) + '...' : verifierNameRaw
-  s += `BT /F1 8.5 Tf 0.02 0.5 0.65 rg 55 687 Td (${escapePdfText(empIdText)}) Tj ET\n`
-  s += `BT /F2 8.5 Tf 0.35 0.4 0.5 rg ${verifierX} 687 Td (|   Verifier: ${escapePdfText(verifierSummary)}) Tj ET\n`
+  const verifierSummary = verifierNameRaw.length > 34 ? verifierNameRaw.slice(0, 32) + '...' : verifierNameRaw
+  s += `BT /F1 8.5 Tf 0.02 0.5 0.65 rg 55 689 Td (${escapePdfText(empIdText)}) Tj ET\n`
+  s += `BT /F2 8.5 Tf 0.35 0.4 0.5 rg ${verifierX} 689 Td (|   Verifier: ${escapePdfText(verifierSummary)}) Tj ET\n`
 
-  // Status Badge placed neatly inside the summary box on the right
-  if (isVerified) {
-    s += '0.92 0.98 0.95 rg 402 690 142 36 re f\n'
-    s += '0.06 0.73 0.51 RG 1.2 w 402 690 142 36 re S\n'
-    s += 'BT /F2 7.5 Tf 0.2 0.55 0.4 rg 412 712 Td (VERIFICATION STATUS) Tj ET\n'
-    s += 'BT /F1 10 Tf 0.04 0.6 0.4 rg 412 698 Td (VERIFIED CLEAN) Tj ET\n'
+  // Status Badge on Right - Verified = Green, Rejected = Red, Found Discrepancy = Orange
+  if (statusType === 'verified') {
+    s += '0.92 0.98 0.95 rg 398 690 148 40 re f\n'
+    s += '0.06 0.73 0.51 RG 1.5 w 398 690 148 40 re S\n'
+    s += 'BT /F2 7.5 Tf 0.15 0.50 0.35 rg 410 715 Td (VERIFICATION STATUS) Tj ET\n'
+    s += 'BT /F1 11 Tf 0.04 0.60 0.38 rg 410 700 Td (VERIFIED) Tj ET\n'
+  } else if (statusType === 'rejected') {
+    s += '1.00 0.94 0.95 rg 398 690 148 40 re f\n'
+    s += '0.88 0.15 0.28 RG 1.5 w 398 690 148 40 re S\n'
+    s += 'BT /F2 7.5 Tf 0.65 0.20 0.25 rg 410 715 Td (VERIFICATION STATUS) Tj ET\n'
+    s += 'BT /F1 11 Tf 0.85 0.12 0.22 rg 410 700 Td (REJECTED) Tj ET\n'
   } else {
-    s += '1.0 0.94 0.95 rg 402 690 142 36 re f\n'
-    s += '0.88 0.15 0.28 RG 1.2 w 402 690 142 36 re S\n'
-    s += 'BT /F2 7.5 Tf 0.6 0.25 0.3 rg 412 712 Td (VERIFICATION STATUS) Tj ET\n'
-    s += 'BT /F1 10 Tf 0.85 0.12 0.25 rg 412 698 Td (REJECTED) Tj ET\n'
+    // Found Discrepancy -> ORANGE
+    s += '1.00 0.96 0.90 rg 398 690 148 40 re f\n'
+    s += '0.93 0.48 0.08 RG 1.5 w 398 690 148 40 re S\n'
+    s += 'BT /F2 7.5 Tf 0.65 0.35 0.10 rg 406 715 Td (VERIFICATION STATUS) Tj ET\n'
+    s += 'BT /F1 9.5 Tf 0.88 0.38 0.04 rg 406 700 Td (FOUND DISCREPANCY) Tj ET\n'
   }
 
-  // 5. Two Info Cards
-  // Left Box - EMPLOYMENT ATTRIBUTES
-  s += '0.98 0.99 1.0 rg 40 568 250 94 re f\n'
-  s += '0.88 0.91 0.94 RG 0.5 w 40 568 250 94 re S\n'
-  s += 'BT /F1 10 Tf 0.012 0.122 0.188 rg 50 644 Td (EMPLOYMENT ATTRIBUTES) Tj ET\n'
+  // Two Information Overview Cards
+  // Left: Claimed Employment Attributes
+  s += '0.98 0.99 1.0 rg 40 582 250 86 re f\n'
+  s += '0.88 0.91 0.94 RG 0.5 w 40 582 250 86 re S\n'
+  s += 'BT /F1 9.5 Tf 0.012 0.122 0.188 rg 50 652 Td (EMPLOYMENT ATTRIBUTES) Tj ET\n'
   const desigTrimmed = designationRaw.length > 30 ? designationRaw.slice(0, 28) + '...' : designationRaw
   const deptTrimmed = departmentRaw.length > 30 ? departmentRaw.slice(0, 28) + '...' : departmentRaw
-  s += `BT /F2 8.5 Tf 0.25 0.25 0.3 rg 50 628 Td (Designation: ${escapePdfText(desigTrimmed)}) Tj ET\n`
-  s += `BT /F2 8.5 Tf 0.25 0.25 0.3 rg 50 613 Td (Department: ${escapePdfText(deptTrimmed)}) Tj ET\n`
-  s += `BT /F2 8.5 Tf 0.25 0.25 0.3 rg 50 598 Td (Joining Date: ${escapePdfText(dojRaw)}) Tj ET\n`
-  s += `BT /F2 8.5 Tf 0.25 0.25 0.3 rg 50 583 Td (Leaving Date: ${escapePdfText(dolRaw)}) Tj ET\n`
+  s += `BT /F2 8.5 Tf 0.25 0.25 0.3 rg 50 636 Td (Designation: ${escapePdfText(desigTrimmed)}) Tj ET\n`
+  s += `BT /F2 8.5 Tf 0.25 0.25 0.3 rg 50 621 Td (Department: ${escapePdfText(deptTrimmed)}) Tj ET\n`
+  s += `BT /F2 8.5 Tf 0.25 0.25 0.3 rg 50 606 Td (Joining Date: ${escapePdfText(dojRaw)}) Tj ET\n`
+  s += `BT /F2 8.5 Tf 0.25 0.25 0.3 rg 50 591 Td (Leaving Date: ${escapePdfText(dolRaw)}) Tj ET\n`
 
-  // Right Box - VERIFICATION AUDIT DETAILS
-  s += '0.98 0.99 1.0 rg 305 568 250 94 re f\n'
-  s += '0.88 0.91 0.94 RG 0.5 w 305 568 250 94 re S\n'
-  s += 'BT /F1 10 Tf 0.012 0.122 0.188 rg 315 644 Td (VERIFICATION AUDIT DETAILS) Tj ET\n'
+  // Right: Audit & Verifier Details
+  s += '0.98 0.99 1.0 rg 305 582 250 86 re f\n'
+  s += '0.88 0.91 0.94 RG 0.5 w 305 582 250 86 re S\n'
+  s += 'BT /F1 9.5 Tf 0.012 0.122 0.188 rg 315 652 Td (VERIFICATION AUDIT DETAILS) Tj ET\n'
   const verifierTrimmed = verifierNameRaw.length > 30 ? verifierNameRaw.slice(0, 28) + '...' : verifierNameRaw
   const subByTrimmed = rawSubmitted.length > 30 ? rawSubmitted.slice(0, 28) + '...' : rawSubmitted
   const emailTrimmed = candEmailRaw.length > 30 ? candEmailRaw.slice(0, 28) + '...' : candEmailRaw
-  s += `BT /F2 8.5 Tf 0.25 0.25 0.3 rg 315 628 Td (Verifier: ${escapePdfText(verifierTrimmed)}) Tj ET\n`
-  s += `BT /F2 8.5 Tf 0.25 0.25 0.3 rg 315 613 Td (Type: Standard Employment Verification) Tj ET\n`
-  s += `BT /F2 8.5 Tf 0.25 0.25 0.3 rg 315 598 Td (Submitted By: ${escapePdfText(subByTrimmed)}) Tj ET\n`
-  s += `BT /F2 8.5 Tf 0.25 0.25 0.3 rg 315 583 Td (Candidate Email: ${escapePdfText(emailTrimmed)}) Tj ET\n`
+  const reviewerDisplay = cleanValue(options?.reviewerName, 'Worktrail Auditor')
+  s += `BT /F2 8.5 Tf 0.25 0.25 0.3 rg 315 636 Td (Verifier: ${escapePdfText(verifierTrimmed)}) Tj ET\n`
+  s += `BT /F2 8.5 Tf 0.25 0.25 0.3 rg 315 621 Td (Auditor: ${escapePdfText(reviewerDisplay)}) Tj ET\n`
+  s += `BT /F2 8.5 Tf 0.25 0.25 0.3 rg 315 606 Td (Submitted By: ${escapePdfText(subByTrimmed)}) Tj ET\n`
+  s += `BT /F2 8.5 Tf 0.25 0.25 0.3 rg 315 591 Td (Candidate Email: ${escapePdfText(emailTrimmed)}) Tj ET\n`
 
-  // 6. Table Section
-  s += 'BT /F1 11 Tf 0.06 0.09 0.16 rg 40 544 Td (VERIFICATION BREAKDOWN AUDIT) Tj ET\n'
+  // Section Header: Parameter Match Breakdown
+  s += 'BT /F1 10.5 Tf 0.06 0.09 0.16 rg 40 556 Td (VERIFICATION BREAKDOWN & PARAMETER AUDIT) Tj ET\n'
 
-  // Table Header
-  s += '0.93 0.95 0.98 rg 40 518 515 20 re f\n'
-  s += '0.8 0.84 0.9 RG 0.5 w 40 518 515 20 re S\n'
-  s += 'BT /F1 9 Tf 0.2 0.25 0.35 rg 50 524 Td (Parameter) Tj ET\n'
-  s += 'BT /F1 9 Tf 0.2 0.25 0.35 rg 200 524 Td (Submitted / Record Value) Tj ET\n'
-  s += 'BT /F1 9 Tf 0.2 0.25 0.35 rg 400 524 Td (Verification Result) Tj ET\n'
+  // Table Header (4 Columns: Parameter | Claimed / Client | Contributor Record | Result)
+  s += '0.93 0.95 0.98 rg 40 534 515 18 re f\n'
+  s += '0.8 0.84 0.9 RG 0.5 w 40 534 515 18 re S\n'
+  s += 'BT /F1 8.5 Tf 0.2 0.25 0.35 rg 48 539 Td (Parameter) Tj ET\n'
+  s += 'BT /F1 8.5 Tf 0.2 0.25 0.35 rg 165 539 Td (Client Claim) Tj ET\n'
+  s += 'BT /F1 8.5 Tf 0.2 0.25 0.35 rg 305 539 Td (Contributor Record) Tj ET\n'
+  s += 'BT /F1 8.5 Tf 0.2 0.25 0.35 rg 448 539 Td (Audit Result) Tj ET\n'
 
-  // Verifier Organization formatting
-  const lowerV = verifierNameRaw.toLowerCase()
-  const verifierOrgDisplay =
-    lowerV.includes('tcs') || lowerV.includes('tata consultancy')
-      ? 'Tata Consultancy Services (TCS)'
-      : rec.verifierCode && !verifierNameRaw.includes('(')
-      ? `${verifierNameRaw} (${rec.verifierCode})`
-      : verifierNameRaw
+  // Resolve Table Rows Dynamically
+  interface RowItem {
+    param: string
+    client: string
+    contributor: string
+    result: string
+    resultType: 'match' | 'mismatch' | 'missing' | 'unverified'
+  }
 
-  const desigDeptValue =
-    departmentRaw && departmentRaw !== 'General' && departmentRaw !== 'N/A'
-      ? `${designationRaw} (${departmentRaw})`
-      : designationRaw
+  let tableRows: RowItem[] = []
 
-  const tableRows = [
-    { param: 'Full Name', val: candNameRaw, res: isVerified ? 'Verified Match' : 'Recorded' },
-    { param: 'Employee Code', val: empIdRaw, res: isVerified ? 'Matched Master DB' : 'Recorded' },
-    { param: 'Verifier Organization', val: verifierOrgDisplay, res: 'Registered Enterprise' },
-    { param: 'Designation & Dept', val: desigDeptValue, res: 'Verified Role' },
-    { param: 'Tenure Period', val: `${dojRaw} to ${dolRaw}`, res: employedStatus },
-    { param: 'Contact Number', val: contactRaw, res: 'Phone Verified' },
-    { param: 'Candidate Email', val: candEmailRaw, res: 'Email Verified' },
-    { param: 'Client Remarks', val: remarksRaw, res: 'Audited' },
-  ]
+  if (options?.comparisonFields && options.comparisonFields.length > 0) {
+    tableRows = options.comparisonFields.slice(0, 8).map((f) => {
+      const fieldCheck = options.fieldChecks ? options.fieldChecks[f.id] : undefined
+      const cStr = String(f.clientVal ?? '').trim()
+      const rStr = String(f.contributorVal ?? '').trim()
 
-  let rowY = 496
+      let resultType: 'match' | 'mismatch' | 'missing' | 'unverified' = 'match'
+      let resultText = 'Verified Match'
+
+      if (fieldCheck?.verified === false) {
+        resultType = 'mismatch'
+        resultText = 'Discrepancy Flagged'
+      } else if (fieldCheck?.verified === true) {
+        resultType = 'match'
+        resultText = 'Verified Match'
+      } else {
+        const cLower = cStr.toLowerCase()
+        const rLower = rStr.toLowerCase()
+        if (!rStr || rLower === 'data not found' || rLower === 'not recorded' || rLower === '—') {
+          resultType = 'missing'
+          resultText = 'Data Not Found'
+        } else if (cLower === rLower || cLower.includes(rLower) || rLower.includes(cLower)) {
+          resultType = 'match'
+          resultText = 'Verified Match'
+        } else {
+          resultType = 'mismatch'
+          resultText = 'Discrepancy'
+        }
+      }
+
+      return {
+        param: f.label,
+        client: cStr || '—',
+        contributor: rStr || 'Data Not Found',
+        result: resultText,
+        resultType
+      }
+    })
+  } else {
+    // Dynamic fallback built directly from rec and contr
+    const defaultRows = [
+      {
+        param: 'Full Name',
+        client: candNameRaw,
+        contributor: cleanValue(contr.CandidateName || contr.Name, candNameRaw),
+        match: Boolean(candNameRaw)
+      },
+      {
+        param: 'Employee Code',
+        client: empIdRaw,
+        contributor: cleanValue(contr.EmployeeCode || contr.EmpCode, empIdRaw),
+        match: Boolean(empIdRaw && empIdRaw !== 'N/A')
+      },
+      {
+        param: 'Verifier / Org',
+        client: verifierNameRaw,
+        contributor: cleanValue(contr.Company || contr.Contributor, verifierNameRaw),
+        match: Boolean(verifierNameRaw)
+      },
+      {
+        param: 'Designation',
+        client: designationRaw,
+        contributor: cleanValue(contr.Designation || contr.LastPositionHeld, designationRaw),
+        match: Boolean(designationRaw && designationRaw !== 'Not Specified')
+      },
+      {
+        param: 'Department',
+        client: departmentRaw,
+        contributor: cleanValue(contr.Department, departmentRaw),
+        match: Boolean(departmentRaw && departmentRaw !== 'Not Specified')
+      },
+      {
+        param: 'Tenure Period',
+        client: `${dojRaw} to ${dolRaw}`,
+        contributor: `${dojRaw} to ${dolRaw}`,
+        match: Boolean(dojRaw && dojRaw !== 'Not Specified')
+      },
+      {
+        param: 'Contact / Email',
+        client: `${candEmailRaw}`,
+        contributor: `${cleanValue(contr.Email, candEmailRaw)}`,
+        match: Boolean(candEmailRaw && candEmailRaw !== 'Not Provided')
+      },
+      {
+        param: 'Employment Status',
+        client: employedStatus,
+        contributor: employedStatus,
+        match: true
+      }
+    ]
+
+    tableRows = defaultRows.map((r) => {
+      let resultType: 'match' | 'mismatch' | 'missing' = 'match'
+      let result = 'Verified Match'
+
+      if (statusType === 'rejected') {
+        resultType = 'mismatch'
+        result = 'Rejected / Discrepant'
+      } else if (statusType === 'discrepancy' && !r.match) {
+        resultType = 'mismatch'
+        result = 'Discrepancy'
+      } else if (!r.match) {
+        resultType = 'missing'
+        result = 'Not Recorded'
+      }
+
+      return {
+        param: r.param,
+        client: r.client,
+        contributor: r.contributor,
+        result,
+        resultType
+      }
+    })
+  }
+
+  let rowY = 516
   tableRows.forEach((r, idx) => {
     if (idx % 2 === 1) {
-      s += `0.98 0.98 0.99 rg 40 ${rowY - 4} 515 22 re f\n`
+      s += `0.98 0.98 0.99 rg 40 ${rowY - 3} 515 18 re f\n`
     }
-    s += `0.9 0.92 0.95 RG 0.5 w 40 ${rowY - 4} 515 0.5 re S\n`
-    s += `BT /F1 8.5 Tf 0.15 0.2 0.28 rg 50 ${rowY + 3} Td (${escapePdfText(r.param)}) Tj ET\n`
-    const valText = r.val.length > 40 ? r.val.slice(0, 38) + '...' : r.val
-    s += `BT /F2 8.5 Tf 0.15 0.2 0.28 rg 200 ${rowY + 3} Td (${escapePdfText(valText)}) Tj ET\n`
-    s += `BT /F2 8.5 Tf 0.25 0.35 0.45 rg 400 ${rowY + 3} Td (${escapePdfText(r.res)}) Tj ET\n`
-    rowY -= 22
+    s += `0.9 0.92 0.95 RG 0.5 w 40 ${rowY - 3} 515 0.5 re S\n`
+
+    // Col 1: Parameter
+    const paramText = r.param.length > 20 ? r.param.slice(0, 19) + '...' : r.param
+    s += `BT /F1 8 Tf 0.15 0.2 0.28 rg 48 ${rowY + 2} Td (${escapePdfText(paramText)}) Tj ET\n`
+
+    // Col 2: Client Claim
+    const clientText = r.client.length > 24 ? r.client.slice(0, 22) + '...' : r.client
+    s += `BT /F2 8 Tf 0.2 0.25 0.35 rg 165 ${rowY + 2} Td (${escapePdfText(clientText)}) Tj ET\n`
+
+    // Col 3: Contributor Record
+    const contrText = r.contributor.length > 24 ? r.contributor.slice(0, 22) + '...' : r.contributor
+    s += `BT /F2 8 Tf 0.2 0.25 0.35 rg 305 ${rowY + 2} Td (${escapePdfText(contrText)}) Tj ET\n`
+
+    // Col 4: Audit Result with Status Color
+    if (r.resultType === 'match') {
+      // Green text
+      s += `BT /F1 8 Tf 0.04 0.60 0.38 rg 448 ${rowY + 2} Td (${escapePdfText(r.result)}) Tj ET\n`
+    } else if (r.resultType === 'mismatch') {
+      // Orange / Red text
+      if (statusType === 'rejected') {
+        s += `BT /F1 8 Tf 0.85 0.12 0.22 rg 448 ${rowY + 2} Td (${escapePdfText(r.result)}) Tj ET\n`
+      } else {
+        s += `BT /F1 8 Tf 0.88 0.38 0.04 rg 448 ${rowY + 2} Td (${escapePdfText(r.result)}) Tj ET\n`
+      }
+    } else {
+      // Slate text
+      s += `BT /F2 8 Tf 0.50 0.55 0.65 rg 448 ${rowY + 2} Td (${escapePdfText(r.result)}) Tj ET\n`
+    }
+
+    rowY -= 18
   })
 
-  // 7. Security Seal & Footer
-  s += '0.85 0.88 0.92 RG 1 w 40 85 515 0.5 re S\n'
-  s += 'BT /F1 8 Tf 0.02 0.5 0.65 rg 40 70 Td (SECURITAS COMPLIANCE ENGINE) Tj ET\n'
-  s += `BT /F2 8 Tf 0.45 0.5 0.6 rg 40 56 Td (Document Token: ${escapePdfText(reqIdRaw)}-${Date.now().toString().slice(-6)}   |   Generated: ${new Date().toLocaleDateString('en-GB')}) Tj ET\n`
-  s += 'BT /F1 8 Tf 0.06 0.73 0.51 rg 395 62 Td (CERTIFIED VERIFICATION DOCKET) Tj ET\n'
+  // 4. Dedicated Reviewer Remarks & Assessment Box (PROMINENT in PDF)
+  const remarksBoxY = 278
+  const remarksBoxH = 86
+
+  // Background and border color tinted to match status
+  if (statusType === 'discrepancy') {
+    s += `1.00 0.98 0.94 rg 40 ${remarksBoxY} 515 ${remarksBoxH} re f\n`
+    s += `0.93 0.65 0.25 RG 1 w 40 ${remarksBoxY} 515 ${remarksBoxH} re S\n`
+  } else if (statusType === 'rejected') {
+    s += `1.00 0.96 0.96 rg 40 ${remarksBoxY} 515 ${remarksBoxH} re f\n`
+    s += `0.90 0.50 0.50 RG 1 w 40 ${remarksBoxY} 515 ${remarksBoxH} re S\n`
+  } else {
+    s += `0.96 0.99 0.97 rg 40 ${remarksBoxY} 515 ${remarksBoxH} re f\n`
+    s += `0.50 0.80 0.65 RG 1 w 40 ${remarksBoxY} 515 ${remarksBoxH} re S\n`
+  }
+
+  // Box Title
+  s += `BT /F1 9 Tf 0.06 0.15 0.25 rg 52 ${remarksBoxY + 68} Td (AUDIT ASSESSMENT & REVIEWER REMARKS) Tj ET\n`
+
+  // Wrapped Remarks Content
+  const remarkLines = wrapPdfLines(finalRemarks, 82).slice(0, 3)
+  let remarkLineY = remarksBoxY + 50
+  remarkLines.forEach((line) => {
+    s += `BT /F2 8.5 Tf 0.2 0.25 0.3 rg 52 ${remarkLineY} Td (${escapePdfText(line)}) Tj ET\n`
+    remarkLineY -= 14
+  })
+
+  // 6. Security Seal & Footer
+  s += '0.85 0.88 0.92 RG 1 w 40 100 515 0.5 re S\n'
+  s += 'BT /F1 8 Tf 0.02 0.5 0.65 rg 40 85 Td (WORKTRAIL COMPLIANCE & VERIFICATION PLATFORM) Tj ET\n'
+  s += `BT /F2 8 Tf 0.45 0.5 0.6 rg 40 71 Td (Document Token: ${escapePdfText(reqIdRaw)}-${Date.now().toString().slice(-6)}   |   Generated: ${new Date().toLocaleDateString('en-GB')}) Tj ET\n`
+
+  if (statusType === 'verified') {
+    s += 'BT /F1 8 Tf 0.06 0.73 0.51 rg 380 78 Td (CERTIFIED VERIFICATION DOCKET) Tj ET\n'
+  } else if (statusType === 'rejected') {
+    s += 'BT /F1 8 Tf 0.85 0.12 0.22 rg 380 78 Td (REJECTED VERIFICATION DOCKET) Tj ET\n'
+  } else {
+    s += 'BT /F1 8 Tf 0.88 0.38 0.04 rg 360 78 Td (DISCREPANCY FLAGGED VERIFICATION DOCKET) Tj ET\n'
+  }
 
   return buildPdf(s, logoData, clientLogoData)
 }
+

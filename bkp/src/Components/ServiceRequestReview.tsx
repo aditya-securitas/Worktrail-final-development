@@ -52,11 +52,6 @@ import {
 import { useAuth } from '../useAuth';
 import { API_ENDPOINTS } from '../endpoint';
 import { type VerificationRecord } from './CandidateVerificationForm';
-import {
-  getLogoImageData,
-  getClientLogoData,
-  buildCandidatePdf
-} from './pdf-utils';
 
 // Helper to detect if a value is a media, image, data URI, or document URL
 export const isDocumentOrMediaUrl = (val: any): boolean => {
@@ -563,10 +558,9 @@ const ServiceRequestReview: React.FC<any> = (props) => {
 
   // Field Verification States
   const [fieldChecks, setFieldChecks] = useState<Record<string, FieldVerificationState>>({});
-  const [actionStatus, setActionStatus] = useState<VerificationRecord['status'] | 'Found Discrepancy' | string>('Pending');
+  const [actionStatus, setActionStatus] = useState<VerificationRecord['status']>('Pending');
   const [overallRemarks, setOverallRemarks] = useState<string>('');
   const [isUpdating, setIsUpdating] = useState<boolean>(false);
-  const [downloadingPdf, setDownloadingPdf] = useState<boolean>(false);
 
   // UI Preview & Feedback
   const [previewDocUrl, setPreviewDocUrl] = useState<string | null>(null);
@@ -970,106 +964,6 @@ const ServiceRequestReview: React.FC<any> = (props) => {
     }
   };
 
-  // Found Discrepancy Handler (calls UpdateFinalReport API)
-  const handleMarkDiscrepancy = async () => {
-    if (!record) return;
-    setIsUpdating(true);
-
-    const contributor = contributorFromProps || record.verifierName || '';
-    const employeeCode = record.employeeId || '';
-    try {
-      await updateFinalReport({
-        contributor,
-        employeeCode,
-        status: 'Found Discrepancy',
-        downloadStatus: 1,
-      });
-      setActionStatus('Found Discrepancy');
-      showToast('Record marked as Found Discrepancy and API updated.', 'info');
-      setRecord((prev) =>
-        prev
-          ? {
-              ...prev,
-              status: 'Found Discrepancy' as any,
-              remarks: overallRemarks
-            }
-          : null
-      );
-    } catch {
-      // Best effort update
-      setActionStatus('Found Discrepancy');
-      showToast('Record marked as Found Discrepancy locally.', 'info');
-      setRecord((prev) =>
-        prev
-          ? {
-              ...prev,
-              status: 'Found Discrepancy' as any,
-              remarks: overallRemarks
-            }
-          : null
-      );
-    } finally {
-      setIsUpdating(false);
-    }
-  };
-
-  // Download Dynamic Verification Report PDF Handler
-  const handleDownloadPdfReport = async () => {
-    if (!record) return;
-    setDownloadingPdf(true);
-
-    try {
-      const contributor =
-        contributorFromProps ||
-        record.verifierName ||
-        (contributorData && (contributorData.Company || contributorData.Contributor || contributorData.contributor)) ||
-        '';
-      const employeeCode =
-        (record.employeeId !== '—' && record.employeeId) ||
-        (contributorData && (contributorData.EmployeeCode || contributorData.employeeId || contributorData.empCode)) ||
-        '';
-
-      const [logoData, clientLogoData] = await Promise.all([
-        getLogoImageData(),
-        getClientLogoData(contributor || record.candidateName || 'Enterprise Client'),
-      ]);
-
-      const pdfBytes = buildCandidatePdf(record, logoData, clientLogoData, {
-        contributorData,
-        status: actionStatus,
-        overallRemarks: overallRemarks || record.remarks || '',
-        fieldChecks,
-        comparisonFields,
-        reviewerName: user?.username || user?.email || 'Worktrail Auditor',
-        hasDiscrepancy: actionStatus === 'Found Discrepancy' || stats.mismatches > 0
-      });
-
-      const blob = new Blob([pdfBytes as any], { type: 'application/pdf' });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      const safeIdentifier = (employeeCode || record.requestId || record.candidateName || 'Record')
-        .replace(/[^a-zA-Z0-9_-]/g, '_');
-      a.download = `Candidate_Verification_Report_${safeIdentifier}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-
-      setTimeout(() => {
-        if (document.body.contains(a)) {
-          document.body.removeChild(a);
-        }
-        window.URL.revokeObjectURL(url);
-      }, 1000);
-
-      showToast('Candidate verification report PDF downloaded successfully!', 'success');
-    } catch (err: any) {
-      console.error('[ServiceRequestReview] Error generating PDF report:', err);
-      showToast('Failed to generate verification report PDF. Please try again.', 'error');
-    } finally {
-      setDownloadingPdf(false);
-    }
-  };
-
   // Open Appeal Email Composer
   const handleOpenAppealModal = () => {
     if (!record) return;
@@ -1317,15 +1211,13 @@ Platform: Worktrail Background Verification System`;
                         {record?.candidateName || 'Candidate Profile'}
                       </h1>
 
-                      {/* Status Badge - Verified = Green, Rejected = Red, Found Discrepancy = Orange */}
+                      {/* Status Badge */}
                       <span
                         className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold tracking-wide uppercase ${
                           actionStatus === 'Verified'
                             ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                             : actionStatus === 'Rejected'
                             ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                            : actionStatus === 'Found Discrepancy'
-                            ? 'bg-orange-50 text-orange-700 border border-orange-300'
                             : actionStatus === 'In Progress'
                             ? 'bg-sky-50 text-sky-700 border border-sky-200'
                             : 'bg-amber-50 text-amber-700 border border-amber-200'
@@ -1337,8 +1229,6 @@ Platform: Worktrail Background Verification System`;
                               ? 'bg-emerald-500'
                               : actionStatus === 'Rejected'
                               ? 'bg-rose-500'
-                              : actionStatus === 'Found Discrepancy'
-                              ? 'bg-orange-500 animate-pulse'
                               : actionStatus === 'In Progress'
                               ? 'bg-sky-500 animate-pulse'
                               : 'bg-amber-500'
@@ -1366,7 +1256,7 @@ Platform: Worktrail Background Verification System`;
                   </div>
                 </div>
 
-                {/* Right Audit Metrics Bar & Download Button */}
+                {/* Right Audit Metrics Bar */}
                 <div className="flex flex-wrap items-center gap-3 bg-slate-50/80 p-3 rounded-2xl border border-slate-200/70 self-start lg:self-auto">
                   <div className="px-3 py-1">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Data Health</span>
@@ -1393,19 +1283,6 @@ Platform: Worktrail Background Verification System`;
                       </span>
                     )}
                   </div>
-
-                  <div className="h-8 w-px bg-slate-200 hidden sm:block" />
-
-                  <button
-                    type="button"
-                    onClick={handleDownloadPdfReport}
-                    disabled={downloadingPdf || !record}
-                    className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#0680A6] hover:bg-[#056a8a] text-white text-xs font-bold shadow-xs transition-all cursor-pointer disabled:opacity-50"
-                    title="Download candidate verification report PDF with dynamic data"
-                  >
-                    <Download className={`w-3.5 h-3.5 ${downloadingPdf ? 'animate-bounce' : ''}`} />
-                    <span>{downloadingPdf ? 'Generating...' : 'Download Report'}</span>
-                  </button>
                 </div>
               </div>
 
@@ -1733,7 +1610,7 @@ Platform: Worktrail Background Verification System`;
                       </p>
                     </div>
 
-                    {/* Verdict Options: Verified = Green, Found Discrepancy = Orange, Rejected = Red */}
+                    {/* Verdict Options */}
                     <div className="flex flex-wrap items-center gap-2">
                       <button
                         type="button"
@@ -1744,26 +1621,12 @@ Platform: Worktrail Background Verification System`;
                             ? 'bg-emerald-600 text-white shadow-emerald-500/25 ring-2 ring-emerald-600/30'
                             : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200'
                         }`}
-                        title="Mark candidate verification as Verified (Approved)"
                       >
                         <CheckCircle2 className="w-4 h-4" />
                         <span>Approve & Verify</span>
                       </button>
 
-                      <button
-                        type="button"
-                        onClick={handleMarkDiscrepancy}
-                        disabled={isUpdating || actionStatus === "Found Discrepancy"}
-                        className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs ${
-                          actionStatus === 'Found Discrepancy'
-                            ? 'bg-orange-500 text-white shadow-orange-500/25 ring-2 ring-orange-500/30'
-                            : 'bg-orange-50 hover:bg-orange-100 text-orange-800 border border-orange-300'
-                        }`}
-                        title="Flag record with Found Discrepancy"
-                      >
-                        <AlertTriangle className="w-4 h-4 text-orange-500" />
-                        <span>Found Discrepancy</span>
-                      </button>
+                     
 
                       <button
                         type="button"
@@ -1774,7 +1637,6 @@ Platform: Worktrail Background Verification System`;
                             ? 'bg-rose-600 text-white shadow-rose-500/25 ring-2 ring-rose-600/30'
                             : 'bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200'
                         }`}
-                        title="Mark candidate verification as Rejected"
                       >
                         <XCircle className="w-4 h-4" />
                         <span>Reject Request</span>
@@ -1792,108 +1654,39 @@ Platform: Worktrail Background Verification System`;
                     </div>
                   </div>
 
-                  {/* Verifier Remarks Textarea with dynamic PDF preview badge */}
+                  {/* Verifier Remarks Textarea */}
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold uppercase tracking-wider text-slate-600 flex items-center justify-between">
-                      <span className="flex items-center gap-2">
-                        <span>Reviewer Assessment Remarks</span>
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200">
-                          Included in PDF Report
-                        </span>
-                      </span>
-                      <span className="text-slate-400 font-normal lowercase">(recorded on audit trail & printed on PDF docket)</span>
+                      <span>Reviewer Assessment Remarks</span>
+                      <span className="text-slate-400 font-normal lowercase">(optional comments recorded on audit trail)</span>
                     </label>
                     <textarea
                       rows={3}
                       value={overallRemarks}
-                      onChange={(e) => {
-                        setOverallRemarks(e.target.value);
-                        if (record) {
-                          setRecord((prev) => (prev ? { ...prev, remarks: e.target.value } : null));
-                        }
-                      }}
-                      placeholder="e.g. Verified against official contributor records. Tenure and designation match. No integrity concerns noted."
+                      onChange={(e) => setOverallRemarks(e.target.value)}
+                      placeholder="e.g. Verified against Securitas official HR database. Tenure and designation match. No disciplinary flags recorded."
                       className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs sm:text-sm text-slate-800 placeholder-slate-400 outline-none focus:border-[#0680A6] focus:bg-white transition-all"
                     />
-
-                    {/* Quick Remark Preset Pills */}
-                    <div className="flex flex-wrap items-center gap-1.5 pt-1 text-[11px]">
-                      <span className="text-slate-400 font-medium mr-1">Quick remark presets:</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const r = 'All employment credentials verified and match official records with no flags.';
-                          setOverallRemarks(r);
-                          if (record) setRecord((prev) => (prev ? { ...prev, remarks: r } : null));
-                        }}
-                        className="px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 transition-colors cursor-pointer"
-                      >
-                        Verified Clean Match
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const r = 'Discrepancy identified between claimed attributes and official contributor records.';
-                          setOverallRemarks(r);
-                          if (record) setRecord((prev) => (prev ? { ...prev, remarks: r } : null));
-                        }}
-                        className="px-2.5 py-1 rounded-lg bg-orange-50 hover:bg-orange-100 text-orange-800 border border-orange-200 transition-colors cursor-pointer"
-                      >
-                        Discrepancy Found
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const r = 'Candidate verification rejected due to unverified employment claims.';
-                          setOverallRemarks(r);
-                          if (record) setRecord((prev) => (prev ? { ...prev, remarks: r } : null));
-                        }}
-                        className="px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 transition-colors cursor-pointer"
-                      >
-                        Rejected Claims
-                      </button>
-                    </div>
                   </div>
 
                   {/* Submission Footer */}
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-2 border-t border-slate-100">
                     <div className="flex items-center gap-2 text-xs text-slate-500">
                       <span>Status to be saved:</span>
-                      <span className={`font-bold underline ${
-                        actionStatus === 'Verified'
-                          ? 'text-emerald-700'
-                          : actionStatus === 'Rejected'
-                          ? 'text-rose-700'
-                          : actionStatus === 'Found Discrepancy'
-                          ? 'text-orange-700'
-                          : 'text-slate-800'
-                      }`}>
-                        {actionStatus}
-                      </span>
+                      <span className="font-bold text-slate-800 underline">{actionStatus}</span>
                       <span>•</span>
                       <span>{stats.reviewedCount} fields verified</span>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-3">
-                      <button
-                        type="button"
-                        onClick={handleDownloadPdfReport}
-                        disabled={downloadingPdf || !record}
-                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold tracking-wide uppercase transition-all shadow-md cursor-pointer disabled:opacity-50"
-                        title="Download candidate verification audit report as PDF"
-                      >
-                        <Download className={`w-4 h-4 ${downloadingPdf ? 'animate-bounce' : ''}`} />
-                        <span>{downloadingPdf ? 'Generating PDF...' : 'Download PDF Report'}</span>
-                      </button>
-
+                    <div className="flex items-center gap-3">
                       <button
                         type="button"
                         onClick={handleOpenAppealModal}
-                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold tracking-wide uppercase transition-all shadow-md cursor-pointer"
+                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold tracking-wide uppercase transition-all shadow-md cursor-pointer"
                         title="Draft and send an appeal email to the contributor requesting missing candidate data"
                       >
                         <Send className="w-4 h-4" />
-                        <span>Appeal Mail</span>
+                        <span>Appeal - Send Mail to Contributor</span>
                       </button>
 
                       <button
