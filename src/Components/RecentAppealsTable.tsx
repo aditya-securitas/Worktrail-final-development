@@ -147,7 +147,7 @@ export const RecentAppealsTable: React.FC<RecentAppealsTableProps> = ({
 
   // Client Identifier (e.g. CL-SECURITASCLIENT)
   const clientIdentifier = useMemo(() => {
-    if (user?.CompanyCode) return user.CompanyCode
+    if (user?.CompanyName) return user.CompanyName
     if (user?.username) {
       return `CL-${user.username.replace(/[^a-zA-Z0-9]/g, '').toUpperCase()}`
     }
@@ -158,15 +158,12 @@ export const RecentAppealsTable: React.FC<RecentAppealsTableProps> = ({
   const loadRecords = async (isManual = false) => {
     const email = (
       user?.EmailID ||
-      user?.email ||
-      user?.Email ||
+
       (user as any)?.emailId ||
-      (user?.username && user.username.includes('@') ? user.username : '') ||
-      localStorage.getItem('worktrail_client_email') ||
-      'Client.worktrial@Securitas-india.com'
+      (user?.username && user.username.includes('@') ? user.username : '') 
     ).trim()
 
-    const requestUrl = API_ENDPOINTS.clientEmpStatus || 'https://worktrail.ai/api/ClientEmpStatus'
+    const requestUrl = API_ENDPOINTS.clientEmpStatus 
     const requestPayload = {
       Clientemail: email
     }
@@ -423,10 +420,10 @@ export const RecentAppealsTable: React.FC<RecentAppealsTableProps> = ({
     setCheckingStatusId(key)
     try {
       const email = (
-        user?.EmailID 
+        user?.EmailID || ''
       ).trim()
 
-      const statusApiUrl = API_ENDPOINTS.clientEmpStatus || 'https://worktrail.ai/api/ClientEmpStatus'
+      const statusApiUrl = API_ENDPOINTS.clientEmpStatus
       const res: any = await axios.post(
         statusApiUrl,
         { Clientemail: email },

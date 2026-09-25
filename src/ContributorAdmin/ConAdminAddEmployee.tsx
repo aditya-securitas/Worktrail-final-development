@@ -21,30 +21,11 @@ import {
     Check,
     AlertCircle
 } from "lucide-react";
+import { API_ENDPOINTS,API_HEADER } from "../endpoint";
 
 // Custom button style
 const btnClass = "inline-flex items-center justify-center h-9 px-5 bg-gradient-to-r from-emerald-500 to-indigo-600 hover:brightness-110 active:scale-[0.98] text-white font-bold text-[11px] tracking-wider uppercase rounded-full shadow-md hover:shadow-lg transition-all duration-200 cursor-pointer select-none outline-none disabled:grayscale disabled:opacity-50 disabled:cursor-not-allowed";
 
-const API_URL = "https://worktrail.ai/api/ContributorData";
-const API_HEADERS = {
-    APIKEY: "Securitas@#!1234",
-    "Content-Type": "application/json"
-};
-const SEARCH_API_URL = "https://worktrail.ai/api/ContributorEmpSearch";
-const SEARCH_API_HEADERS = {
-    APIKEY: "Securitas@#!1234",
-    "Content-Type": "application/json"
-};
-const EDIT_EMP_API_URL = "https://worktrail.ai/api/ContributorEditData";
-const EDIT_EMP_API_HEADERS = {
-    APIKEY: "Securitas@#!1234",
-    "Content-Type": "application/json"
-};
-const FIELD_DYNAMIC_API = "https://worktrail.ai/api/ContributorAdminFormDynamic";
-const FIELD_DYNAMIC_API_HEADERS = {
-    APIKEY: "Securitas@#!1234",
-    "Content-Type": "application/json"
-};
 
 // EMPTY SAMPLE DATA - Will be generated dynamically
 export const SAMPLE_BULK_ROWS: Record<string, any>[] = [];
@@ -193,9 +174,9 @@ function UpdateEmployeeFormV2({
                 reqBody["EmployeeCode"] = employeeCode;
                 reqBody["Contributor"] = contributor;
                 const { data } = await axios.post(
-                    EDIT_EMP_API_URL,
+                    API_ENDPOINTS.ContributorEditData,
                     reqBody,
-                    { headers: EDIT_EMP_API_HEADERS }
+                    { headers: API_HEADER }
                 );
                 if (!data || !Array.isArray(data.data)) {
                     throw new Error(data?.message || data?.error || "Edit data could not be loaded!");
@@ -330,9 +311,9 @@ function UpdateEmployeeFormV2({
             payload["Contributor"] = form.Contributor || contributor;
 
             // API: send as array (like add), to ContributorData API
-            const resp = await fetch(API_URL, {
+            const resp = await fetch(API_ENDPOINTS.ContributorData, {
                 method: "POST",
-                headers: API_HEADERS,
+                headers: API_HEADER,
                 body: JSON.stringify([payload])
             });
             const resText = await resp.text();
@@ -557,9 +538,9 @@ export default function ConAdminAddEmployee() {
             (async () => {
                 try {
                     const contrib = user?.CompanyName || company || initialCompany;
-                    const resp = await fetch(FIELD_DYNAMIC_API, {
+                    const resp = await fetch(API_ENDPOINTS.ContributorAdminFormDynamic, {
                         method: "POST",
-                        headers: FIELD_DYNAMIC_API_HEADERS,
+                        headers: API_HEADER,
                         body: JSON.stringify({ Contributor: contrib })
                     });
                     const data = await resp.json();
@@ -760,9 +741,9 @@ export default function ConAdminAddEmployee() {
             if (contributorVal) {
                 bodyPayload.Contributor = contributorVal;
             }
-            const response = await fetch(SEARCH_API_URL, {
+            const response = await fetch(API_ENDPOINTS.ContributorEmpSearch, {
                 method: "POST",
-                headers: SEARCH_API_HEADERS,
+                headers: API_HEADER,
                 body: JSON.stringify(bodyPayload)
             });
             const resText = await response.text();
@@ -806,9 +787,9 @@ export default function ConAdminAddEmployee() {
         setTablePage(1);
         try {
             const contributorVal = (user?.CompanyName || initialCompany || company || "Securitas India").trim();
-            const dynResp = await fetch(FIELD_DYNAMIC_API, {
+            const dynResp = await fetch(API_ENDPOINTS.ContributorAdminFormDynamic, {
                 method: "POST",
-                headers: FIELD_DYNAMIC_API_HEADERS,
+                headers: API_HEADER,
                 body: JSON.stringify({ Contributor: contributorVal })
             });
             const dynDataRaw = await dynResp.text();
@@ -819,9 +800,9 @@ export default function ConAdminAddEmployee() {
                 fetchedDynamicFields = dynData.data;
             }
             setDynamicFields(fetchedDynamicFields);
-            const empResp = await fetch(SEARCH_API_URL, {
+            const empResp = await fetch(API_ENDPOINTS.ContributorEmpSearch, {
                 method: "POST",
-                headers: SEARCH_API_HEADERS,
+                headers: API_HEADER,
                 body: JSON.stringify({ Contributor: contributorVal })
             });
             const empRaw = await empResp.text();
@@ -894,23 +875,45 @@ export default function ConAdminAddEmployee() {
 
     const handleBulkSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        console.log("[handleBulkSubmit] Submission started");
+
         if (!selectedFile) {
             showToast("Please select an Excel file.", "error");
+            console.log("[handleBulkSubmit] Client-side error: No file selected, aborting.");
             return;
         }
         setUploading(true);
+
         try {
+            console.log("[handleBulkSubmit] Reading uploaded file...");
             const rawRows = await readUploadedFile(selectedFile);
+            console.log("[handleBulkSubmit] Raw rows from file:", rawRows);
+
             if (!Array.isArray(rawRows) || rawRows.length === 0) {
-                throw new Error("Excel file is empty. Please use the sample template.");
+                const msg = "Excel file is empty. Please use the sample template.";
+                console.error("[handleBulkSubmit] Client-side error:", msg);
+                throw new Error(msg);
             }
+
+            console.log("[handleBulkSubmit] Normalizing rows with company:", company);
             const normalizedRows = rawRows.map(row => normalizeBulkRow(row, company));
+            console.log("[handleBulkSubmit] Normalized rows:", normalizedRows);
+
+            // Find missing required fields except for "middlename"
             const missingRequired = dynamicFields.find(f =>
-                normalizedRows.some(r => !r[f.DBFieldName] && !/remarks|comments|issue/i.test(f.DBFieldName))
+                normalizedRows.some(r =>
+                    !r[f.DBFieldName] &&
+                    !/remarks|comments|issue/i.test(f.DBFieldName) &&
+                    !/middlename/i.test(f.DBFieldName) // allow null/empty middlename
+                )
             );
             if (missingRequired) {
-                throw new Error(`A row is missing required field: "${missingRequired.DisplayFieldName}"`);
+                const msg = `A row is missing required field: "${missingRequired.DisplayFieldName}"`;
+                console.error("[handleBulkSubmit] Client-side error:", msg);
+                throw new Error(msg);
             }
+
+            // Check for duplicate code fields as before
             const codeField = dynamicFields.find(f =>
                 /personnumber|employeecode|code/i.test(f.DBFieldName + f.DisplayFieldName)
             );
@@ -918,26 +921,32 @@ export default function ConAdminAddEmployee() {
                 const codes = normalizedRows.map(r => String(r[codeField.DBFieldName]).trim().toUpperCase());
                 const dups = codes.filter((item, idx) => codes.indexOf(item) !== idx);
                 if (dups.length > 0) {
-                    throw new Error(`Duplicate ${codeField.DisplayFieldName}(s): ${Array.from(new Set(dups)).join(", ")}`);
+                    const msg = `Duplicate ${codeField.DisplayFieldName}(s): ${Array.from(new Set(dups)).join(", ")}`;
+                    console.error("[handleBulkSubmit] Client-side error:", msg);
+                    throw new Error(msg);
                 }
             }
 
-            // Axios POST request replacing fetch
+
+
+            // Axios POST request
             let response, parsedBody;
-            console.log(normalizedRows)
             try {
-                response = await axios.post(API_URL, normalizedRows, {
-                    headers: API_HEADERS,
-                    validateStatus: () => true // we'll handle errors ourselves
+                response = await axios.post(API_ENDPOINTS.ContributorData, normalizedRows, {
+                    headers: API_HEADER,
+                    validateStatus: () => true
                 });
                 parsedBody = response.data;
+                console.log("[handleBulkSubmit] API response status:", response.status);
+                console.log("[handleBulkSubmit] API response body:", parsedBody);
             } catch (err: any) {
-                // Clearly log the error object for investigation
-                console.error("Bulk upload error - Caught during axios POST:", err);
+                // Log server-side error
+                console.error("[handleBulkSubmit] Server-side error: Caught during axios POST:", err);
                 if (err?.response) {
-                    console.error("Server responded with status:", err.response.status);
-                    console.error("Response data:", err.response.data);
+                    console.error("[handleBulkSubmit] Server-side error: Response status:", err.response.status);
+                    console.error("[handleBulkSubmit] Server-side error: Response data:", err.response.data);
                 }
+
                 let msg = err?.response?.data?.message || err?.response?.data?.error || err?.message || "Bulk upload failed";
                 showToast(msg, "error");
                 throw new Error(msg);
@@ -951,8 +960,9 @@ export default function ConAdminAddEmployee() {
                     detail = parsedBody;
                 }
                 // Log full error response for debugging
-                console.error("Bulk upload failed with status:", response.status);
-                console.error("Server response (parsedBody):", parsedBody);
+                console.error("[handleBulkSubmit] Server-side error: Bulk upload failed with status:", response.status);
+                console.error("[handleBulkSubmit] Server-side error: Server response (parsedBody):", parsedBody);
+
                 if (response.status === 409) {
                     const conflictMsg = (
                         detail && detail.length < 200 && !detail.startsWith("{")
@@ -967,15 +977,29 @@ export default function ConAdminAddEmployee() {
                 throw new Error(failMsg);
             }
 
+            console.log(`[handleBulkSubmit] Success: Successfully uploaded ${normalizedRows.length} records!`);
             showToast(`Successfully uploaded ${normalizedRows.length} records!`, "success");
             setSelectedFile(null);
             setTimeout(() => handleBack(), 1200);
         } catch (err: any) {
-            // Always log the caught error for clarity
-            console.error("handleBulkSubmit error:", err);
+            // Log the caught error, clarify source if possible
+            if (
+                err?.message &&
+                (
+                    err.message.includes("required field") ||
+                    err.message.includes("Duplicate") ||
+                    err.message.includes("empty") ||
+                    err.message.includes("No file selected")
+                )
+            ) {
+                console.error("[handleBulkSubmit] Client-side error:", err);
+            } else {
+                console.error("[handleBulkSubmit] Server-side error:", err);
+            }
             showToast(err?.message || "Bulk upload failed", "error");
         } finally {
             setUploading(false);
+            console.log("[handleBulkSubmit] Done.");
         }
     };
 
@@ -1043,8 +1067,8 @@ export default function ConAdminAddEmployee() {
         try {
             const normalized = normalizeBulkRow(form, form.Contributor);
             console.log(normalized);
-            const response = await axios.post(API_URL, [normalized], {
-                headers: API_HEADERS,
+            const response = await axios.post(API_ENDPOINTS.ContributorData, [normalized], {
+                headers: API_HEADER,
                 validateStatus: () => true // We'll handle error cases manually
             });
             let parsedBody: any = response.data;

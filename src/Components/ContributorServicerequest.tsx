@@ -23,6 +23,7 @@ import {
   RotateCcw,
   Sparkles,
 } from 'lucide-react'
+import { API_ENDPOINTS,API_HEADER } from '../endpoint'
 
 type DynamicRequestRow = Array<{
   Id: number
@@ -122,12 +123,9 @@ const ContributorServicerequest: React.FC = () => {
       reqBody.Downloadstatus = ''
     }
 
-    fetch(API_URL, {
+    fetch(API_ENDPOINTS.ContributorServiceRequest, {
       method: 'POST',
-      headers: {
-        APIKEY: API_KEY,
-        'Content-Type': 'application/json',
-      },
+      headers: API_HEADER,
       body: JSON.stringify(reqBody),
     })
       .then(async (resp) => {

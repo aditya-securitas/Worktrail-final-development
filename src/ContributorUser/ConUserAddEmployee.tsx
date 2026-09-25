@@ -21,30 +21,10 @@ import {
     Check,
     AlertCircle
 } from "lucide-react";
+import { API_ENDPOINTS,API_HEADER } from "../endpoint";
 
 // Custom button style
 const btnClass = "inline-flex items-center justify-center h-9 px-5 bg-gradient-to-r from-emerald-500 to-indigo-600 hover:brightness-110 active:scale-[0.98] text-white font-bold text-[11px] tracking-wider uppercase rounded-full shadow-md hover:shadow-lg transition-all duration-200 cursor-pointer select-none outline-none disabled:grayscale disabled:opacity-50 disabled:cursor-not-allowed";
-
-const API_URL = "https://worktrail.ai/api/ContributorData";
-const API_HEADERS = {
-    APIKEY: "Securitas@#!1234",
-    "Content-Type": "application/json"
-};
-const SEARCH_API_URL = "https://worktrail.ai/api/ContributorEmpSearch";
-const SEARCH_API_HEADERS = {
-    APIKEY: "Securitas@#!1234",
-    "Content-Type": "application/json"
-};
-const EDIT_EMP_API_URL = "https://worktrail.ai/api/ContributorEditData";
-const EDIT_EMP_API_HEADERS = {
-    APIKEY: "Securitas@#!1234",
-    "Content-Type": "application/json"
-};
-const FIELD_DYNAMIC_API = "https://worktrail.ai/api/ContributorAdminFormDynamic";
-const FIELD_DYNAMIC_API_HEADERS = {
-    APIKEY: "Securitas@#!1234",
-    "Content-Type": "application/json"
-};
 
 // EMPTY SAMPLE DATA - Will be generated dynamically
 export const SAMPLE_BULK_ROWS: Record<string, any>[] = [];
@@ -193,9 +173,9 @@ function UpdateEmployeeFormV2({
                 reqBody["EmployeeCode"] = employeeCode;
                 reqBody["Contributor"] = contributor;
                 const { data } = await axios.post(
-                    EDIT_EMP_API_URL,
+                    API_ENDPOINTS.ContributorEditData,
                     reqBody,
-                    { headers: EDIT_EMP_API_HEADERS }
+                    { headers: API_HEADER }
                 );
                 if (!data || !Array.isArray(data.data)) {
                     throw new Error(data?.message || data?.error || "Edit data could not be loaded!");
@@ -330,9 +310,9 @@ function UpdateEmployeeFormV2({
             payload["Contributor"] = form.Contributor || contributor;
 
             // API: send as array (like add), to ContributorData API
-            const resp = await fetch(API_URL, {
+            const resp = await fetch(API_ENDPOINTS.ContributorData, {
                 method: "POST",
-                headers: API_HEADERS,
+                headers: API_HEADER,
                 body: JSON.stringify([payload])
             });
             const resText = await resp.text();
@@ -557,9 +537,9 @@ export default function ConUserAddEmployee() {
             (async () => {
                 try {
                     const contrib = user?.CompanyName || company || initialCompany;
-                    const resp = await fetch(FIELD_DYNAMIC_API, {
+                    const resp = await fetch(API_ENDPOINTS.ContributorAdminFormDynamic, {
                         method: "POST",
-                        headers: FIELD_DYNAMIC_API_HEADERS,
+                        headers: API_HEADER,
                         body: JSON.stringify({ Contributor: contrib })
                     });
                     const data = await resp.json();
@@ -760,9 +740,9 @@ export default function ConUserAddEmployee() {
             if (contributorVal) {
                 bodyPayload.Contributor = contributorVal;
             }
-            const response = await fetch(SEARCH_API_URL, {
+            const response = await fetch(API_ENDPOINTS.ContributorEmpSearch, {
                 method: "POST",
-                headers: SEARCH_API_HEADERS,
+                headers: API_HEADER,
                 body: JSON.stringify(bodyPayload)
             });
             const resText = await response.text();
@@ -806,9 +786,9 @@ export default function ConUserAddEmployee() {
         setTablePage(1);
         try {
             const contributorVal = (user?.CompanyName || initialCompany || company || "Securitas India").trim();
-            const dynResp = await fetch(FIELD_DYNAMIC_API, {
+            const dynResp = await fetch(API_ENDPOINTS.ContributorAdminFormDynamic, {
                 method: "POST",
-                headers: FIELD_DYNAMIC_API_HEADERS,
+                headers: API_HEADER,
                 body: JSON.stringify({ Contributor: contributorVal })
             });
             const dynDataRaw = await dynResp.text();
@@ -819,9 +799,9 @@ export default function ConUserAddEmployee() {
                 fetchedDynamicFields = dynData.data;
             }
             setDynamicFields(fetchedDynamicFields);
-            const empResp = await fetch(SEARCH_API_URL, {
+            const empResp = await fetch(API_ENDPOINTS.ContributorEmpSearch, {
                 method: "POST",
-                headers: SEARCH_API_HEADERS,
+                headers: API_HEADER,
                 body: JSON.stringify({ Contributor: contributorVal })
             });
             const empRaw = await empResp.text();
@@ -926,8 +906,8 @@ export default function ConUserAddEmployee() {
             let response, parsedBody;
             console.log(normalizedRows)
             try {
-                response = await axios.post(API_URL, normalizedRows, {
-                    headers: API_HEADERS,
+                response = await axios.post(API_ENDPOINTS.ContributorData, normalizedRows, {
+                    headers: API_HEADER,
                     validateStatus: () => true // we'll handle errors ourselves
                 });
                 parsedBody = response.data;
@@ -1043,8 +1023,8 @@ export default function ConUserAddEmployee() {
         try {
             const normalized = normalizeBulkRow(form, form.Contributor);
             console.log(normalized);
-            const response = await axios.post(API_URL, [normalized], {
-                headers: API_HEADERS,
+            const response = await axios.post(API_ENDPOINTS.ContributorData, [normalized], {
+                headers: API_HEADER,
                 validateStatus: () => true // We'll handle error cases manually
             });
             let parsedBody: any = response.data;

@@ -72,7 +72,7 @@ export const CONTRIBUTOR_MENU: MenuRoute[] = [
 ]
 
 export const CONTRIBUTORADMIN_MENU: MenuRoute[] = [
-  { Sno: 1, Usertype: 'ContributorAdmin', Route: '/dashboard', components: 'Dashboard.tsx' },
+  { Sno: 1, Usertype: 'ContributorAdmin', Route: '/dashboard', components: 'ContributorDashboard.tsx' },
   { Sno: 2, Usertype: 'ContributorAdmin', Route: '/ServiceRequest', components: 'ContributorServicerequest.tsx' },
   { Sno: 3, Usertype: 'ContributorAdmin', Route: '/ConAdminAddEmployee', components: 'ConAdminAddEmployee.tsx' },
   { Sno: 3, Usertype: 'ContributorAdmin', Route: '/ConAdminUserMaster', components: 'ConAdminUsermaster.tsx' },
@@ -82,7 +82,7 @@ export const CONTRIBUTORADMIN_MENU: MenuRoute[] = [
 ]
 
 export const CONTRIBUTORUSER_MENU: MenuRoute[] = [
-  { Sno: 1, Usertype: 'ContributorUser', Route: '/dashboard', components: 'Dashboard.tsx' },
+  { Sno: 1, Usertype: 'ContributorUser', Route: '/dashboard', components: 'ContributorDashboard.tsx' },
   { Sno: 2, Usertype: 'ContributorUser', Route: '/ServiceRequest', components: 'ServiceRequest.tsx' },
   { Sno: 3, Usertype: 'ContributorUser', Route: '/ConUserAddEmployee', components: 'ConUserAddEmployee.tsx' },
   { Sno: 6, Usertype: 'ContributorUser', Route: '/Termsandconditions', components: 'TermsandConditions.tsx' },
@@ -92,7 +92,7 @@ export const CONTRIBUTORUSER_MENU: MenuRoute[] = [
 
 // Client menu
 export const CLIENT_MENU: MenuRoute[] = [
-  { Sno: 1, Usertype: 'Client', Route: '/dashboard', components: 'Dashboard.tsx' },
+  { Sno: 1, Usertype: 'Client', Route: '/dashboard', components: 'ClientDashboard.tsx' },
   { Sno: 2, Usertype: 'Client', Route: '/CandidateVerification', components: 'CandidateVerificationForm.tsx' },
   { Sno: 2, Usertype: 'Client', Route: '/ClientRequest', components: 'ClientRequest.tsx' },
   { Sno: 3, Usertype: 'Client', Route: '/ServiceRequest', components: 'ServiceRequest.tsx' },

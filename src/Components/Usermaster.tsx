@@ -18,6 +18,7 @@ import {
   Check,
   Briefcase
 } from "lucide-react";
+import { API_ENDPOINTS,API_HEADER } from "../endpoint";
 
 type OrgType = {
   OrganizationID: number;
@@ -104,12 +105,9 @@ const UserMaster: React.FC = () => {
     setOrgLoading(true);
     setOrgError(null);
     try {
-      const response = await fetch("https://worktrail.ai/api/OrgmasterData", {
+      const response = await fetch(API_ENDPOINTS.OrgmasterData, {
         method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          "APIKEY": "Securitas@#!1234",
-        },
+        headers: API_HEADER,
       });
       if (!response.ok) {
         throw new Error(`Error: ${response.statusText}`);
@@ -138,11 +136,9 @@ const UserMaster: React.FC = () => {
   const fetchContributorAdmins = () => {
     setAdminLoading(true);
     setAdminError(null);
-    fetch("https://worktrail.ai/api/ContributorAdminData", {
+    fetch(API_ENDPOINTS.ContributorAdminData, {
       method: "GET",
-      headers: {
-        "APIKEY": "Securitas@#!1234",
-      },
+      headers: API_HEADER,
     })
       .then((res) => {
         if (!res.ok) throw new Error("Error fetching contributor admins");
@@ -301,12 +297,9 @@ const UserMaster: React.FC = () => {
         usermasterid: pendingChange.to === "ContributorUser" ? "3" : "2",
       };
 
-      const res = await fetch("https://worktrail.ai/api/ContributorUpdate", {
+      const res = await fetch(API_ENDPOINTS.ContributorUpdate, {
         method: "POST",
-        headers: {
-          "APIKEY": "Securitas@#!1234",
-          "Content-Type": "application/json",
-        },
+        headers: API_HEADER,
         body: JSON.stringify(payload),
       });
 

@@ -15,6 +15,7 @@ import {
   ChevronRight,
   ShieldAlert
 } from "lucide-react";
+import { API_ENDPOINTS,API_HEADER } from "../endpoint";
 
 type OrgType = {
   OrganizationID: number;
@@ -71,11 +72,9 @@ const OrgMaster: React.FC = () => {
     setOrgsError(null);
     setTableMessage(null);
     try {
-      const res = await fetch("https://worktrail.ai/api/OrgmasterData", {
+      const res = await fetch(API_ENDPOINTS.OrgmasterData, {
         method: "GET",
-        headers: {
-          "APIKEY": "Securitas@#!1234",
-        },
+        headers: API_HEADER,
       });
       if (!res.ok) {
         const text = await res.text();
@@ -109,9 +108,9 @@ const OrgMaster: React.FC = () => {
 
     setIsSubmitting(true);
     try {
-      const res = await fetch("https://worktrail.ai/api/Orgmastermanage", {
+      const res = await fetch(API_ENDPOINTS.Orgmastermanage, {
         method: "POST",
-        headers: API_HEADERS,
+        headers: API_HEADER,
         body: JSON.stringify({
           OrganizationName: orgName.trim(),
           IsDeleted: 0,
@@ -158,9 +157,9 @@ const OrgMaster: React.FC = () => {
     setEditLoadingId(org.OrganizationID);
     setTableMessage(null);
     try {
-      const res = await fetch("https://worktrail.ai/api/OrgmasterNameUpdate", {
+      const res = await fetch(API_ENDPOINTS.OrgmasterNameUpdate, {
         method: "POST",
-        headers: API_HEADERS,
+        headers: API_HEADER,
         body: JSON.stringify({
           OrganizationID: org.OrganizationID.toString(),
           OrganizationName: editOrgName.trim(),
@@ -193,9 +192,9 @@ const OrgMaster: React.FC = () => {
     setDeleteModalOrg(null);
 
     try {
-      const res = await fetch("https://worktrail.ai/api/OrgmasterDelete", {
+      const res = await fetch(API_ENDPOINTS.OrgmasterDelete, {
         method: "POST",
-        headers: API_HEADERS,
+        headers: API_HEADER,
         body: JSON.stringify({
           OrganizationID: org.OrganizationID.toString(),
         }),

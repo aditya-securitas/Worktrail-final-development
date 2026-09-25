@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useNavigate } from 'react-router-dom';
+import { API_ENDPOINTS,API_HEADER } from '../endpoint';
 
 export type EmployeeRecord = {
   Sno: number;
@@ -87,11 +88,9 @@ const ServiceRequest: React.FC = () => {
   const fetchAllRecords = async () => {
     setLoading(true);
     try {
-      const resp = await fetch('https://worktrail.ai/api/AdminClientData', {
+      const resp = await fetch(API_ENDPOINTS.AdminClientData, {
         method: 'GET',
-        headers: {
-          APIKEY: 'Securitas@#!1234',
-        },
+        headers: API_HEADER,
       });
       if (!resp.ok) throw new Error(`API Error: ${resp.status}`);
       const json = await resp.json();

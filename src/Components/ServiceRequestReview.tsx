@@ -50,7 +50,7 @@ import {
   Maximize2
 } from 'lucide-react';
 import { useAuth } from '../useAuth';
-import { API_ENDPOINTS } from '../endpoint';
+import { API_ENDPOINTS,API_HEADER } from '../endpoint';
 import { type VerificationRecord } from './CandidateVerificationForm';
 import {
   getLogoImageData,
@@ -80,15 +80,7 @@ export const isDocumentOrMediaUrl = (val: any): boolean => {
 
 // Single API endpoint containing both client requests and contributor records
 const REVIEW_CLIENT_DATA_API_URL =
-  (API_ENDPOINTS as any).reviewClientData || 'https://worktrail.ai/api/ReviewClientData';
-
-const API_HEADERS = {
-  APIKEY: 'Securitas@#!1234',
-  'Content-Type': 'application/json'
-};
-
-// Add UpdateFinalReport constant
-const UPDATE_FINAL_REPORT_URL = 'https://worktrail.ai/api/UpdateFinalReport';
+  (API_ENDPOINTS as any).reviewClientData;
 
 export interface FieldVerificationState {
   verified: boolean | null; // true = Yes, false = No, null = unselected
@@ -635,7 +627,7 @@ const ServiceRequestReview: React.FC<any> = (props) => {
       try {
         const res = await fetch(REVIEW_CLIENT_DATA_API_URL, {
           method: 'POST',
-          headers: API_HEADERS,
+          headers: API_HEADER,
           body: JSON.stringify(payload)
         });
 
@@ -851,9 +843,9 @@ const ServiceRequestReview: React.FC<any> = (props) => {
         DownloadStatus: downloadStatus,
       };
       console.log(payload)
-      const res = await fetch(UPDATE_FINAL_REPORT_URL, {
+      const res = await fetch(API_ENDPOINTS.UpdateFinalReport, {
         method: 'POST',
-        headers: API_HEADERS,
+        headers: API_HEADER,
         body: JSON.stringify(payload),
       });
       if (!res.ok) {
@@ -879,22 +871,30 @@ const ServiceRequestReview: React.FC<any> = (props) => {
       Status: actionStatus,
       remarks: overallRemarks,
       fieldChecks,
-      verifiedBy: user?.username || user?.email || 'Facilitator Reviewer',
+      verifiedBy: user?.username || user?.EmailID,
       verifiedAt: new Date().toISOString()
     };
 
     try {
-      const updateUrl = (API_ENDPOINTS as any).clientDocumentUpdate || 'https://worktrail.ai/api/ClientDocumentUpdate';
+      const updateUrl = (API_ENDPOINTS as any).clientDocumentUpdate;
       await fetch(updateUrl, {
         method: 'POST',
-        headers: API_HEADERS,
+        headers: API_HEADER,
         body: JSON.stringify(updatePayload)
       });
       showToast(`Verification decision recorded as "${actionStatus}"!`, 'success');
-      setRecord((prev) => (prev ? { ...prev, status: actionStatus, remarks: overallRemarks } : null));
+      setRecord((prev) =>
+        prev
+          ? { ...prev, status: actionStatus as VerificationRecord['status'], remarks: overallRemarks }
+          : null
+      );
     } catch {
       showToast(`Verification decision updated locally as "${actionStatus}".`, 'success');
-      setRecord((prev) => (prev ? { ...prev, status: actionStatus, remarks: overallRemarks } : null));
+      setRecord((prev) =>
+        prev
+          ? { ...prev, status: actionStatus as VerificationRecord['status'], remarks: overallRemarks }
+          : null
+      );
     } finally {
       setIsUpdating(false);
     }
@@ -1040,7 +1040,7 @@ const ServiceRequestReview: React.FC<any> = (props) => {
         overallRemarks: overallRemarks || record.remarks || '',
         fieldChecks,
         comparisonFields,
-        reviewerName: user?.username || user?.email || 'Worktrail Auditor',
+        reviewerName: user?.username || user?.EmailID || 'Worktrail Auditor',
         hasDiscrepancy: actionStatus === 'Found Discrepancy' || stats.mismatches > 0
       });
 
@@ -1077,8 +1077,8 @@ const ServiceRequestReview: React.FC<any> = (props) => {
     const candidateName = record.candidateName || 'Candidate';
     const employeeCode = record.employeeId || '—';
     const reqId = record.requestId || record.id || 'REQ-01';
-    const reviewerName = user?.username || user?.email || 'Worktrail Reviewer';
-    const reviewerEmail = user?.email || user?.EmailID || 'reviewer@worktrail.ai';
+    const reviewerName = user?.username || user?.EmailID || 'Worktrail Reviewer';
+    const reviewerEmail = user?.EmailID || user?.EmailID || 'reviewer@worktrail.ai';
 
     // Find contributor contact email if available
     const contrEmail =

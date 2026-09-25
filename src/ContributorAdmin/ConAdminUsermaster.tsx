@@ -24,6 +24,7 @@ import {
   Eye,
   EyeOff
 } from "lucide-react";
+import { API_ENDPOINTS,API_HEADER } from "../endpoint";
 
 const primaryBtnClass =
   "inline-flex items-center justify-center gap-2 h-11 px-8 bg-gradient-to-r from-[#10B981] to-[#5850EC] hover:brightness-110 active:scale-[0.98] text-white font-bold text-xs tracking-wider uppercase rounded-full shadow-md hover:shadow-lg transition-all duration-200 cursor-pointer select-none outline-none disabled:grayscale disabled:opacity-50 disabled:cursor-not-allowed";
@@ -219,11 +220,10 @@ export default function ConAdminUserMaster() {
       setLoading(true);
       try {
         const companyName = encodeURIComponent(user.CompanyName);
-        const url = `https://worktrail.ai/api/ContributorAdminData?companyName=${companyName}`;
+        const url = `${API_ENDPOINTS.ContributorAdminData}?companyName=${companyName}`;
+   
         const response = await axios.get(url, {
-          headers: {
-            APIKEY: "Securitas@#!1234"
-          }
+          headers: API_HEADER
         });
         if (response.data && Array.isArray(response.data.data)) {
           setAdminData(response.data.data);
@@ -264,11 +264,8 @@ export default function ConAdminUserMaster() {
   useEffect(() => {
     const fetchOrgs = async () => {
       try {
-        const response = await axios.get("https://worktrail.ai/api/OrgmasterData", {
-          headers: {
-            "Content-Type": "application/json",
-            APIKEY: "Securitas@#!1234"
-          }
+        const response = await axios.get(API_ENDPOINTS.OrgmasterData, {
+          headers: API_HEADER
         });
         if (response.data && Array.isArray(response.data.data)) {
           setOrganizations(response.data.data);
@@ -292,13 +289,11 @@ export default function ConAdminUserMaster() {
     setLoading(true);
     try {
       const companyName = encodeURIComponent(user.CompanyName);
-      const url = `https://worktrail.ai/api/ContributorAdminData?companyName=${companyName}`;
+      const url = `${API_ENDPOINTS.ContributorAdminData}?companyName=${companyName}`;
       // Log the API URL for ContributorAdminData
       console.log("Fetching ContributorAdminData API at:", url);
       const response = await axios.get(url, {
-        headers: {
-          APIKEY: "Securitas@#!1234"
-        }
+        headers: API_HEADER
       });
       // Log the response data from ContributorAdminData
       console.log("ContributorAdminData Axios API Response:", response.data);
@@ -425,11 +420,8 @@ export default function ConAdminUserMaster() {
     console.log("Register API Payload:", payload);
 
     try {
-      const response = await axios.post("https://worktrail.ai/api/ContributorRegister", payload, {
-        headers: {
-          APIKEY: "Securitas@#!1234",
-          "Content-Type": "application/json"
-        }
+      const response = await axios.post(API_ENDPOINTS.ContributorRegister, payload, {
+        headers: API_HEADER
       });
 
       // Log the axios response
@@ -574,11 +566,8 @@ export default function ConAdminUserMaster() {
 
       console.log("ContributorDelete API Axios Payload:", payload);
 
-      const response = await axios.post("https://worktrail.ai/api/ContributorDelete", payload, {
-        headers: {
-          APIKEY: "Securitas@#!1234",
-          "Content-Type": "application/json"
-        }
+      const response = await axios.post(API_ENDPOINTS.ContributorDelete, payload, {
+        headers: API_HEADER
       });
 
       // Log the Axios response

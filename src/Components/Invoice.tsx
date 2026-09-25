@@ -66,8 +66,8 @@ export default function Invoice() {
 
     const loadInvoices = async () => {
       setLoading(true)
-      const clientEmail = (user?.email || user?.Email || user?.username || '').trim()
-      const targetUrl = API_ENDPOINTS.clientEmpData || 'https://worktrail.ai/api/ClientEmpData'
+      const clientEmail = (user?.EmailID || user?.EmailID || user?.username || '').trim()
+      const targetUrl = API_ENDPOINTS.clientEmpData 
       let clientEmpList: any[] = []
 
       try {

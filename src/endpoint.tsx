@@ -3,6 +3,13 @@
  * Pure fetch implementation with zero external dependencies.
  */
 
+
+// API Header to be used in API requests, exported for reuse
+export const API_HEADER = {
+  APIKEY: "Securitas@#!1234",
+  "Content-Type": "application/json",
+};
+
 export interface AxiosRequestConfig {
   baseURL?: string
   headers?: Record<string, string>
@@ -30,7 +37,7 @@ export class AxiosClient {
   private resInterceptors: Array<(r: AxiosResponse) => any> = []
 
   constructor(defaults: AxiosRequestConfig = {}) {
-    this.defaults = { headers: { 'Content-Type': 'application/json' }, ...defaults }
+    this.defaults = { headers: { ...API_HEADER }, ...defaults }
   }
 
   async request<T = any>(cfg: AxiosRequestConfig & { url?: string; method?: string }): Promise<AxiosResponse<T>> {
@@ -83,14 +90,12 @@ export class AxiosClient {
   patch = <T = any>(url: string, data?: any, c?: AxiosRequestConfig) => this.request<T>({ ...c, url, data, method: 'PATCH' })
 }
 
-export const BASE_URL = 'https://worktrail.ai/api'
+//export const BASE_URL = 'https://worktrail.ai/api'
+export const STAGE_URL = 'http://10.80.0.83:3000/api'
 
 export const apiClient = new AxiosClient({
-  baseURL: BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-    APIKEY: 'Securitas@#!1234',
-  },
+  baseURL: STAGE_URL,
+  headers: { ...API_HEADER },
 })
 
 apiClient.interceptors.request.use((config) => {
@@ -112,29 +117,47 @@ export const axios = {
 
 export const API_ENDPOINTS = {
   auth: {
-    login: `${BASE_URL}/login`,
-    register: `${BASE_URL}/Register`,
-    logout: `${BASE_URL}/auth/logout`,
-    me: `${BASE_URL}/auth/me`,
-    verifyLoginOtp: `${BASE_URL}/VerifyLoginOtp`,
-    verifyRegistrationOtp: `${BASE_URL}/VerifyRegistrationOtp`,
-    requestPasswordReset: `${BASE_URL}/RequestPasswordReset`,
-    updatePassword: `${BASE_URL}/UpdatePassword`,
+    login: `${STAGE_URL}/login`,
+    register: `${STAGE_URL}/Register`,
+    logout: `${STAGE_URL}/auth/logout`,
+    me: `${STAGE_URL}/auth/me`,
+    verifyLoginOtp: `${STAGE_URL}/VerifyLoginOtp`,
+    verifyRegistrationOtp: `${STAGE_URL}/VerifyRegistrationOtp`,
+    requestPasswordReset: `${STAGE_URL}/RequestPasswordReset`,
+    updatePassword: `${STAGE_URL}/UpdatePassword`,
   },
-  menu: `${BASE_URL}/Menu`,
+  menu: `${STAGE_URL}/Menu`,
   payments: {
-    createOrder: `${BASE_URL}/Payment/CreateOrder`,
-    verify: `${BASE_URL}/Payment/Verify`,
-    transaction: (orderId: string) => `${BASE_URL}/Payment/Transaction/${encodeURIComponent(orderId)}`,
+    createOrder: `${STAGE_URL}/Payment/CreateOrder`,
+    verify: `${STAGE_URL}/Payment/Verify`,
+    transaction: (orderId: string) => `${STAGE_URL}/Payment/Transaction/${encodeURIComponent(orderId)}`,
   },
-  clientEmpData: `${BASE_URL}/ClientEmpData`,
-  clientEmpStatus: `${BASE_URL}/ClientEmpStatus`,
-  reviewClientData: `${BASE_URL}/ReviewClientData`,
-  clientDocumentUpdate: `${BASE_URL}/ClientDocumentUpdate`,
+  clientEmpData: `${STAGE_URL}/ClientEmpData`,
+  clientEmpStatus: `${STAGE_URL}/ClientEmpStatus`,
+  reviewClientData: `${STAGE_URL}/ReviewClientData`,
+  clientDocumentUpdate: `${STAGE_URL}/ClientDocumentUpdate`,
   users: {
-    profile: `${BASE_URL}/users/profile`,
+    profile: `${STAGE_URL}/users/profile`,
   },
+  OrgmasterData:`${STAGE_URL}/OrgmasterData`,
+  ContributorData:`${STAGE_URL}/ContributorData`,
+  ContributorEmpSearch:`${STAGE_URL}/ContributorEmpSearch`,
+  ContributorEditData:`${STAGE_URL}/ContributorEditData`,
+  ContributorAdminFormDynamic:`${STAGE_URL}/ContributorAdminFormDynamic`,
+  ContributorAdminData:`${STAGE_URL}/ContributorAdminData`,
+  ContributorRegister:`${STAGE_URL}/ContributorRegister`,
+  ContributorDelete:`${STAGE_URL}/ContributorDelete`,
+  ContributorUpdate:`${STAGE_URL}/ContributorUpdate`,
+  UpdateFinalReport:`${STAGE_URL}/UpdateFinalReport`,
+  AdminClientData:`${STAGE_URL}/AdminClientData`,
+  Orgmastermanage:`${STAGE_URL}/Orgmastermanage`,
+  OrgmasterNameUpdate:`${STAGE_URL}/OrgmasterNameUpdate`,
+  OrgmasterDelete:`${STAGE_URL}/OrgmasterDelete`,
+  ContributorServiceRequest:`${STAGE_URL}/ContributorServiceRequest`,
+  DownloadUpdatePDF:`${STAGE_URL}/DownloadUpdatePDF`
 } as const
 
 export type ApiEndpoint =
   (typeof API_ENDPOINTS)[keyof typeof API_ENDPOINTS][keyof (typeof API_ENDPOINTS)[keyof typeof API_ENDPOINTS]]
+
+export const API_HEADERS = { ...API_HEADER };

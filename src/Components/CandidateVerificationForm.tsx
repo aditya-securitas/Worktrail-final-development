@@ -1329,10 +1329,8 @@ function CandidateVerificationForm() {
   const getClientIdentifier = useCallback(() => {
     const idStr = user?.id ? `CL-${user.id}` : ''
     const nameStr =
-      user?.CompanyName ||
-      (user?.FirstName ? `${user.FirstName} ${user.LastName || ''}`.trim() : '') ||
-      'Enterprise Client'
-    const emailStr = (user?.username || user?.Email || user?.email || 'client@worktrail.ai').trim()
+      user?.CompanyName 
+    const emailStr = (user?.username || user?.EmailID || user?.EmailID || 'client@worktrail.ai').trim()
     return {
       clientId: idStr || (user?.username ? `CL-${user.username.split('@')[0]}` : 'CL-2026'),
       clientName: nameStr,
@@ -1341,206 +1339,8 @@ function CandidateVerificationForm() {
   }, [user])
 
   // Load recent candidate verification requests directly from live database API
-  const loadRecentRequestsForClient = useCallback(async () => {
-    const clientInfo = getClientIdentifier()
-    const clientEmail = clientInfo.clientEmail.toLowerCase()
-    const allRecords: VerificationRecord[] = []
 
-    try {
-      const statusApiUrl = API_ENDPOINTS.clientEmpStatus || 'https://worktrail.ai/api/ClientEmpStatus'
-      let clientEmpList: any[] = []
 
-      // 1. Primary: GET on client employee ID and client email from clientEmpStatus API
-      const employeeIdVal = String(user?.id || user?.EmployeeCode || user?.EmployeeId || clientInfo.clientId || '').replace(/^CL-/, '')
-      try {
-        const queryParams = new URLSearchParams()
-        if (employeeIdVal) {
-          queryParams.append('clientEmployeeId', employeeIdVal)
-          queryParams.append('EmployeeCode', employeeIdVal)
-          queryParams.append('EmployeeId', employeeIdVal)
-          queryParams.append('ClientEmpId', employeeIdVal)
-          queryParams.append('id', employeeIdVal)
-        }
-        if (clientEmail) {
-          queryParams.append('Clientemail', clientEmail)
-          queryParams.append('email', clientEmail)
-        }
-
-        const res = await axios.get(`${statusApiUrl}?${queryParams.toString()}`, {
-          headers: {
-            APIKEY: 'Securitas@#!1234',
-            'Content-Type': 'application/json',
-          },
-        })
-        // Axios returns the parsed data in res.data, so no need to call .json()
-        const data = res.data
-        clientEmpList = Array.isArray(data) ? data : data?.data || data?.candidates || data?.records || data?.status || []
-      } catch (statusErr) {
-        console.warn('ClientEmpStatus GET query notice in CandidateVerificationForm:', statusErr)
-      }
-
-      // If combined params returned empty, try with client employee ID alone or Clientemail alone
-      if (!clientEmpList || clientEmpList.length === 0) {
-        if (employeeIdVal) {
-          try {
-            const res = await axios.get(
-              `${statusApiUrl}?clientEmployeeId=${encodeURIComponent(employeeIdVal)}`,
-              {
-                headers: {
-                  APIKEY: 'Securitas@#!1234',
-                  'Content-Type': 'application/json',
-                },
-              }
-            );
-            const data = res.data;
-            clientEmpList = Array.isArray(data)
-              ? data
-              : data?.data || data?.candidates || data?.records || data?.status || [];
-          } catch (empErr) {
-            console.warn('ClientEmpStatus employeeId GET notice in CandidateVerificationForm:', empErr);
-          }
-        }
-        if ((!clientEmpList || clientEmpList.length === 0) && clientEmail) {
-          try {
-            const res = await axios.get(
-              `${statusApiUrl}?Clientemail=${encodeURIComponent(clientEmail)}`,
-              {
-                headers: {
-                  APIKEY: 'Securitas@#!1234',
-                  'Content-Type': 'application/json',
-                },
-              }
-            );
-            const data = res.data;
-            clientEmpList = Array.isArray(data)
-              ? data
-              : data?.data || data?.candidates || data?.records || data?.status || [];
-          } catch (err) {
-            console.warn('ClientEmpStatus single GET notice in CandidateVerificationForm:', err);
-          }
-        }
-      }
- 
-
-      // 2. Secondary fallback: Query clientEmpData if clientEmpStatus returned no records
-      if (!clientEmpList || clientEmpList.length === 0) {
-        const fallbackUrl = API_ENDPOINTS.clientEmpData || 'https://worktrail.ai/api/ClientEmpData'
-        try {
-          const res = await axios.post(
-            fallbackUrl,
-            {
-              Clientemail: clientEmail,
-              email: clientEmail,
-            },
-            {
-              headers: {
-                'Content-Type': 'application/json',
-                APIKEY: 'Securitas@#!1234',
-              },
-            }
-          )
-          console.log('ClientEmpData POST response:', res)
-          const data = res.data
-          clientEmpList = Array.isArray(data) ? data : data?.data || data?.candidates || []
-        } catch (postError) {
-          console.log('Error in ClientEmpData POST:', postError)
-          // Continue to fallback GET
-        }
-      }
-
-      // 3. Fallback GET on clientEmpData if still empty
-      if (!clientEmpList || clientEmpList.length === 0) {
-        const fallbackUrl = API_ENDPOINTS.clientEmpData || 'https://worktrail.ai/api/ClientEmpData'
-        try {
-          const getRes = await axios.get(fallbackUrl, {
-            headers: {
-              APIKEY: 'Securitas@#!1234',
-            },
-          })
-          console.log('ClientEmpData GET response:', getRes)
-          const getData = getRes.data
-          clientEmpList = Array.isArray(getData) ? getData : getData?.data || getData?.candidates || []
-        } catch (getError) {
-          console.log('Error in ClientEmpData GET:', getError)
-          // Ignored
-        }
-      }
-
-      if (Array.isArray(clientEmpList) && clientEmpList.length > 0) {
-        // Flatten nested candidates if API returned grouped payloads
-        const flatList: any[] = []
-        clientEmpList.forEach((item: any, itemIdx: number) => {
-          if (Array.isArray(item.candidates) && item.candidates.length > 0) {
-            item.candidates.forEach((c: any, cIdx: number) => {
-              flatList.push({
-                ...item,
-                ...c,
-                id: c.id || item.id || `cand-${itemIdx}-${cIdx}`,
-                RequestId: c.RequestId || c.requestId || item.RequestId || item.requestId || item.orderId,
-                Contributor: c.Contributor || item.Contributor || item.verifierName,
-                Clientemail: c.Clientemail || item.Clientemail || clientEmail,
-                verificationType: c.verificationType || item.verificationType,
-                status: c.status || item.status || 'Pending',
-                created_at: c.created_at || item.created_at,
-              })
-            })
-          } else {
-            flatList.push(item)
-          }
-        })
-
-        flatList.forEach((item: any, idx: number) => {
-          const fullName =
-            [item.FirstName, item.MiddleName, item.LastName].filter(Boolean).join(' ') ||
-            item.candidateName ||
-            item.CandidateName ||
-            item.name ||
-            'Candidate'
-          const reqId = item.RequestId || item.requestId || item.orderId || `VR-${idx}`
-          if (!allRecords.some((r) => r.requestId === reqId)) {
-            allRecords.push({
-              id: item.id ? String(item.id) : reqId,
-              requestId: reqId,
-              candidateName: fullName,
-              employeeId: item.EmployeeCode || item.employeeId || item.EmpCode || '—',
-              candidateEmail: item.Email || item.candidateEmail || item.email || '',
-              contactNumber: item.MobileNo || item.contactNumber || item.mobile || '',
-              verifierId: item.OrganizationID ? String(item.OrganizationID) : '1',
-              verifierName: item.Contributor || item.verifierName || 'Registered Enterprise',
-              verifierCategory: 'Registered Organization',
-              verifierCode: `ORG-${item.OrganizationID || '1'}`,
-              dateOfJoining: item.DateOfJoining || item.dateOfJoining || '—',
-              dateOfLeaving: item.DateOfLeaving || item.dateOfLeaving || 'Present',
-              isCurrentlyEmployed: !item.DateOfLeaving || item.DateOfLeaving.toLowerCase() === 'present',
-              designation: item.LastPositionHeld || item.designation || item.Designation || '—',
-              department: item.Department || item.department || '—',
-              verificationType: item.verificationType || item.VerificationType || 'Standard Employment Verification',
-              remarks: item.remarks || item.Remarks || 'Client Candidate Verification Record',
-              uploadedFilesCount: item.LOA ? 1 : (item.uploadedFilesCount || 0),
-              submittedBy: item.Clientemail || item.submittedBy || clientEmail,
-              submittedAt: item.created_at ? item.created_at.split('T')[0] : (item.submittedAt || new Date().toISOString().split('T')[0]),
-              status: (item.status as any) || 'Pending',
-              amount: item.Amount || item.amount || 470.82,
-              transactionId: item.TransactionId || item.transactionId,
-              paymentId: item.PaymentId || item.paymentId,
-              orderId: item.OrderId || item.orderId,
-              clientId: clientInfo.clientId,
-              customFields: item,
-              dynamicData: item,
-            })
-          }
-        })
-      }
-    } catch {
-      // Ignored
-    }
-
-    setClientRecentRequests(allRecords)
-  }, [getClientIdentifier, user])
-
-  useEffect(() => {
-    loadRecentRequestsForClient()
-  }, [loadRecentRequestsForClient])
 
   // Real-time live status checker
   const handleCheckStatus = async (record: VerificationRecord) => {
@@ -1553,7 +1353,7 @@ function CandidateVerificationForm() {
     }))
 
     try {
-      const checkUrl = API_ENDPOINTS.reviewClientData || 'https://worktrail.ai/api/ReviewClientData'
+      const checkUrl = API_ENDPOINTS.reviewClientData 
       let liveStatus = record.status || 'Pending'
       let feedbackMsg = `Status confirmed: ${liveStatus} at ${record.verifierName}. In queue for verification.`
 
@@ -1563,7 +1363,7 @@ function CandidateVerificationForm() {
           {
             requestId: reqId,
             EmployeeCode: record.employeeId,
-            Clientemail: user?.username || user?.email || record.submittedBy || '',
+            Clientemail: user?.username || user?.EmailID || record.submittedBy || '',
           },
           {
             headers: {
@@ -1889,7 +1689,7 @@ function CandidateVerificationForm() {
         verificationType: 'Standard Employment Verification',
         remarks: remarks.trim() || 'Dynamic candidate verification submission',
         uploadedFilesCount: uploadedFiles.length,
-        submittedBy: user?.username || user?.FirstName || 'Client User',
+        submittedBy: user?.username ||  'Client User',
         submittedAt: todayFormatted,
         status: 'Pending',
         amount: customAmount || orgTotalPrice,
@@ -1940,7 +1740,7 @@ function CandidateVerificationForm() {
       step = "Build candidates array and clientEmail";
       const candidates = [candidateApiObject]
       const isClient = user?.Usertype?.toLowerCase() === 'client'
-      const clientEmail = (paymentSender.email || (isClient ? (user?.email || user?.Email || user?.username) : '') || candEmail || 'client@worktrail.ai').trim()
+      const clientEmail = (paymentSender.email || (isClient ? (user?.EmailID) : '')).trim()
       console.log("[saveAndCompleteRecord] candidates array:", candidates)
 
       step = "POST to clientEmpData endpoint";
@@ -1971,7 +1771,7 @@ function CandidateVerificationForm() {
       step = "Mark client has requests";
       markClientHasRequests(user, candEmail)
       step = "Load recent requests";
-      loadRecentRequestsForClient()
+  
 
       step = "Update local records UI state";
       setLastSubmittedRecord(newRecord)
@@ -2038,10 +1838,10 @@ function CandidateVerificationForm() {
       setSelectedOrgAmount(payAmount)
       const isClient = user?.Usertype?.toLowerCase() === 'client'
       const clientEmail = isClient
-        ? (user?.email || user?.Email || user?.username || '')
+        ? (user?.EmailID || user?.EmailID || user?.username || '')
         : (singleForm['Email'] || singleForm['Candidate Email'] || '')
       const clientName = isClient
-        ? (user?.FirstName ? `${user.FirstName} ${user.LastName || ''}`.trim() : (user?.CompanyName || ''))
+        ? (user?.username ? `${user.username} ${user.username || ''}`.trim() : (user?.CompanyName || ''))
         : (singleForm['CandidateName'] || singleForm['FirstName'] || '')
       const clientPhone = isClient
         ? (user?.MobileNo || user?.Mobile || '')
@@ -2088,10 +1888,10 @@ function CandidateVerificationForm() {
     setSelectedOrgAmount(batchTotal)
     const isClient = user?.Usertype?.toLowerCase() === 'client'
     const clientEmail = isClient
-      ? (user?.email || user?.Email || user?.username || '')
+      ? (user?.EmailID || user?.EmailID ||  '')
       : (bulkRows[0]?.['Email'] || bulkRows[0]?.['Candidate Email'] || '')
     const clientName = isClient
-      ? (user?.FirstName ? `${user.FirstName} ${user.LastName || ''}`.trim() : (user?.CompanyName || ''))
+      ? (user?.username ? `${user.username} ${user.username || ''}`.trim() : (user?.CompanyName || ''))
       : (bulkRows[0]?.['CandidateName'] || bulkRows[0]?.['FirstName'] || '')
     const clientPhone = isClient
       ? (user?.MobileNo || user?.Mobile || '')
@@ -2100,7 +1900,7 @@ function CandidateVerificationForm() {
       name: clientName,
       phone: clientPhone,
       email: clientEmail,
-    })
+    })  
     setPaymentTargetMode('bulk')
     setIsPaymentModalOpen(true)
   }
@@ -2153,7 +1953,7 @@ function CandidateVerificationForm() {
       // Map candidateName, email, phone from payer modal state
       const isClient = user?.Usertype?.toLowerCase() === 'client'
       const candName = sender.name || singleForm['CandidateName'] || singleForm['FirstName'] || 'Candidate'
-      const candEmail = sender.email || (isClient ? (user?.email || user?.username) : '') || singleForm['Email'] || 'client@worktrail.ai'
+      const candEmail = sender.email || (isClient ? (user?.EmailID || user?.username) : '') || singleForm['Email'] || 'client@worktrail.ai'
       const candPhone = cleanPhone(sender.phone || (isClient ? user?.MobileNo : '') || singleForm['MobileNo'])
 
       payload.candidateName = candName
@@ -2391,7 +2191,7 @@ function CandidateVerificationForm() {
           verificationType: 'Standard Employment Verification',
           remarks: 'Dynamic bulk candidate verification batch request',
           uploadedFilesCount: 0,
-          submittedBy: user?.username || user?.FirstName || 'Client User',
+          submittedBy: user?.username || user?.username || 'Client User',
           submittedAt: todayFormatted,
           status: 'Pending',
           amount: customAmount || orgTotalPrice,
@@ -2482,7 +2282,7 @@ function CandidateVerificationForm() {
       })
 
       const isClient = user?.Usertype?.toLowerCase() === 'client'
-      const clientEmail = (paymentSender.email || (isClient ? (user?.email || user?.Email || user?.username) : '') || bulkRows[0]?.['Email'] || 'client@worktrail.ai').trim()
+      const clientEmail = (paymentSender.email || (isClient ? (user?.EmailID) : '') || bulkRows[0]?.['Email'] ).trim()
 
       const postPayload = {
         candidates: apiBulkRows,
@@ -2519,7 +2319,7 @@ function CandidateVerificationForm() {
       }
 
       markClientHasRequests(user, user?.username)
-      await loadRecentRequestsForClient()
+
 
       setLastSubmittedRecord(newRecords[0] || null)
       setLastSubmittedBatch(newRecords)
@@ -2565,8 +2365,8 @@ function CandidateVerificationForm() {
       const payAmount = customPayAmount || Number((batchCount * orgTotalPrice).toFixed(2))
 
       const isClient = user?.Usertype?.toLowerCase() === 'client'
-      const candName = sender.name || (isClient ? (user?.CompanyName || user?.FirstName) : '') || `${batchCount} Candidates (${selectedOrgName})`
-      const candEmail = sender.email || (isClient ? (user?.email || user?.username) : '') || bulkRows[0]?.['Email'] || 'client@worktrail.ai'
+      const candName = sender.name || (isClient ? (user?.CompanyName || user?.CompanyName) : '') || `${batchCount} Candidates (${selectedOrgName})`
+      const candEmail = sender.email || (isClient ? (user?.EmailID || user?.username) : '') || bulkRows[0]?.['Email'] || 'client@worktrail.ai'
       const candPhone = cleanPhone(sender.phone || (isClient ? user?.MobileNo : '') || bulkRows[0]?.['MobileNo'])
 
       // 1. Ensure Razorpay Checkout script is loaded
@@ -3079,8 +2879,8 @@ function CandidateVerificationForm() {
           <div className="flex items-center gap-3.5">
             <div className="hidden sm:flex flex-col text-right">
               <span className="text-xs font-black text-white tracking-wide">
-                {user?.FirstName
-                  ? `${user.FirstName} ${user.LastName || ''}`
+                {user?.username
+                  ? `${user.username} ${user.username || ''}`
                   : user?.username || 'Client User'}
               </span>
               <span className="text-[10px] text-teal-300 uppercase tracking-widest font-mono font-bold">
@@ -3089,7 +2889,7 @@ function CandidateVerificationForm() {
             </div>
 
             <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#10B981] to-[#5850EC] text-white flex items-center justify-center font-black text-sm shadow-md shadow-teal-900/30 border border-white/25">
-              {(user?.FirstName?.charAt(0) || user?.username?.charAt(0) || 'C').toUpperCase()}
+              {(user?.username?.charAt(0) || user?.username?.charAt(0) || 'C').toUpperCase()}
             </div>
 
             <button

@@ -19,10 +19,10 @@ import {
   KeyRound,
   RefreshCw,
   ArrowLeft,
+  ListRestart,
   Check
 } from 'lucide-react'
 import securitasLogo from './assets/Img/logo_b.png'
-
 import axios from 'axios'
 
 type RegisterProps = { onLogin?: () => void }
@@ -120,21 +120,13 @@ const validateSingleField = (
       return ''
 
     case 'companyName':
-      if (accountType === 'Contributor') {
-        if (!val) return 'Company name is required'
-        // Validation disables input so length/characters don't matter here
-      }
       return ''
 
     case 'clientCompanyName':
-      if (accountType === 'Client') {
-        if (!val) return 'Company name is required'
-        // Simple presence validation for Client field.
-      }
       return ''
 
     case 'companyCode':
-      if (!val) return ''
+      if (!val) return 'Company code is required'
       if (val.length < 2) return 'Company code must be at least 2 characters'
       if (!/^[A-Z0-9\-_/]+$/i.test(val)) {
         return 'Can only contain alphanumeric characters, hyphens, and slashes'
@@ -232,7 +224,7 @@ function Register({ onLogin }: RegisterProps) {
     if (accountType === 'Contributor') {
       setOrgsLoading(true)
       setOrgsError('')
-      axios.get('https://worktrail.ai/api/OrgmasterData', {
+      axios.get(API_ENDPOINTS.OrgmasterData, {
         headers: {
           APIKEY: 'Securitas@#!1234'
         }
@@ -363,7 +355,8 @@ function Register({ onLogin }: RegisterProps) {
           'email',
           'firstName',
           'lastName',
-          'clientCompanyName', // ADDED for client
+          'companyCode',
+          'clientCompanyName',
           'password',
           'confirmPassword'
         ]
@@ -408,8 +401,8 @@ function Register({ onLogin }: RegisterProps) {
       email: form.email.trim(),
       FirstName: form.firstName.trim(),
       LastName: form.lastName.trim(),
-      CompanyName: accountType === 'Contributor' ? form.companyName : form.clientCompanyName, // pass as selected organization name or client input
-      CompanyCode: accountType === 'Contributor' && form.companyCode.trim() ? form.companyCode.trim() : null,
+      CompanyName: (accountType === 'Contributor' ? form.companyName : form.clientCompanyName)?.trim() || null,
+      CompanyCode: form.companyCode.trim() ? form.companyCode.trim() : null,
       GSTNumber: accountType === 'Contributor' && form.gstNo.trim() ? form.gstNo.trim() : null,
       Address: accountType === 'Contributor' && form.address.trim() ? form.address.trim() : null,
       City: accountType === 'Contributor' && form.city.trim() ? form.city.trim() : null,
@@ -645,7 +638,7 @@ function Register({ onLogin }: RegisterProps) {
             disabled={orgsLoading}
             required={required}
           >
-            <option value="">Select organization...</option>
+            <option value="">Select organization (Optional)...</option>
             {orgs.map((org) => (
               <option key={org.OrganizationID} value={org.OrganizationName}>{org.OrganizationName}</option>
             ))}
@@ -719,7 +712,7 @@ function Register({ onLogin }: RegisterProps) {
             value={form[field]}
             onChange={(event) => updateField(field, event.target.value)}
             onBlur={() => handleBlur(field)}
-            placeholder={'Enter your company name'}
+            placeholder={'Enter your company name (Optional)'}
             autoComplete="off"
             className={`w-full placeholder-slate-400 outline-none text-xs sm:text-sm bg-transparent font-medium ${
               hasError ? 'text-rose-900' : 'text-slate-800'
@@ -836,23 +829,25 @@ function Register({ onLogin }: RegisterProps) {
     return (
       <div className="flex flex-col items-center text-center w-full font-securitas select-text animate-fade-in py-4">
         <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center mb-5 text-emerald-600 shadow-sm border border-emerald-200">
-          <CheckCircle2 className="w-9 h-9" />
+          <ListRestart className="w-9 h-9" />
         </div>
 
         <h2 className="text-2xl sm:text-3xl font-extrabold text-[#082136] tracking-tight leading-tight mb-2">
-          Account Verified!
+          Account is under review!
         </h2>
         <p className="text-slate-500 text-xs sm:text-sm font-medium max-w-sm mb-6">
-          Your <span className="font-semibold text-slate-700">{accountType}</span> account has been successfully verified and activated.
+          Your <span className="font-semibold text-slate-700">{accountType}</span> account is under review please wait for final approval.
         </p>
 
+
+        <p className=' w-[100%] mb-5 p-2 border border-[#8A9AB2] rounded-full text-slate-500 text-xs sm:text-sm font-medium tracking-wider  flex items-center justify-center gap-2 cursor-pointer select-none shadow-md'>Please wait for the approval confirmation on your registered email address.</p>
         <Link
           to="/login"
           onClick={onLogin}
           className="w-full h-[50px] rounded-full text-white text-xs sm:text-[13px] font-bold tracking-wider uppercase bg-gradient-to-r from-[#10B981] to-[#5850EC] hover:brightness-110 hover:shadow-[0_8px_25px_rgba(16,185,129,0.3)] active:scale-[0.98] transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer select-none shadow-md"
         >
-          <span>Proceed to Sign In</span>
-          <ArrowRight className="w-4 h-4" />
+          <span className="text-white">Proceed to Sign In</span>
+          <ArrowRight className="w-4 h-4 cursor-pointer text-white" />
         </Link>
       </div>
     )
@@ -1032,20 +1027,21 @@ function Register({ onLogin }: RegisterProps) {
           {/* Dynamic Contributor Fields */}
           {accountType === 'Contributor' && (
             <>
-              {input('companyName', 'Company Name', 'Select company', true, 'text', 'sm:col-span-2')}
-              {input('companyCode', 'Company Code', 'e.g. ACM-01', false, 'text', 'col-span-1')}
+              {input('companyCode', 'Company Code', 'e.g. ACM-01', true, 'text', 'col-span-1')}
+              {input('companyName', 'Company Name', 'Select company (Optional)', false, 'text', 'col-span-1')}
               {input('gstNo', 'GST Number', 'e.g. 07AAACS1122C1ZK', false, 'text', 'col-span-1')}
+              {input('zipCode', 'ZIP / PIN Code', 'e.g. 400001', false, 'text', 'col-span-1')}
               {input('address', 'Office Address', 'Building, Street...', false, 'text', 'sm:col-span-2')}
               {input('city', 'City', 'e.g. Mumbai', false, 'text', 'col-span-1')}
               {input('state', 'State', 'e.g. Maharashtra', false, 'text', 'col-span-1')}
-              {input('country', 'Country', 'India', false, 'text', 'col-span-1')}
-              {input('zipCode', 'ZIP / PIN Code', 'e.g. 400001', false, 'text', 'col-span-1')}
+              {input('country', 'Country', 'India', false, 'text', 'sm:col-span-2')}
             </>
           )}
-          {/* New Client Company Name Field */}
+          {/* Client Fields */}
           {accountType === 'Client' && (
             <>
-              {input('clientCompanyName', 'Company Name', 'Enter your company name', true, 'text', 'sm:col-span-2')}
+              {input('companyCode', 'Company Code', 'e.g. CL-01', true, 'text', 'col-span-1')}
+              {input('clientCompanyName', 'Company Name', 'Enter company name (Optional)', false, 'text', 'col-span-1')}
             </>
           )}
 

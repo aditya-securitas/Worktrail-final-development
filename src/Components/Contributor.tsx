@@ -30,24 +30,8 @@ import {
 import * as XLSX from 'xlsx';
 import { useAuth } from '../useAuth';
 import { OrgLogo } from './OrgLogo';
-
-// API Endpoints supporting primary and fallback routing
-const SEARCH_API_URLS = [
-  'https://worktrail.ai/api/ContributorEmpSearch'
-];
-
-const ORG_API_URLS = [
-  'https://worktrail.ai/api/OrgmasterData'
-];
-
-const ADMIN_API_URLS = [
-  'https://worktrail.ai/api/ContributorAdminData'
-];
-
-const API_HEADERS = {
-  'APIKEY': 'Securitas@#!1234',
-  'Content-Type': 'application/json'
-};
+import { API_ENDPOINTS,API_HEADER } from '../endpoint';
+import axios from 'axios';
 
 // Types
 export interface EmployeeRecord {
@@ -117,27 +101,6 @@ const Contributor: React.FC = () => {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  // Safe API Fetcher with fallback
-  const fetchWithFallback = async (urls: string[], options: RequestInit): Promise<any> => {
-    let lastError: any = null;
-    for (const url of urls) {
-      try {
-        const res = await fetch(url, options);
-        if (res.ok) {
-          const text = await res.text();
-          try {
-            return JSON.parse(text);
-          } catch {
-            return text;
-          }
-        }
-      } catch (err) {
-        lastError = err;
-      }
-    }
-    throw lastError || new Error('Request failed on all endpoints');
-  };
-
   // Load all contributor data
   const loadAllContributorData = async () => {
     setLoading(true);
@@ -152,12 +115,11 @@ const Contributor: React.FC = () => {
       ];
 
       try {
-        const orgRes = await fetchWithFallback(ORG_API_URLS, {
-          method: 'GET',
-          headers: API_HEADERS
+        const orgRes = await axios.get(API_ENDPOINTS.OrgmasterData, {
+          headers: API_HEADER
         });
-        if (orgRes && Array.isArray(orgRes.data)) {
-          const fetchedOrgs: ContributorOrg[] = orgRes.data.map((item: any) => ({
+        if (orgRes && Array.isArray(orgRes.data?.data)) {
+          const fetchedOrgs: ContributorOrg[] = orgRes.data.data.map((item: any) => ({
             OrganizationID: item.OrganizationID,
             OrganizationName: item.OrganizationName
           }));
@@ -178,12 +140,11 @@ const Contributor: React.FC = () => {
 
       // 2. Fetch Contributor Accounts (Admins/Users)
       try {
-        const adminRes = await fetchWithFallback(ADMIN_API_URLS, {
-          method: 'GET',
-          headers: API_HEADERS
+        const adminRes = await axios.get(API_ENDPOINTS.OrgmasterData, {
+          headers: API_HEADER
         });
-        if (adminRes && Array.isArray(adminRes.data)) {
-          setContributorAccounts(adminRes.data);
+        if (adminRes && Array.isArray(adminRes.data?.data)) {
+          setContributorAccounts(adminRes.data.data);
         }
       } catch (adminErr) {
         console.warn('Could not fetch contributor accounts:', adminErr);
@@ -202,18 +163,20 @@ const Contributor: React.FC = () => {
       // Fetch records for each contributor concurrently
       const recordPromises = uniqueContributorNames.map(async (companyName) => {
         try {
-          const result = await fetchWithFallback(SEARCH_API_URLS, {
-            method: 'POST',
-            headers: API_HEADERS,
-            body: JSON.stringify({ Contributor: companyName })
-          });
-          if (result && Array.isArray(result.data)) {
-            return result.data.map((r: any) => ({
+          const result = await axios.post(
+            API_ENDPOINTS.ContributorEmpSearch,
+            { Contributor: companyName },
+            { headers: API_HEADER }
+          );
+          // Expecting data as result.data.data
+          const data = result.data?.data;
+          if (data && Array.isArray(data)) {
+            return data.map((r: any) => ({
               ...r,
               Contributor: r.Contributor || companyName
             }));
-          } else if (result && result.data && typeof result.data === 'object') {
-            return [{ ...result.data, Contributor: result.data.Contributor || companyName }];
+          } else if (data && typeof data === 'object') {
+            return [{ ...data, Contributor: data.Contributor || companyName }];
           }
           return [];
         } catch {

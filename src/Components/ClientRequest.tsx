@@ -30,6 +30,7 @@ import {
   getLogoImageData,
   getClientLogoData,
 } from './pdf-utils';
+import { API_ENDPOINTS,API_HEADER } from '../endpoint';
 
 export type RawEmployeeRecord = {
   Sno?: number;
@@ -87,7 +88,7 @@ const ClientRequest: React.FC = () => {
 
   // Client Identifier (e.g. CL-SECURITASCLIENT)
   const clientIdentifier = useMemo(() => {
-    if (user?.CompanyCode) return user.CompanyCode;
+    if (user?.CompanyName) return user.CompanyName;
     if (user?.username) {
       return `CL-${user.username.replace(/[^a-zA-Z0-9]/g, '').toUpperCase()}`;
     }
@@ -117,11 +118,6 @@ const ClientRequest: React.FC = () => {
 
     const email = (
       user?.EmailID ||
-      user?.email ||
-      user?.Email ||
-      (user as any)?.emailId ||
-      (user?.username && user.username.includes('@') ? user.username : '') ||
-      localStorage.getItem('worktrail_client_email') ||
       'Client.worktrial@Securitas-india.com'
     ).trim();
 
@@ -131,14 +127,11 @@ const ClientRequest: React.FC = () => {
       return;
     }
 
-    const requestUrl = 'https://worktrail.ai/api/ClientEmpStatus';
+    
     const requestPayload = {
       Clientemail: email,
     };
-    const requestHeaders = {
-      APIKEY: 'Securitas@#!1234',
-      'Content-Type': 'application/json',
-    };
+    const requestHeaders = API_HEADER
 
     if (isManual) {
       setRefreshing(true);
@@ -148,7 +141,7 @@ const ClientRequest: React.FC = () => {
     setError(null);
 
     try {
-      const res: any = await axios.post(requestUrl, requestPayload, { headers: requestHeaders });
+      const res: any = await axios.post(API_ENDPOINTS.clientEmpStatus, requestPayload, { headers: requestHeaders });
 
       const rawList: RawEmployeeRecord[] = Array.isArray(res.data)
         ? res.data
@@ -446,16 +439,13 @@ const ClientRequest: React.FC = () => {
       // Notify backend of download, then reload API data (refresh table state)
       await axios
         .post(
-          'https://worktrail.ai/api/DownloadUpdatePDF',
+         API_ENDPOINTS.DownloadUpdatePDF,
           {
             Contributor: contributor,
             EmployeeCode: employeeCode,
           },
           {
-            headers: {
-              APIKEY: 'Securitas@#!1234',
-              'Content-Type': 'application/json',
-            },
+            headers: API_HEADER,
           }
         );
         

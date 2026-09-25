@@ -33,11 +33,13 @@ import {
 import { axios, API_ENDPOINTS } from './endpoint'
 import ConAdminAddEmployee from './ContributorAdmin/ConAdminAddEmployee'
 import ContributorServicerequest from './Components/ContributorServicerequest'
-
+import ContributorDashboard from './ContributorDashboard'
+import ClientDashboard from './ClientDashboard'
 const EXTERNAL_LINKS: Record<string, boolean> = {
   'Privacypolicy.tsx': true,
   'Termsandconditions.tsx': true
 }
+import { CheckCircle2 } from 'lucide-react'
 
 function MenuComponent({ item }: { item: MenuRoute | undefined }) {
   const { user } = useAuth()
@@ -46,13 +48,6 @@ function MenuComponent({ item }: { item: MenuRoute | undefined }) {
   if (item.components === 'ServiceRequestReview.tsx') return <ServiceRequestReview />
   if (item.components === 'ConUserAddEmployee.tsx') return <ConUserAddEmployee />
   if (item.components === 'ConAdminAddEmployee.tsx') return <ConAdminAddEmployee />
-  if (item.components === 'AddEmployee.tsx') {
-    const ut = (user?.Usertype || '').toLowerCase().trim().replace(/[\s_-]+/g, '')
-    if (ut === 'contributor' || ut === 'contributoruser' || ut === 'contributoradmin' || ut === 'admincontributor') {
-      return <ConUserAddEmployee />
-    }
-    return <AddEmployee />
-  }
   if (item.components === 'Client.tsx') return <Navigate to="/ClientRequest" replace />
   if (item.components === 'ClientRequest.tsx') return <ClientRequest />
   if (item.components === 'CandidateVerificationForm.tsx') return <CandidateVerificationForm />
@@ -64,6 +59,8 @@ function MenuComponent({ item }: { item: MenuRoute | undefined }) {
   if (item.components === 'Invoice.tsx') return <Invoice />
   if (item.components === 'ConAdminUsermaster.tsx') return <ConAdminUsermaster />
   if (item.components === 'ContributorServicerequest.tsx') return <ContributorServicerequest />
+  if (item.components === 'ContributorDashboard.tsx') return <ContributorDashboard />
+  if (item.components === 'ClientDashboard.tsx') return <ClientDashboard />
   return null
 }
 
@@ -121,9 +118,6 @@ function Dashboard() {
       user?.CompanyName 
     const emailStr = (
       user?.EmailID ||
-      user?.EmailID ||  
-      user?.username ||
-      (user as any)?.Clientemail ||
       'Client.worktrial@Securitas-india.com'
     ).trim()
     const derivedClientId =
@@ -140,177 +134,13 @@ function Dashboard() {
     }
   }, [user])
 
-  const loadRecords = async () => {
-    setIsRecordsLoading(true)
-    const clientEmail = (
-      clientInfo.clientEmail 
-    ).trim()
-    const statusApiUrl = API_ENDPOINTS.clientEmpStatus || 'https://worktrail.ai/api/ClientEmpStatus'
-    let clientEmpList: any[] = []
 
-    // 1. Primary: POST to ClientEmpStatus using Clientemail
-    try {
-      const res: any = await axios.post(
-        statusApiUrl,
-        { Clientemail: clientEmail },
-        {
-          headers: {
-            APIKEY: 'Securitas@#!1234',
-            'Content-Type': 'application/json',
-          },
-        }
-      )
-      clientEmpList = Array.isArray(res.data)
-        ? res.data
-        : res.data?.data || res.data?.candidates || res.data?.records || res.data?.status || []
-    } catch (err) {
-      console.warn('ClientEmpStatus POST fetch notice in Dashboard:', err)
-    }
-
-    // 2. Secondary: If personal email returned empty, query ClientEmpStatus with enterprise email
-    if (!clientEmpList || clientEmpList.length === 0) {
-      if (clientEmail !== 'Client.worktrial@Securitas-india.com') {
-        try {
-          const res: any = await axios.post(
-            statusApiUrl,
-            { Clientemail: 'Client.worktrial@Securitas-india.com' },
-            {
-              headers: {
-                APIKEY: 'Securitas@#!1234',
-                'Content-Type': 'application/json',
-              },
-            }
-          )
-          clientEmpList = Array.isArray(res.data)
-            ? res.data
-            : res.data?.data || res.data?.candidates || res.data?.records || res.data?.status || []
-        } catch (err) {
-          console.warn('ClientEmpStatus enterprise fallback notice in Dashboard:', err)
-        }
-      }
-    }
-
-    // 3. Fallback GET on ClientEmpStatus if still empty
-    if (!clientEmpList || clientEmpList.length === 0) {
-      try {
-        const getRes = await fetch(statusApiUrl, {
-          method: 'GET',
-          headers: {
-            APIKEY: 'Securitas@#!1234',
-          },
-        })
-        if (getRes.ok) {
-          const getData = await getRes.json()
-          clientEmpList = Array.isArray(getData)
-            ? getData
-            : getData?.data || getData?.candidates || getData?.records || getData?.status || []
-        }
-      } catch (getErr) {
-        console.warn('ClientEmpStatus GET fetch notice in Dashboard:', getErr)
-      }
-    }
-
-    if (Array.isArray(clientEmpList) && clientEmpList.length > 0) {
-      const flatList: any[] = []
-      clientEmpList.forEach((item: any, itemIdx: number) => {
-        if (Array.isArray(item.candidates) && item.candidates.length > 0) {
-          item.candidates.forEach((c: any, cIdx: number) => {
-            flatList.push({
-              ...item,
-              ...c,
-              id: c.id || item.id || `dash-cand-${itemIdx}-${cIdx}`,
-              RequestId: c.RequestId || c.requestId || item.RequestId || item.requestId || item.orderId,
-              Contributor: c.Contributor || item.Contributor || item.verifierName,
-              Clientemail: c.Clientemail || item.Clientemail || clientEmail,
-              clientId: c.clientId || c.ClientId || item.clientId || item.ClientId || clientInfo.clientId,
-              verificationType: c.verificationType || item.verificationType,
-              status: c.status || item.status || 'Pending',
-              created_at: c.created_at || item.created_at,
-            })
-          })
-        } else {
-          flatList.push(item)
-        }
-      })
-
-      const isClientUser = user?.Usertype?.toLowerCase() === 'client'
-      const filteredList = isClientUser && clientEmail
-        ? flatList.filter((item: any) => {
-            const itemClient = (item.Clientemail || item.ClientEmail || item.clientEmail || item.submittedBy || '').trim().toLowerCase()
-            const itemClientId = String(item.clientId || item.ClientId || item.ClientEmpId || item.clientEmployeeId || '').trim().toLowerCase()
-            const authClientId = String(clientInfo.clientId || '').toLowerCase()
-            const authId = String(clientInfo.rawId || user?.id || '').toLowerCase()
-
-            const matchesEmail = itemClient && itemClient === clientEmail.toLowerCase()
-            const matchesId = (authClientId && itemClientId && itemClientId === authClientId) || (authId && itemClientId && itemClientId === authId)
-
-            if (itemClient || itemClientId) {
-              return matchesEmail || matchesId
-            }
-            return true
-          })
-        : flatList
-
-      const parsedRecords: VerificationRecord[] = filteredList.map((item: any, idx: number) => {
-        const fullName =
-          [item.FirstName, item.MiddleName, item.LastName].filter(Boolean).join(' ') ||
-          item.candidateName ||
-          item.CandidateName ||
-          item.name ||
-          'Candidate'
-        const rawStatus = String(item.status || item.Status || 'Pending').trim()
-        const normalizedStatus =
-          rawStatus.toLowerCase() === 'verified'
-            ? 'Verified'
-            : rawStatus.toLowerCase() === 'rejected'
-              ? 'Rejected'
-              : rawStatus.toLowerCase() === 'in progress' || rawStatus.toLowerCase() === 'inprogress'
-                ? 'In Progress'
-                : 'Pending'
-        return {
-          id: item.id ? String(item.id) : (item.RequestId ? String(item.RequestId) : `api-rec-${idx}`),
-          requestId: item.RequestId || item.requestId || item.orderId || `VR-2026-${1000 + idx}`,
-          clientId: item.clientId || item.ClientId || item.ClientEmpId || clientInfo.clientId,
-          candidateName: fullName,
-          employeeId: item.EmployeeCode || item.employeeId || item.EmpCode || '—',
-          candidateEmail: item.Email || item.candidateEmail || item.email || '',
-          contactNumber: item.MobileNo || item.contactNumber || item.mobile || '',
-          verifierId: item.OrganizationID ? String(item.OrganizationID) : '1',
-          verifierName: item.Contributor || item.verifierName || 'Registered Enterprise',
-          verifierCategory: 'Registered Organization',
-          verifierCode: `ORG-${item.OrganizationID || '1'}`,
-          dateOfJoining: item.DateOfJoining || item.dateOfJoining || '—',
-          dateOfLeaving: item.DateOfLeaving || item.dateOfLeaving || 'Present',
-          isCurrentlyEmployed: !item.DateOfLeaving || item.DateOfLeaving.toLowerCase() === 'present',
-          designation: item.LastPositionHeld || item.designation || item.Designation || '—',
-          department: item.Department || item.department || '—',
-          verificationType: item.verificationType || item.VerificationType || 'Standard Employment Verification',
-          remarks: item.remarks || item.Remarks || 'API Synchronized Verification Record',
-          uploadedFilesCount: item.LOA ? 1 : (item.uploadedFilesCount || 0),
-          submittedBy: item.Clientemail || item.submittedBy || user?.username || 'Client User',
-          submittedAt: item.created_at ? item.created_at.split('T')[0] : (item.submittedAt || new Date().toISOString().split('T')[0]),
-          status: (normalizedStatus as any),
-          amount: item.Amount || item.amount || 1499,
-          transactionId: item.TransactionId || item.transactionId,
-          paymentId: item.PaymentId || item.paymentId,
-          orderId: item.OrderId || item.orderId,
-          customFields: item,
-          dynamicData: item,
-        }
-      })
-
-      setAllRecords(parsedRecords)
-    } else {
-      setAllRecords([])
-    }
-    setIsRecordsLoading(false)
-  }
 
   useEffect(() => {
     try {
       localStorage.removeItem('worktrail_verification_records')
     } catch {}
-    loadRecords()
+
   }, [location.pathname, user])
 
   // Dynamic records for stats & telemetry charts
@@ -601,7 +431,6 @@ function Dashboard() {
               <RecentAppealsTable
                 records={allRecords}
                 onRecordsLoaded={(recs) => setAllRecords(recs)}
-                onRefresh={loadRecords}
                 refreshing={isRecordsLoading}
                 isClient={isClientUser}
                 defaultClientId={clientInfo.clientId}
