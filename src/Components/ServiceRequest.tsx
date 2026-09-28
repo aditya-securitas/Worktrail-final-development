@@ -22,11 +22,12 @@ import {
   Phone,
   Sparkles,
   RotateCcw,
-  CheckCheck
+  CheckCheck,
+  Ban
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useNavigate } from 'react-router-dom';
-import { API_ENDPOINTS,API_HEADER } from '../endpoint';
+import { API_ENDPOINTS, API_HEADER } from '../endpoint';
 
 export type EmployeeRecord = {
   Sno: number;
@@ -55,6 +56,7 @@ export type EmployeeRecord = {
   LOA: string | null;
   SupportingDocs: string | null;
   Status: string;
+  Downloadstatus?: string | number | null;
 };
 
 type Toast = { text: string; type: 'success' | 'error' | 'info' } | null;
@@ -122,15 +124,33 @@ const ServiceRequest: React.FC = () => {
     return s.includes('completed') || s.includes('verified') || s.includes('approved');
   }
 
-  // Summary Metrics
+  // Summary Metrics (show only for valid/filtered records!)
   const stats = useMemo(() => {
-    const total = records.length;
+    // Use the actual filter below as for filteredRecords
+    const filterLogic = (rec: EmployeeRecord) => {
+      const statusStr = (rec.Status || '').toLowerCase();
+      const downloadStatus = rec.Downloadstatus;
+      if (
+        (statusStr === 'downloaded' && downloadStatus === '0') ||
+        (statusStr === 'pending' && (downloadStatus === null || typeof downloadStatus === 'undefined'))
+      ) {
+        return false;
+      }
+      return true;
+    };
+    const statRecords = records.filter(filterLogic);
+
+    const total = statRecords.length;
     let completed = 0;
     let pending = 0;
     let inProgress = 0;
 
-    records.forEach((r) => {
+    statRecords.forEach((r) => {
       const s = (r.Status || '').toLowerCase();
+      // Rejected: count as its own group (not included in completed/pending/inProgress, but included in total)
+      if (s === 'rejected') {
+        return;
+      }
       if (s.includes('complet') || s.includes('verif') || s.includes('approv')) {
         completed++;
       } else if (s.includes('progress') || s.includes('review')) {
@@ -140,7 +160,7 @@ const ServiceRequest: React.FC = () => {
       }
     });
 
-    const uniqueOrders = new Set(records.map((r) => r.OrderID).filter(Boolean)).size;
+    const uniqueOrders = new Set(statRecords.map((r) => r.OrderID).filter(Boolean)).size;
 
     return { total, completed, pending, inProgress, uniqueOrders };
   }, [records]);
@@ -148,6 +168,19 @@ const ServiceRequest: React.FC = () => {
   // Filter records for table and search
   const filteredRecords = useMemo(() => {
     return records.filter((rec) => {
+      const statusStr = (rec.Status || '').toLowerCase();
+      const downloadStatusRaw = rec.Downloadstatus;
+      const downloadStatus = typeof downloadStatusRaw === 'undefined' ? '' : String(downloadStatusRaw);
+
+      // REMOVE: Downloaded with Downloadstatus === "0"
+      if (statusStr === 'downloaded' && downloadStatus === '0') {
+        return false;
+      }
+      // REMOVE: Pending with Downloadstatus === null or undefined
+      if (statusStr === 'pending' && (downloadStatusRaw === null || typeof downloadStatusRaw === 'undefined')) {
+        return false;
+      }
+
       // Order ID filter
       if (orderId && rec.OrderID !== orderId) return false;
 
@@ -156,13 +189,22 @@ const ServiceRequest: React.FC = () => {
 
       // Status Filter Tab
       if (statusFilter !== 'all') {
-        const s = (rec.Status || '').toLowerCase();
+        // Show "Rejected" rows only in 'all' mode
+        if (statusStr === 'rejected') {
+          return statusFilter === 'all';
+        }
         if (statusFilter === 'completed') {
-          if (!s.includes('complet') && !s.includes('verif') && !s.includes('approv')) return false;
+          if (!statusStr.includes('complet') && !statusStr.includes('verif') && !statusStr.includes('approv')) return false;
         } else if (statusFilter === 'in_progress') {
-          if (!s.includes('progress') && !s.includes('review')) return false;
+          if (!statusStr.includes('progress') && !statusStr.includes('review')) return false;
         } else if (statusFilter === 'pending') {
-          if (s.includes('complet') || s.includes('verif') || s.includes('approv') || s.includes('progress') || s.includes('review')) {
+          if (
+            statusStr.includes('complet') ||
+            statusStr.includes('verif') ||
+            statusStr.includes('approv') ||
+            statusStr.includes('progress') ||
+            statusStr.includes('review')
+          ) {
             return false;
           }
         }
@@ -193,7 +235,7 @@ const ServiceRequest: React.FC = () => {
     return filteredRecords.slice(start, start + pageSize);
   }, [filteredRecords, currentPage, pageSize]);
 
-  // Excel Export
+  // Excel Export (only export actually visible/filtered records)
   const handleExportExcel = () => {
     if (!filteredRecords.length) {
       showToast('No records to export.', 'info');
@@ -601,7 +643,20 @@ const ServiceRequest: React.FC = () => {
 
                   const statusLower = (rec.Status || '').toLowerCase();
                   const isVerified = statusLower.includes('verif') || statusLower.includes('complet') || statusLower.includes('approv');
+                  const isRejected = statusLower === 'rejected';
                   const isInProgress = statusLower.includes('progress') || statusLower.includes('review');
+                  // Cast Downloadstatus to string for comparison, in case the backend sometimes returns number
+                  const downloadStatusRaw = rec.Downloadstatus;
+                  const downloadStatus = typeof downloadStatusRaw === 'undefined' ? '' : String(downloadStatusRaw);
+
+                  // For the "Review & Verify" button: disable and visually mute if Downloadstatus==="1"
+                  const reviewBtnDisabled = downloadStatus === '1';
+                  const reviewBtnOpacity = reviewBtnDisabled ? 'opacity-50 pointer-events-none grayscale' : '';
+                  const reviewBtnTitle = reviewBtnDisabled
+                    ? 'Download completed: Action disabled'
+                    : completed
+                    ? 'View the audit record'
+                    : 'Review and verify this request';
 
                   return (
                     <tr
@@ -689,7 +744,12 @@ const ServiceRequest: React.FC = () => {
 
                       {/* 7. Status Badge */}
                       <td className="py-4 px-4 text-center">
-                        {isVerified ? (
+                        {isRejected ? (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                            <Ban className="w-3.5 h-3.5 text-rose-600" />
+                            Rejected
+                          </span>
+                        ) : isVerified ? (
                           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
                             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                             Verified
@@ -712,11 +772,13 @@ const ServiceRequest: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => handleReviewAndVerify(rec.Contributor, rec.Clientemail, rec.EmployeeCode, rec)}
-                          className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs ${
+                          className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-xs ${reviewBtnOpacity} ${
                             completed
                               ? 'bg-gradient-to-r from-[#10B981] to-[#5850EC]  text-slate-700 border border-slate-200'
                               : 'bg-gradient-to-r from-[#10B981] to-[#5850EC]  text-white hover:shadow-md'
                           }`}
+                          disabled={reviewBtnDisabled}
+                          title={reviewBtnTitle}
                         >
                           <ShieldCheck className="w-3.5 h-3.5" />
                           <span>{completed ? 'View Audit' : 'Review & Verify'}</span>

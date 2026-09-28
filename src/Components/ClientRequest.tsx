@@ -4,9 +4,6 @@ import {
   RefreshCw,
   Download,
   Layers,
-  Clock,
-  ShieldCheck,
-  CheckCircle2,
   AlertTriangle,
   AlertCircle,
   Search,
@@ -15,22 +12,22 @@ import {
   FileText,
   User,
   Briefcase,
-  Activity
+  Activity,
+  CheckCircle2,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useAuth } from '../useAuth';
 import { axios } from '../endpoint';
 import { OrgLogo } from './OrgLogo';
 import {
-  analyzeCandidateData,
-  type VerificationRecord
+  type VerificationRecord,
 } from './CandidateVerificationForm';
 import {
   buildCandidatePdf,
   getLogoImageData,
   getClientLogoData,
 } from './pdf-utils';
-import { API_ENDPOINTS,API_HEADER } from '../endpoint';
+import { API_ENDPOINTS, API_HEADER } from '../endpoint';
 
 export type RawEmployeeRecord = {
   Sno?: number;
@@ -62,6 +59,40 @@ export type RawEmployeeRecord = {
   Downloadstatus?: string | number | null;
   [key: string]: any;
 };
+
+// Custom completeness analyzer ONLY looking at LOA and SupportingDocs
+function minimalAnalyzeCandidateData(record: VerificationRecord) {
+  const missingItems: { fieldName: string; status: 'missing' | 'present' }[] = [];
+  let totalFields = 2;
+  let missingCount = 0;
+
+  if (!record.raw || record.raw.LOA == null) {
+    missingItems.push({ fieldName: 'LOA', status: 'missing' });
+    missingCount++;
+  }
+  if (!record.raw || record.raw.SupportingDocs == null) {
+    missingItems.push({ fieldName: 'SupportingDocs', status: 'missing' });
+    missingCount++;
+  }
+
+  const completenessPercent = totalFields === 0 ? 100 : Math.round(((totalFields - missingCount) / totalFields) * 100);
+
+  // Compose output structure fitting table UI
+  return {
+    missingCount,
+    completenessPercent,
+    items: [
+      {
+        fieldName: 'LOA',
+        status: (!record.raw || record.raw.LOA == null) ? 'missing' : 'present',
+      },
+      {
+        fieldName: 'SupportingDocs',
+        status: (!record.raw || record.raw.SupportingDocs == null) ? 'missing' : 'present',
+      },
+    ],
+  };
+}
 
 const ClientRequest: React.FC = () => {
   const { user } = useAuth();
@@ -127,11 +158,10 @@ const ClientRequest: React.FC = () => {
       return;
     }
 
-    
     const requestPayload = {
       Clientemail: email,
     };
-    const requestHeaders = API_HEADER
+    const requestHeaders = API_HEADER;
 
     if (isManual) {
       setRefreshing(true);
@@ -185,14 +215,14 @@ const ClientRequest: React.FC = () => {
         const dojFormatted = item.DateOfJoining
           ? formatDate(item.DateOfJoining)
           : item.DOJ
-          ? formatDate(item.DOJ)
-          : '—';
+            ? formatDate(item.DOJ)
+            : '—';
 
         const dolFormatted = item.DateOfLeaving
           ? formatDate(item.DateOfLeaving)
           : item.DOL
-          ? formatDate(item.DOL)
-          : '—';
+            ? formatDate(item.DOL)
+            : '—';
 
         const isCurrentlyEmployed = !item.DateOfLeaving && !item.DOL;
 
@@ -228,7 +258,7 @@ const ClientRequest: React.FC = () => {
           remarks: item.AnyBehaviourIssue
             ? `Behaviour: ${item.AnyBehaviourIssue}`
             : (item.Remarks || item.remarks || 'Confirmed relieving date and integrity clearance'),
-          uploadedFilesCount: (item.LOA || item.loa || item.SupportingDocs) ? 1 : 0,
+          uploadedFilesCount: ((item.LOA || item.loa) || item.SupportingDocs) ? 1 : 0,
           submittedBy: item.Clientemail || clientIdentifier,
           submittedAt: item.CreatedAt ? formatDate(item.CreatedAt) : '—',
           // Use actual status string from API, pass through for UI rendering (case preserved)
@@ -245,8 +275,8 @@ const ClientRequest: React.FC = () => {
     } catch (err: any) {
       setError(
         err?.response?.data?.message ||
-          err?.message ||
-          'Could not load client requests.'
+        err?.message ||
+        'Could not load client requests.'
       );
     } finally {
       setLoading(false);
@@ -302,7 +332,7 @@ const ClientRequest: React.FC = () => {
 
       // Completeness
       if (selectedCompletenessFilter !== 'All') {
-        const analysis = analyzeCandidateData(r);
+        const analysis = minimalAnalyzeCandidateData(r);
         if (selectedCompletenessFilter === 'Complete' && analysis.missingCount > 0) return false;
         if (selectedCompletenessFilter === 'Missing' && analysis.missingCount === 0) return false;
       }
@@ -320,7 +350,7 @@ const ClientRequest: React.FC = () => {
   const rejectedRequests = records.filter((r) =>
     r.status && typeof r.status === 'string' && r.status.trim().toLowerCase() === 'rejected'
   ).length;
-  const recordsWithMissingData = records.filter((r) => analyzeCandidateData(r).missingCount > 0).length;
+  const recordsWithMissingData = records.filter((r) => minimalAnalyzeCandidateData(r).missingCount > 0).length;
 
   // Status Badge UI: Display status exactly as from API (show color for important cases)
   const getStatusBadge = (status: string) => {
@@ -354,7 +384,7 @@ const ClientRequest: React.FC = () => {
   const handleExportExcel = () => {
     if (filteredRecords.length === 0) return;
     const rows = filteredRecords.map((r, i) => {
-      const analysis = analyzeCandidateData(r);
+      const analysis = minimalAnalyzeCandidateData(r);
       const missingFields = analysis.items
         .filter((item) => item.status === 'missing')
         .map((item) => item.fieldName)
@@ -439,7 +469,7 @@ const ClientRequest: React.FC = () => {
       // Notify backend of download, then reload API data (refresh table state)
       await axios
         .post(
-         API_ENDPOINTS.DownloadUpdatePDF,
+          API_ENDPOINTS.DownloadUpdatePDF,
           {
             Contributor: contributor,
             EmployeeCode: employeeCode,
@@ -448,7 +478,7 @@ const ClientRequest: React.FC = () => {
             headers: API_HEADER,
           }
         );
-        
+
       // After success, reload the table by refreshing data
       await loadRecords(true);
     } catch (err: any) {
@@ -685,7 +715,7 @@ const ClientRequest: React.FC = () => {
               <tbody className="divide-y divide-slate-100 text-xs sm:text-sm">
                 {filteredRecords.length > 0 ? (
                   filteredRecords.map((rec) => {
-                    const analysis = analyzeCandidateData(rec);
+                    const analysis = minimalAnalyzeCandidateData(rec);
                     const missingItems = analysis.items.filter((i) => i.status === 'missing');
                     const reqKey = rec.requestId || rec.id;
                     const isChecking = checkingStatusId === reqKey;
@@ -738,7 +768,7 @@ const ClientRequest: React.FC = () => {
                                 className="text-[10px] text-amber-700 font-medium mt-1 truncate max-w-[170px]"
                                 title={missingItems.map((i) => i.fieldName).join(', ')}
                               >
-                                Missing: {missingItems.map((i) => i.fieldName.replace('Candidate ', '')).join(', ')}
+                                Missing: {missingItems.map((i) => i.fieldName).join(', ')}
                               </span>
                             </div>
                           )}
@@ -838,7 +868,7 @@ const ClientRequest: React.FC = () => {
 
       {/* Record Details Modal */}
       {selectedRecord && (() => {
-        const modalAnalysis = analyzeCandidateData(selectedRecord);
+        const modalAnalysis = minimalAnalyzeCandidateData(selectedRecord);
         const modalReqKey = selectedRecord.requestId || selectedRecord.id;
         const isCheckingModal = checkingStatusId === modalReqKey;
         const modalFeedback = statusFeedback[modalReqKey];

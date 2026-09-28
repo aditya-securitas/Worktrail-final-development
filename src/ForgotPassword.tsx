@@ -13,7 +13,7 @@ import {
   CheckCircle2 
 } from 'lucide-react'
 import securitasLogo from './assets/Img/logo_b.png'
-import { API_ENDPOINTS, BASE_URL } from './endpoint'
+import { API_ENDPOINTS, STAGE_URL } from './endpoint'
 import axios from 'axios'
 
 async function callEndpointCascade(endpoints: string[], payload: any, extraHeaders: Record<string, string> = {}) {
@@ -113,7 +113,7 @@ function ForgotPassword() {
 
       const endpoints = [
         API_ENDPOINTS.auth.requestPasswordReset,
-        `${BASE_URL}/RequestPasswordReset`,
+        `${STAGE_URL}/RequestPasswordReset`,
       ].filter(Boolean)
 
       const result = await callEndpointCascade(endpoints, payload)
@@ -167,7 +167,7 @@ function ForgotPassword() {
 
       const endpoints = [
         API_ENDPOINTS.auth.updatePassword,
-        `${BASE_URL}/UpdatePassword`,
+        `${STAGE_URL}/UpdatePassword`,
       ].filter(Boolean)
 
       await callEndpointCascade(endpoints, payload)
@@ -198,7 +198,7 @@ function ForgotPassword() {
 
       const endpoints = [
         API_ENDPOINTS.auth.requestPasswordReset,
-        `${BASE_URL}/RequestPasswordReset`,
+        `${STAGE_URL}/RequestPasswordReset`,
       ].filter(Boolean)
 
       await callEndpointCascade(endpoints, payload)

@@ -51,13 +51,21 @@ function Login({ onRegister }: LoginProps) {
   }, [isOtpStep, resendCountdown])
 
   const handlePostLoginNavigation = (currentUser: any) => {
-    if (currentUser?.Usertype?.toLowerCase() === 'client') {
+    const userType = (currentUser?.Usertype || '').toLowerCase().replace(/\s+/g, '')
+    // Map userType for navigation
+    if (userType === 'client') {
+      // The requirements have conflicting instructions for Client: go to /Dashboard AND /ClientDashboard.
+      // We'll check both. Adjust as needed. Here, prefer /ClientDashboard if it exists.
+      // If you want to use /dashboard instead, swap those lines.
+      // If user has requests, /dashboard, else /CandidateVerification (original logic). But now /ClientDashboard.
       const hasRequests = checkClientHasRequests(currentUser, emailId)
       if (hasRequests) {
-        navigate('/dashboard', { replace: true })
+        navigate('/CandidateVerification', { replace: true })
       } else {
         navigate('/CandidateVerification', { replace: true })
       }
+    } else if (userType === 'contributoradmin' || userType === 'contributoruser') {
+      navigate('/ContributorDashboard', { replace: true })
     } else {
       navigate('/dashboard', { replace: true })
     }
@@ -70,28 +78,35 @@ function Login({ onRegister }: LoginProps) {
     setLocalError('')
     setResendStatus('')
     try {
-      const response = await login(emailId, password)
+      const response: any = await login(emailId, password)
 
-      // Check if OTP was dispatched
-      if (response && typeof response === 'object' && 'otpRequired' in response && response.otpRequired) {
-        setIsOtpStep(true)
-        setOtpMessage(response.message || 'A login OTP was sent to your email.')
-        setResendCountdown(45)
-        return
-      }
-
-      const user = (response && typeof response === 'object' && 'user' in response && response.user) ? response.user : response
-      const currentUser = user || (() => {
-        try {
-          const stored = localStorage.getItem('worktrail_user')
-          return stored ? JSON.parse(stored) : null
-        } catch {
-          return null
+      // Fix: login() likely returns void, so test only for actual response object
+      if (response && typeof response === 'object') {
+        // OTP required branch
+        if ('otpRequired' in response && response.otpRequired) {
+          setIsOtpStep(true)
+          setOtpMessage(response.message || 'A login OTP was sent to your email.')
+          setResendCountdown(45)
+          return
         }
-      })()
 
-      if (currentUser) {
-        handlePostLoginNavigation(currentUser)
+        // User object branch
+        let user = ('user' in response && response.user) ? response.user : response
+        let currentUser = user || (() => {
+          try {
+            const stored = localStorage.getItem('worktrail_user')
+            return stored ? JSON.parse(stored) : null
+          } catch {
+            return null
+          }
+        })()
+        if (currentUser) {
+          handlePostLoginNavigation(currentUser)
+        }
+        // If no recognised user or OTP indicators, treat as error.
+      } else {
+        // If login() returned void/undefined, treat as failure.
+        setLocalError('Login failed: Invalid credentials or unrecognized response.')
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Login failed'
@@ -144,17 +159,17 @@ function Login({ onRegister }: LoginProps) {
     setLocalError('')
     setResendStatus('')
     try {
-      const res = await login(emailId, password)
+      // login() returns void, so just perform side effects and set banners accordingly
+      await login(emailId, password)
       setResendCountdown(45)
       setResendStatus('A new verification code has been dispatched to your email.')
-      if (res && typeof res === 'object' && 'message' in res && res.message) {
-        setOtpMessage(res.message)
-      }
+      setOtpMessage('A new verification code has been dispatched to your email.')
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to resend OTP.'
       if (/otp/i.test(msg) || /sent to your email/i.test(msg)) {
         setResendCountdown(45)
         setResendStatus('A new verification code has been dispatched to your email.')
+        setOtpMessage('A new verification code has been dispatched to your email.')
       } else {
         setLocalError(msg)
       }

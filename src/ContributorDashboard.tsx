@@ -1,52 +1,106 @@
-import { Link } from 'react-router-dom'
+import React, { useEffect, useState } from "react";
 import {
   Folder,
   Clock,
   HelpCircle,
-  ThumbsUp
-} from 'lucide-react'
-import bgVideo from './assets/video/the_element_related_to_BGV.mp4'
+  ThumbsUp,
+  CheckCircle2,
+  ListChecks,
+  Ban,
+  ListTodo,
+} from "lucide-react";
+import bgVideo from "./assets/video/the_element_related_to_BGV.mp4";
+import { useAuth } from "./useAuth";
+import axios from "axios";
+
+// Icon mapping for card types (as fallback/icons per column name)
+const columnIconMap: { [key: string]: React.ElementType } = {
+  ContributorCount: Folder,
+  TotalRequest: ListChecks,
+  CompletedRequest: CheckCircle2,
+  PendingRequest: Ban,
+  InProgressRequest: ListTodo,
+};
+
+// Color mapping for card types
+const columnColorMap: {
+  [key: string]: {
+    colorClass: string;
+    barColor: string;
+    iconBg: string;
+  };
+} = {
+  ContributorCount: {
+    colorClass: "text-indigo-500",
+    barColor: "bg-indigo-500",
+    iconBg: "bg-indigo-50 text-indigo-500",
+  },
+  TotalRequest: {
+    colorClass: "text-blue-500",
+    barColor: "bg-blue-500",
+    iconBg: "bg-blue-50 text-blue-500",
+  },
+  CompletedRequest: {
+    colorClass: "text-emerald-500",
+    barColor: "bg-emerald-500",
+    iconBg: "bg-emerald-50 text-emerald-500",
+  },
+  PendingRequest: {
+    colorClass: "text-orange-500",
+    barColor: "bg-orange-500",
+    iconBg: "bg-orange-50 text-orange-500",
+  },
+  InProgressRequest: {
+    colorClass: "text-pink-500",
+    barColor: "bg-pink-500",
+    iconBg: "bg-pink-50 text-pink-500",
+  },
+};
 
 export default function ContributorDashboard() {
-  // Hardcoded card stats for Contributor
-  const contributorCards = [
-    {
-      title: 'TOTAL CASES',
-      value: '48',
-      sub: 'Database records',
-      icon: Folder,
-      colorClass: 'text-[#5850EC]',
-      barColor: 'bg-[#5850EC]',
-      iconBg: 'bg-indigo-50 text-[#5850EC]'
-    },
-    {
-      title: 'CASE PENDING',
-      value: '14',
-      sub: 'Active running checks',
-      icon: Clock,
-      colorClass: 'text-orange-500',
-      barColor: 'bg-orange-500',
-      iconBg: 'bg-orange-50 text-orange-500'
-    },
-    {
-      title: 'REQUESTS PENDING',
-      value: '09',
-      sub: 'Running queries',
-      icon: HelpCircle,
-      colorClass: 'text-blue-500',
-      barColor: 'bg-blue-500',
-      iconBg: 'bg-blue-50 text-blue-500'
-    },
-    {
-      title: 'REQUESTS RESPONDED',
-      value: '25',
-      sub: 'Completed queries',
-      icon: ThumbsUp,
-      colorClass: 'text-pink-500',
-      barColor: 'bg-pink-500',
-      iconBg: 'bg-pink-50 text-pink-500'
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [dashboardCards, setDashboardCards] = useState<
+    { columnName: string; value: string }[]
+  >([]);
+
+  useEffect(() => {
+    const fetchDashboard = async () => {
+      setLoading(true);
+      try {
+        const res = await axios.post(
+          "https://worktrail.ai/api/ContributorDash",
+          {
+            Contributor: user?.CompanyName || "",
+          },
+          {
+            headers: {
+              APIKEY: "Securitas@#!1234",
+              "Content-Type": "application/json",
+            },
+          }
+        );
+        const apiData = res.data?.data || [];
+        // Normalize data to array of {columnName, value}
+        setDashboardCards(
+          apiData.map((item: any) => ({
+            columnName: item.ColumnName,
+            value: item.Value,
+          }))
+        );
+      } catch (error) {
+        setDashboardCards([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (user?.CompanyName) {
+      fetchDashboard();
+    } else {
+      setLoading(false);
     }
-  ]
+  }, [user?.CompanyName]);
 
   return (
     <div className="w-full select-text animate-fade-in">
@@ -77,77 +131,77 @@ export default function ContributorDashboard() {
           <p className="text-slate-300 text-xs sm:text-sm text-right leading-relaxed mb-6">
             Review inbound candidate background verification requests, verify employment credentials, and manage service requests.
           </p>
-      
         </div>
       </div>
 
-      {/* 2. Hardcoded Metric Cards Section */}
+      {/* 2. Dynamic Metric Cards Section */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        {contributorCards.map((card) => {
-          const Icon = card.icon
-          return (
+        {loading ? (
+          Array.from({ length: 4 }).map((_, idx) => (
             <div
-              key={card.title}
-              className="relative bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden p-6 flex flex-col transition-all hover:shadow-md"
+              key={idx}
+              className="relative bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden p-6 flex flex-col"
             >
-              {/* Top Accent Color Bar */}
-              <div className={`absolute top-0 left-0 right-0 h-[3.5px] ${card.barColor}`} />
-
+              <div className="absolute top-0 left-0 right-0 h-[3.5px] bg-slate-200 animate-pulse" />
               <div className="flex justify-between items-start mb-3">
-                <span className="font-bold text-slate-600 tracking-widest text-[12px]">
-                  {card.title}
+                <span className="h-4 bg-slate-100 rounded w-1/2 animate-pulse"></span>
+                <span className="p-2 rounded-xl bg-slate-100 text-slate-200 animate-pulse">
+                  <Folder className="w-4 h-4" />
                 </span>
-                <div className={`p-2 rounded-xl ${card.iconBg}`}>
-                  <Icon className="w-4 h-4" />
-                </div>
               </div>
-
               <div className="mt-5">
-                <span className={`font-extrabold block text-3xl sm:text-3.5xl ${card.colorClass}`}>
-                  {card.value}
+                <span className="font-extrabold block text-3xl sm:text-3.5xl text-slate-200 animate-pulse">
+                  --
                 </span>
-                <span className="text-slate-500 font-medium mt-1.5 block text-[12px]">
-                  {card.sub}
-                </span>
+                <span className="text-slate-300 font-medium mt-1.5 block text-[12px] h-3 animate-pulse"></span>
               </div>
             </div>
-          )
-        })}
-      </div>
+          ))
+        ) : dashboardCards.length === 0 ? (
+          <div className="col-span-full text-center text-slate-400 py-8">
+            No dashboard data available.
+          </div>
+        ) : (
+          dashboardCards.map((card) => {
+            const {
+              colorClass = "text-blue-500",
+              barColor = "bg-blue-500",
+              iconBg = "bg-blue-50 text-blue-500",
+            } = columnColorMap[card.columnName] || {};
+            const Icon = columnIconMap[card.columnName] || Folder;
+            // Card Title: Show the columnName in a user-friendly way
+            const title =
+              card.columnName
+                .replace(/([a-z])([A-Z])/g, "$1 $2")
+                .replace(/^./, (str) => str.toUpperCase()) || card.columnName;
 
-      {/* 3. Table Structure */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 select-none">
-        <div>
-          <h3 className="text-lg font-extrabold text-slate-800 tracking-tight leading-none uppercase">
-            Service Requests
-          </h3>
-          <span className="text-[9px] text-slate-400 font-bold tracking-widest mt-1 block">
-            RECENT VERIFICATION QUEUE & ACTIVITY
-          </span>
-        </div>
-      </div>
+            return (
+              <div
+                key={card.columnName}
+                className="relative bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden p-6 flex flex-col transition-all hover:shadow-md"
+              >
+                {/* Top Accent Color Bar */}
+                <div className={`absolute top-0 left-0 right-0 h-[3.5px] ${barColor}`} />
 
-      <div className="bg-white rounded-3xl shadow-sm border border-slate-200/80 overflow-hidden mb-8">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="border-b border-slate-100 bg-slate-50/70 text-[11px] font-extrabold uppercase tracking-wider text-slate-500 select-none">
-                <th className="px-6 py-4">#</th>
-                <th className="px-6 py-4">REQUEST ID</th>
-                <th className="px-6 py-4">CANDIDATE NAME</th>
-                <th className="px-6 py-4">CLIENT NAME</th>
-                <th className="px-6 py-4">VERIFICATION TYPE</th>
-                <th className="px-6 py-4">DATE</th>
-                <th className="px-6 py-4">STATUS</th>
-                <th className="px-6 py-4 text-right">ACTION</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 text-xs sm:text-sm">
-           
-            </tbody>
-          </table>
-        </div>
+                <div className="flex justify-between items-start mb-3">
+                  <span className="font-bold text-slate-600 tracking-widest text-[12px]">
+                    {title}
+                  </span>
+                  <div className={`p-2 rounded-xl ${iconBg}`}>
+                    <Icon className="w-4 h-4" />
+                  </div>
+                </div>
+
+                <div className="mt-5">
+                  <span className={`font-extrabold block text-3xl sm:text-3.5xl ${colorClass}`}>
+                    {card.value}
+                  </span>
+                </div>
+              </div>
+            );
+          })
+        )}
       </div>
     </div>
-  )
+  );
 }

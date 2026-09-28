@@ -53,6 +53,7 @@ export type RawEmployeeRecord = {
   LOA?: string | null
   SupportingDocs?: string | null
   Status?: string
+  Downloadstatus?: string | number | null
   [key: string]: any
 }
 
@@ -92,6 +93,66 @@ function analyzeLOACompleteness(record: VerificationRecord) {
     items,
   }
 }
+
+// --- Begin custom status calculation logic based on requirements ---
+type NormalizedStatus = 'Completed' | 'In Progress' | 'Verified' | 'Rejected' | 'Pending'
+
+// Given the raw Status and Downloadstatus from API, compute our internal status display
+function getNormalizedStatus(statusRaw: string | undefined, downloadStatusRaw: string | number | undefined | null): NormalizedStatus {
+  // Normalize casing and string/number for Downloadstatus
+  const status = typeof statusRaw === 'string' ? statusRaw.trim().toLowerCase() : ''
+  let downloadStatus: string | null = null
+  if (typeof downloadStatusRaw === 'string') {
+    downloadStatus = downloadStatusRaw.trim()
+  } else if (typeof downloadStatusRaw === 'number') {
+    downloadStatus = downloadStatusRaw.toString()
+  }
+  // Status logic as per requirements:
+  // "Status": "Downloaded", "Downloadstatus": "0"  => show as Completed (green)
+  if (status === 'downloaded' && downloadStatus === '0') {
+    return 'Completed'
+  }
+  // "Status": "Rejected", "Downloadstatus": "1" => Rejected
+  if (status === 'rejected' && downloadStatus === '1') {
+    return 'Rejected'
+  }
+  // "Status": "InProgress", "Downloadstatus": null => In Progress
+  if (status === 'inprogress' && (downloadStatus === null || downloadStatus === undefined || downloadStatus === '')) {
+    return 'In Progress'
+  }
+  // "Status": "Approved", "Downloadstatus": 1 => Verified
+  // if (status === 'approved' && downloadStatus === '1') {
+  //   return 'Verified'
+  // }
+  // "Status": "Pending", "Downloadstatus": null => Pending
+  if (status === 'pending' && (downloadStatus === null || downloadStatus === undefined || downloadStatus === '')) {
+    return 'Pending'
+  }
+  // Default fallbacks:
+  // If status is explicitly Rejected
+  if (status === 'rejected') {
+    return 'Rejected'
+  }
+  // If status contains progress
+  if (status.includes('progress')) {
+    return 'In Progress'
+  }
+  // If status contains verified or completed
+  // if (status.includes('verified') || status.includes('complet')) {
+  //   return 'Verified'
+  // }
+  // If status contains approved and downloadstatus is '1'
+  if (status === 'approved' && downloadStatus === '1') {
+    return 'Verified'
+  }
+  // If status is Downloaded and downloadstatus is '0'
+  if (status === 'downloaded' && downloadStatus === '0') {
+    return 'Completed'
+  }
+  // Else default to Pending
+  return 'Pending'
+}
+// --- End custom status calculation logic ---
 
 export const RecentAppealsTable: React.FC<RecentAppealsTableProps> = ({
   records: initialRecords,
@@ -198,18 +259,11 @@ export const RecentAppealsTable: React.FC<RecentAppealsTableProps> = ({
           item.name ||
           'Candidate'
 
-        let status: 'Pending' | 'In Progress' | 'Verified' | 'Rejected' = 'Pending'
-        const st = String(item.Status || item.status || '').toLowerCase()
-        if (st.includes('verif') || st.includes('complet')) {
-          status = 'Verified'
-        } else if (st.includes('progress') || st.includes('review')) {
-          status = 'In Progress'
-        } else if (st.includes('reject') || st.includes('cancel')) {
-          status = 'Rejected'
-        } else {
-          status = 'Pending'
-        }
-
+        // EXTRACT Downloadstatus (may be string or number or null/undefined)
+        const downloadStatus = (item.Downloadstatus !== undefined && item.Downloadstatus !== null) ? item.Downloadstatus : (item.downloadstatus ?? null)
+        // Use new logic to compute 'status' for display/filtering
+        const normalizedStatus = getNormalizedStatus(item.Status || item.status, downloadStatus)
+        // Set underlying field for original status if needed
         const rawEmpCode = item.EmployeeCode || item.employeeId || item.empCode || item.EmpCode || item.EmployeeID || ''
         const rawOrderId = item.OrderID || item.orderId || item.OrderId || ''
         const rawContributor = item.Contributor || item.contributor || 'Securitas'
@@ -237,9 +291,12 @@ export const RecentAppealsTable: React.FC<RecentAppealsTableProps> = ({
           uploadedFilesCount: (item.LOA || item.loa || item.SupportingDocs) ? 1 : 0,
           submittedBy: item.Clientemail || clientIdentifier,
           submittedAt: item.CreatedAt ? formatDate(item.CreatedAt) : (item.submittedAt || '—'),
-          status,
+          status: normalizedStatus,
           LOA: item.LOA || item.loa || null,
           SupportingDocs: item.SupportingDocs || null,
+          // Add for downstream use in badge rendering, inspection, exports if needed
+          _apiRawStatus: item.Status || item.status,
+          _apiDownloadstatus: downloadStatus,
           raw: item
         } as unknown as VerificationRecord
       })
@@ -380,14 +437,22 @@ export const RecentAppealsTable: React.FC<RecentAppealsTableProps> = ({
     endDate
   )
 
-  // Status Badge UI
+  // Status Badge UI -- update logic to match new NormalizedStatus and colors
   const getStatusBadge = (status: VerificationRecord['status']) => {
+    // For possible status values, see getNormalizedStatus logic above.
     switch (status) {
       case 'Verified':
         return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-teal-50 text-teal-800 border border-teal-200">
+            <span className="w-1.5 h-1.5 rounded-full bg-teal-500" />
+            Verified
+          </span>
+        )
+      case 'Completed':
+        return (
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-            Verified
+            Completed
           </span>
         )
       case 'In Progress':
@@ -415,6 +480,7 @@ export const RecentAppealsTable: React.FC<RecentAppealsTableProps> = ({
   }
 
   // Live status check query against clientEmpStatus API
+  // (optional: you may want to re-align this with getNormalizedStatus if you want)
   const handleCheckStatus = async (rec: VerificationRecord) => {
     const key = rec.orderId || rec.id
     setCheckingStatusId(key)
@@ -602,7 +668,7 @@ export const RecentAppealsTable: React.FC<RecentAppealsTableProps> = ({
       }
       
       await axios.post(
-        API_ENDPOINTS.clientDocumentUpdate || 'https://worktrail.ai/api/ClientDocumentUpdate',
+        API_ENDPOINTS.clientDocumentUpdate,
         payload,
         {
           headers: customHeaders

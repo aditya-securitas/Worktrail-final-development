@@ -2880,7 +2880,7 @@ function CandidateVerificationForm() {
             <div className="hidden sm:flex flex-col text-right">
               <span className="text-xs font-black text-white tracking-wide">
                 {user?.username
-                  ? `${user.username} ${user.username || ''}`
+                  ? `${user.username}`
                   : user?.username || 'Client User'}
               </span>
               <span className="text-[10px] text-teal-300 uppercase tracking-widest font-mono font-bold">

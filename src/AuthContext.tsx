@@ -8,7 +8,9 @@ import {
   CONTRIBUTORUSER_MENU,
   CONTRIBUTORADMIN_MENU,
   CLIENT_MENU,
-  type AuthUser
+  type AuthUser,
+  type LoginResult
+
 } from './auth-context'
 
 // Helper to map user types to their corresponding menus
@@ -92,11 +94,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const loginInFlight = useRef(false)
   const verifyInFlight = useRef(false)
 
-  const login = async (emailId: string, password: string) => {
+  const login = async (
+    emailId: string,
+    password: string
+  ): Promise<LoginResult> => {
     if (loginInFlight.current) {
-      if (import.meta.env.DEV) console.warn('[Login API] Ignoring duplicate login call while in-flight')
-      return
+      if (import.meta.env.DEV) {
+        console.warn('[Login API] Ignoring duplicate login call while in-flight')
+      }
+  
+      throw new Error('Login already in progress. Please wait a moment.')
     }
+  
     loginInFlight.current = true
     setIsLoading(true)
     setError('')
