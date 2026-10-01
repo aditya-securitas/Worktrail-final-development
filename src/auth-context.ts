@@ -22,7 +22,7 @@ export type MenuRoute = {
 
 // Superadmin menu
 export const SUPERADMIN_MENU: MenuRoute[] = [
-  { Sno: 1, Usertype: 'Superadmin', Route: '/dashboard', components: 'Dashboard.tsx' },
+  { Sno: 1, Usertype: 'Superadmin', Route: '/AdminDashboard', components: 'AdminDashboard.tsx' },
   { Sno: 2, Usertype: 'Superadmin', Route: '/ServiceRequest', components: 'ServiceRequest.tsx' },
   { Sno: 2, Usertype: 'Superadmin', Route: '/ServiceRequestReview', components: 'ServiceRequestReview.tsx' },
   { Sno: 3, Usertype: 'Superadmin', Route: '/AddEmployee', components: 'AddEmployee.tsx' },

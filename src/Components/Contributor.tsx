@@ -10,27 +10,21 @@ import {
   Eye,
   CheckCircle2,
   XCircle,
-  Calendar,
-  DollarSign,
   Briefcase,
   Mail,
   Phone,
   ShieldCheck,
-  Layers,
   Sparkles,
   ChevronRight,
   X,
   AlertCircle,
   UserCheck,
-  Building,
-  TrendingUp,
-  SlidersHorizontal,
-  FileText
+  Building
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useAuth } from '../useAuth';
 import { OrgLogo } from './OrgLogo';
-import { API_ENDPOINTS,API_HEADER } from '../endpoint';
+import { API_ENDPOINTS, API_HEADER } from '../endpoint';
 import axios from 'axios';
 
 // Types
@@ -94,7 +88,10 @@ const Contributor: React.FC = () => {
   const [selectedEmployee, setSelectedEmployee] = useState<EmployeeRecord | null>(null);
 
   // Toast
-  const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const [toastMessage, setToastMessage] = useState<{
+    text: string;
+    type: 'success' | 'error' | 'info';
+  } | null>(null);
 
   const showToast = (text: string, type: 'success' | 'error' | 'info' = 'info') => {
     setToastMessage({ text, type });
@@ -107,34 +104,22 @@ const Contributor: React.FC = () => {
     setError(null);
 
     try {
-      // 1. Fetch Organizations
-      let orgList: ContributorOrg[] = [
-        { OrganizationName: 'Securitas' },
-        { OrganizationName: 'Securitas India' },
-        { OrganizationName: 'TCS' }
-      ];
-
+      // 1. Fetch Organizations -- restrict to API-provided organizations only!
+      let orgList: ContributorOrg[] = [];
       try {
         const orgRes = await axios.get(API_ENDPOINTS.OrgmasterData, {
           headers: API_HEADER
         });
         if (orgRes && Array.isArray(orgRes.data?.data)) {
-          const fetchedOrgs: ContributorOrg[] = orgRes.data.data.map((item: any) => ({
+          orgList = orgRes.data.data.map((item: any) => ({
             OrganizationID: item.OrganizationID,
             OrganizationName: item.OrganizationName
           }));
-          const existingNames = new Set(fetchedOrgs.map((o) => o.OrganizationName.toLowerCase()));
-          // Add default well-known contributors if not already in list
-          if (!existingNames.has('securitas') && !existingNames.has('securitas india')) {
-            fetchedOrgs.unshift({ OrganizationName: 'Securitas' });
-          }
-          if (!existingNames.has('tcs')) {
-            fetchedOrgs.push({ OrganizationName: 'TCS' });
-          }
-          orgList = fetchedOrgs;
         }
       } catch (orgErr) {
-        console.warn('Could not fetch organizations, using default list:', orgErr);
+        // If organization api call fails, show no orgs at all
+        orgList = [];
+        console.warn('Could not fetch organizations:', orgErr);
       }
       setOrganizations(orgList);
 
@@ -150,17 +135,12 @@ const Contributor: React.FC = () => {
         console.warn('Could not fetch contributor accounts:', adminErr);
       }
 
-      // 3. Fetch Records across all unique Contributor organizations
+      // 3. Fetch Records only for relevant orgs (those in orgList)
       const uniqueContributorNames = Array.from(
         new Set(orgList.map((o) => o.OrganizationName.trim()).filter(Boolean))
       );
 
-      // Always include Securitas & TCS
-      if (!uniqueContributorNames.includes('Securitas')) uniqueContributorNames.push('Securitas');
-      if (!uniqueContributorNames.includes('Securitas India')) uniqueContributorNames.push('Securitas India');
-      if (!uniqueContributorNames.includes('TCS')) uniqueContributorNames.push('TCS');
-
-      // Fetch records for each contributor concurrently
+      // Fetch records for each contributor concurrently (only those in the org API!)
       const recordPromises = uniqueContributorNames.map(async (companyName) => {
         try {
           const result = await axios.post(
@@ -190,7 +170,6 @@ const Contributor: React.FC = () => {
       // Deduplicate by EmployeeCode + Contributor
       const seen = new Set<string>();
       const dedupedRecords: EmployeeRecord[] = [];
-
       for (const row of combined) {
         const key = `${String(row.Contributor || '').trim().toLowerCase()}_${String(
           row.EmployeeCode || ''
@@ -203,13 +182,10 @@ const Contributor: React.FC = () => {
 
       setAllRecords(dedupedRecords);
 
-      // Calculate record counts for each organization
+      // Calculate record counts for each organization (works with only API orgs)
       const updatedOrgs = orgList.map((org) => {
         const count = dedupedRecords.filter(
-          (r) =>
-            r.Contributor?.toLowerCase().trim() === org.OrganizationName.toLowerCase().trim() ||
-            (org.OrganizationName.toLowerCase().includes('securitas') &&
-              r.Contributor?.toLowerCase().includes('securitas'))
+          (r) => r.Contributor?.toLowerCase().trim() === org.OrganizationName.toLowerCase().trim()
         ).length;
         return { ...org, recordCount: count };
       });
@@ -245,15 +221,17 @@ const Contributor: React.FC = () => {
     return Array.from(set).sort();
   }, [allRecords]);
 
-  // Distinct contributors present in records
+  // Distinct contributors present in records (limit to orgList + contributors in current records)
   const presentContributors = useMemo(() => {
     const set = new Set<string>();
+    // Only allow contributors that are present in organizations API
+    organizations.forEach((o) => set.add(o.OrganizationName));
     allRecords.forEach((r) => {
-      if (r.Contributor && r.Contributor.trim() !== '') {
+      if (r.Contributor && r.Contributor.trim() !== '' && set.has(r.Contributor.trim())) {
+        // They must belong to orgs API list to be selectable
         set.add(r.Contributor.trim());
       }
     });
-    organizations.forEach((o) => set.add(o.OrganizationName));
     return Array.from(set).sort();
   }, [allRecords, organizations]);
 
@@ -264,27 +242,23 @@ const Contributor: React.FC = () => {
       if (selectedContributor !== 'All') {
         const recContr = (rec.Contributor || '').toLowerCase().trim();
         const selContr = selectedContributor.toLowerCase().trim();
-        if (selContr === 'securitas') {
-          if (!recContr.includes('securitas')) return false;
-        } else if (recContr !== selContr) {
+        // Only EXACT match since only showing org master entries.
+        if (recContr !== selContr) {
           return false;
         }
       }
-
       // Department filter
       if (selectedDepartment !== 'All') {
         if ((rec.Department || '').trim().toLowerCase() !== selectedDepartment.toLowerCase()) {
           return false;
         }
       }
-
       // Rehire Eligibility filter
       if (selectedRehire !== 'All') {
         const rehireVal = String(rec.EligibilityToRehire || '').trim().toLowerCase();
         if (selectedRehire === 'Yes' && !rehireVal.startsWith('y')) return false;
         if (selectedRehire === 'No' && !rehireVal.startsWith('n')) return false;
       }
-
       // Search Query
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
@@ -304,7 +278,6 @@ const Contributor: React.FC = () => {
           contr.includes(q)
         );
       }
-
       return true;
     });
   }, [allRecords, selectedContributor, selectedDepartment, selectedRehire, searchQuery]);
@@ -316,7 +289,6 @@ const Contributor: React.FC = () => {
         showToast('No records available to export.', 'info');
         return;
       }
-
       const rows = filteredRecords.map((r, idx) => ({
         'S.No': idx + 1,
         'Contributor / Company': r.Contributor || '',
@@ -336,7 +308,6 @@ const Contributor: React.FC = () => {
         'Behaviour Issues': r.AnyBehaviourIssue || '',
         'Rehire Eligible': r.EligibilityToRehire || ''
       }));
-
       const worksheet = XLSX.utils.json_to_sheet(rows);
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, 'Contributor_Data');
@@ -360,11 +331,12 @@ const Contributor: React.FC = () => {
 
   // Color generator for Contributor badge
   const getContributorBadgeStyle = (name?: string) => {
+    // Only care about the api orgs
     const lower = (name || '').toLowerCase();
     if (lower.includes('securitas')) {
       return 'bg-emerald-50 text-emerald-700 border-emerald-200/80';
     }
-    if (lower.includes('tcs')) {
+    if (lower.includes('nagarro')) {
       return 'bg-indigo-50 text-indigo-700 border-indigo-200/80';
     }
     return 'bg-purple-50 text-purple-700 border-purple-200/80';
@@ -669,7 +641,6 @@ const Contributor: React.FC = () => {
                         return (
                           <tr key={index} className="hover:bg-slate-50/60 transition-colors group">
                             <td className="py-3.5 px-4 font-mono text-slate-400 font-medium">{index + 1}</td>
-
                             {/* Contributor Pill */}
                             <td className="py-3.5 px-4">
                               <div className="flex items-center gap-2">
@@ -679,14 +650,12 @@ const Contributor: React.FC = () => {
                                 </span>
                               </div>
                             </td>
-
                             {/* Employee Code */}
                             <td className="py-3.5 px-4">
                               <span className="font-mono font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200/60">
                                 {record.EmployeeCode || '—'}
                               </span>
                             </td>
-
                             {/* Candidate Name & Contact */}
                             <td className="py-3.5 px-4">
                               <div className="font-bold text-slate-900">{fullName || 'Unnamed Employee'}</div>
@@ -699,24 +668,20 @@ const Contributor: React.FC = () => {
                                 {record.MobileNo && <span>• {record.MobileNo}</span>}
                               </div>
                             </td>
-
                             {/* Department & Position */}
                             <td className="py-3.5 px-4">
                               <div className="font-semibold text-slate-800">{record.Department || '—'}</div>
                               <div className="text-[11px] text-slate-500">{record.LastPositionHeld || '—'}</div>
                             </td>
-
                             {/* Timeline */}
                             <td className="py-3.5 px-4 text-[11px] text-slate-600">
                               <div>Join: {record.DateOfJoining || '—'}</div>
                               <div>Exit: {record.DateOfLeaving || '—'}</div>
                             </td>
-
                             {/* Salary */}
                             <td className="py-3.5 px-4 font-semibold text-slate-800">
                               {formatSalary(record.LastSalaryAnnual)}
                             </td>
-
                             {/* Rehire Status */}
                             <td className="py-3.5 px-4 text-center">
                               {isRehire ? (
@@ -729,7 +694,6 @@ const Contributor: React.FC = () => {
                                 </span>
                               )}
                             </td>
-
                             {/* Action Button */}
                             <td className="py-3.5 px-4 text-right">
                               <button
@@ -769,13 +733,11 @@ const Contributor: React.FC = () => {
                         {count} Records
                       </span>
                     </div>
-
                     <h3 className="text-lg font-bold text-slate-900">{org.OrganizationName}</h3>
                     <p className="text-xs text-slate-500 mt-1">
                       Registered Contributor Entity ID: {org.OrganizationID ? `#${org.OrganizationID}` : 'Standard'}
                     </p>
                   </div>
-
                   <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between">
                     <button
                       onClick={() => {
@@ -809,7 +771,6 @@ const Contributor: React.FC = () => {
                 {contributorAccounts.length} Active Logins
               </span>
             </div>
-
             {contributorAccounts.length === 0 ? (
               <div className="py-12 text-center text-slate-400 text-xs font-medium">
                 No contributor login records returned from ContributorAdminData.
@@ -891,7 +852,6 @@ const Contributor: React.FC = () => {
                 <X className="w-4 h-4" />
               </button>
             </div>
-
             {/* Modal Body */}
             <div className="py-6 space-y-6 text-xs sm:text-sm">
               {/* Job & Org Information */}

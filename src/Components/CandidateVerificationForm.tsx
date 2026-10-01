@@ -104,7 +104,6 @@ interface RazorpayPaymentResponse {
 
 export type Step = 'organization' | 'verificationType' | 'single' | 'bulk'
 
-const DYNAMIC_FIELD_API = 'https://worktrail.ai/api/ContributorAdminFormDynamic'
 const DYNAMIC_FIELD_API_KEY = 'Securitas@#!1234'
 
 /**
@@ -1420,7 +1419,7 @@ function CandidateVerificationForm() {
       setLoading(true)
       setOrgError(null)
       try {
-        const response = await axios.get('https://worktrail.ai/api/OrgmasterData', {
+        const response = await axios.get(API_ENDPOINTS.OrgmasterData, {
           headers: { APIKEY: DYNAMIC_FIELD_API_KEY },
         })
         if (response.data && Array.isArray(response.data.data)) {
@@ -1456,7 +1455,7 @@ function CandidateVerificationForm() {
 
       try {
         const response = await axios.post(
-          DYNAMIC_FIELD_API,
+          API_ENDPOINTS.ContributorAdminFormDynamic,
           {
             Contributor: selectedOrgName,
           },
@@ -1519,7 +1518,7 @@ function CandidateVerificationForm() {
     setDynamicFieldError(null)
     try {
       const response = await axios.post(
-        DYNAMIC_FIELD_API,
+        API_ENDPOINTS.ContributorAdminFormDynamic,
         { Contributor: selectedOrgName },
         {
           headers: {
@@ -1841,7 +1840,7 @@ function CandidateVerificationForm() {
         ? (user?.EmailID || user?.EmailID || user?.username || '')
         : (singleForm['Email'] || singleForm['Candidate Email'] || '')
       const clientName = isClient
-        ? (user?.username ? `${user.username} ${user.username || ''}`.trim() : (user?.CompanyName || ''))
+        ? (user?.username ? `${user.username}`.trim() : (user?.CompanyName || ''))
         : (singleForm['CandidateName'] || singleForm['FirstName'] || '')
       const clientPhone = isClient
         ? (user?.MobileNo || user?.Mobile || '')
@@ -2523,7 +2522,7 @@ function CandidateVerificationForm() {
         setLoading(true)
         setOrgError(null)
         try {
-          const response = await axios.get('https://worktrail.ai/api/OrgmasterData', {
+          const response = await axios.get(API_ENDPOINTS.OrgmasterData, {
             headers: { APIKEY: DYNAMIC_FIELD_API_KEY },
           })
           if (response.data && Array.isArray(response.data.data)) {

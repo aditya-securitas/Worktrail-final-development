@@ -17,6 +17,7 @@ import ClientRequest from './Components/ClientRequest'
 import RecentAppealsTable from './Components/RecentAppealsTable'
 import ConAdminUsermaster from './ContributorAdmin/ConAdminUsermaster'
 import ConUserAddEmployee from './ContributorUser/ConUserAddEmployee'
+import Client from './Components/Client'
 import Navbar from './Components/Navbar'
 import Sidebar from './Components/Sidebar'
 import { flattenMenu, menuPath } from './Components/sidebar-utils'
@@ -35,6 +36,7 @@ import ConAdminAddEmployee from './ContributorAdmin/ConAdminAddEmployee'
 import ContributorServicerequest from './Components/ContributorServicerequest'
 import ContributorDashboard from './ContributorDashboard'
 import ClientDashboard from './ClientDashboard'
+import AdminDashboard from './Components/AdminDashboard'
 const EXTERNAL_LINKS: Record<string, boolean> = {
   'Privacypolicy.tsx': true,
   'Termsandconditions.tsx': true
@@ -48,7 +50,7 @@ function MenuComponent({ item }: { item: MenuRoute | undefined }) {
   if (item.components === 'ServiceRequestReview.tsx') return <ServiceRequestReview />
   if (item.components === 'ConUserAddEmployee.tsx') return <ConUserAddEmployee />
   if (item.components === 'ConAdminAddEmployee.tsx') return <ConAdminAddEmployee />
-  if (item.components === 'Client.tsx') return <Navigate to="/ClientRequest" replace />
+  if (item.components === 'Client.tsx') return <Client/>
   if (item.components === 'ClientRequest.tsx') return <ClientRequest />
   if (item.components === 'CandidateVerificationForm.tsx') return <CandidateVerificationForm />
   if (item.components === 'Contributor.tsx') return <Contributor />
@@ -61,6 +63,8 @@ function MenuComponent({ item }: { item: MenuRoute | undefined }) {
   if (item.components === 'ContributorServicerequest.tsx') return <ContributorServicerequest />
   if (item.components === 'ContributorDashboard.tsx') return <ContributorDashboard />
   if (item.components === 'ClientDashboard.tsx') return <ClientDashboard />
+  if (item.components === 'AdminDashboard.tsx') return <AdminDashboard />
+
   return null
 }
 
@@ -310,7 +314,7 @@ function Dashboard() {
                       : 'Candidate background verification portal. Access compliance audit parameters, telemetry signals, and physical checks.'}
                   </p>
                   <div className="flex flex-wrap items-center justify-end gap-3">
-                    {user?.Usertype?.toLowerCase() === 'client' && (
+                    {/* {user?.Usertype?.toLowerCase() === 'client' && (
                       <>
                         <Link to="/ClientRequest">
                           <button className="flex items-center gap-2 h-11 px-5 bg-white/10 hover:bg-white/20 border border-white/20 text-white font-bold text-xs tracking-wider uppercase rounded-full transition-all shadow-sm cursor-pointer select-none">
@@ -319,7 +323,7 @@ function Dashboard() {
                         </Link>
                       
                       </>
-                    )}
+                    )} */}
                     {/* <Link
                       to={
                         isClientUser

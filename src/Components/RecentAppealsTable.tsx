@@ -57,6 +57,8 @@ export type RawEmployeeRecord = {
   [key: string]: any
 }
 
+type NormalizedStatus = 'In Progress' | 'Verified' | 'Rejected' | 'Pending' | 'Completed';
+
 interface RecentAppealsTableProps {
   records?: VerificationRecord[]
   onRecordsLoaded?: (records: VerificationRecord[]) => void
@@ -95,10 +97,12 @@ function analyzeLOACompleteness(record: VerificationRecord) {
 }
 
 // --- Begin custom status calculation logic based on requirements ---
-type NormalizedStatus = 'Completed' | 'In Progress' | 'Verified' | 'Rejected' | 'Pending'
 
 // Given the raw Status and Downloadstatus from API, compute our internal status display
-function getNormalizedStatus(statusRaw: string | undefined, downloadStatusRaw: string | number | undefined | null): NormalizedStatus {
+function getNormalizedStatus(
+  statusRaw: string | undefined,
+  downloadStatusRaw: string | number | undefined | null
+): NormalizedStatus {
   // Normalize casing and string/number for Downloadstatus
   const status = typeof statusRaw === 'string' ? statusRaw.trim().toLowerCase() : ''
   let downloadStatus: string | null = null
@@ -120,15 +124,10 @@ function getNormalizedStatus(statusRaw: string | undefined, downloadStatusRaw: s
   if (status === 'inprogress' && (downloadStatus === null || downloadStatus === undefined || downloadStatus === '')) {
     return 'In Progress'
   }
-  // "Status": "Approved", "Downloadstatus": 1 => Verified
-  // if (status === 'approved' && downloadStatus === '1') {
-  //   return 'Verified'
-  // }
   // "Status": "Pending", "Downloadstatus": null => Pending
   if (status === 'pending' && (downloadStatus === null || downloadStatus === undefined || downloadStatus === '')) {
     return 'Pending'
   }
-  // Default fallbacks:
   // If status is explicitly Rejected
   if (status === 'rejected') {
     return 'Rejected'
@@ -137,10 +136,6 @@ function getNormalizedStatus(statusRaw: string | undefined, downloadStatusRaw: s
   if (status.includes('progress')) {
     return 'In Progress'
   }
-  // If status contains verified or completed
-  // if (status.includes('verified') || status.includes('complet')) {
-  //   return 'Verified'
-  // }
   // If status contains approved and downloadstatus is '1'
   if (status === 'approved' && downloadStatus === '1') {
     return 'Verified'
@@ -172,7 +167,7 @@ export const RecentAppealsTable: React.FC<RecentAppealsTableProps> = ({
 
   // Search & Filter State
   const [searchQuery, setSearchQuery] = useState('')
-  const [selectedStatus, setSelectedStatus] = useState('All')
+  const [selectedStatus, setSelectedStatus] = useState<'All' | NormalizedStatus>('All')
   const [selectedCompletenessFilter, setSelectedCompletenessFilter] = useState<'All' | 'Complete' | 'Missing'>('All')
   const [selectedCompanyFilter, setSelectedCompanyFilter] = useState('All')
   const [startDate, setStartDate] = useState('')
@@ -291,7 +286,7 @@ export const RecentAppealsTable: React.FC<RecentAppealsTableProps> = ({
           uploadedFilesCount: (item.LOA || item.loa || item.SupportingDocs) ? 1 : 0,
           submittedBy: item.Clientemail || clientIdentifier,
           submittedAt: item.CreatedAt ? formatDate(item.CreatedAt) : (item.submittedAt || '—'),
-          status: normalizedStatus,
+          status: normalizedStatus as NormalizedStatus,
           LOA: item.LOA || item.loa || null,
           SupportingDocs: item.SupportingDocs || null,
           // Add for downstream use in badge rendering, inspection, exports if needed
@@ -438,7 +433,7 @@ export const RecentAppealsTable: React.FC<RecentAppealsTableProps> = ({
   )
 
   // Status Badge UI -- update logic to match new NormalizedStatus and colors
-  const getStatusBadge = (status: VerificationRecord['status']) => {
+  const getStatusBadge = (status: NormalizedStatus) => {
     // For possible status values, see getNormalizedStatus logic above.
     switch (status) {
       case 'Verified':
@@ -856,7 +851,7 @@ export const RecentAppealsTable: React.FC<RecentAppealsTableProps> = ({
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex flex-col gap-1">
-                          {getStatusBadge(rec.status)}
+                          {getStatusBadge(rec.status as NormalizedStatus)}
                           {feedback && (
                             <span className="text-[10px] text-[#0680A6] font-medium max-w-[160px] truncate" title={feedback}>
                               {feedback}

@@ -90,8 +90,8 @@ export class AxiosClient {
   patch = <T = any>(url: string, data?: any, c?: AxiosRequestConfig) => this.request<T>({ ...c, url, data, method: 'PATCH' })
 }
 
-//export const BASE_URL = 'https://worktrail.ai/api'
-export const STAGE_URL = 'http://10.80.0.83:3000/api'
+export const STAGE_URL = 'https://worktrail.ai/api'
+//export const BASE_URL = 'http://10.80.0.83:3001/api'
 
 export const apiClient = new AxiosClient({
   baseURL: STAGE_URL,
@@ -154,7 +154,13 @@ export const API_ENDPOINTS = {
   OrgmasterNameUpdate:`${STAGE_URL}/OrgmasterNameUpdate`,
   OrgmasterDelete:`${STAGE_URL}/OrgmasterDelete`,
   ContributorServiceRequest:`${STAGE_URL}/ContributorServiceRequest`,
-  DownloadUpdatePDF:`${STAGE_URL}/DownloadUpdatePDF`
+  DownloadUpdatePDF:`${STAGE_URL}/DownloadUpdatePDF`,
+  ContributorDash : `${STAGE_URL}/ContributorDash`,
+  AdminRequestProgress:`${STAGE_URL}/AdminRequestProgress`,
+  AdminDash:`${STAGE_URL}/AdminDash`,
+  PaymentAdminData:`${STAGE_URL}/PaymentAdminData`
+
+
 } as const
 
 export type ApiEndpoint =

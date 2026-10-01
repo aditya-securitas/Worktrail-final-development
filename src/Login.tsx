@@ -52,12 +52,11 @@ function Login({ onRegister }: LoginProps) {
 
   const handlePostLoginNavigation = (currentUser: any) => {
     const userType = (currentUser?.Usertype || '').toLowerCase().replace(/\s+/g, '')
-    // Map userType for navigation
-    if (userType === 'client') {
-      // The requirements have conflicting instructions for Client: go to /Dashboard AND /ClientDashboard.
-      // We'll check both. Adjust as needed. Here, prefer /ClientDashboard if it exists.
-      // If you want to use /dashboard instead, swap those lines.
-      // If user has requests, /dashboard, else /CandidateVerification (original logic). But now /ClientDashboard.
+    // Navigate based on usertype
+    if (userType === 'superadmin') {
+      navigate('/AdminDashboard', { replace: true })
+    } else if (userType === 'client') {
+      // You may want to customize for client, but keeping logic as before
       const hasRequests = checkClientHasRequests(currentUser, emailId)
       if (hasRequests) {
         navigate('/CandidateVerification', { replace: true })

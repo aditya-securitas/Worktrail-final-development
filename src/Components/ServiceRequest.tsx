@@ -61,13 +61,17 @@ export type EmployeeRecord = {
 
 type Toast = { text: string; type: 'success' | 'error' | 'info' } | null;
 
+// Define type without "all" for status-only filter use
+type RecordStatusFilter = 'pending' | 'in_progress' | 'completed';
+type StatusFilter = 'all' | RecordStatusFilter;
+
 const ServiceRequest: React.FC = () => {
   const [records, setRecords] = useState<EmployeeRecord[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [orderId, setOrderId] = useState<string>('');
   const [selectedEmpCode, setSelectedEmpCode] = useState<string>('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'in_progress' | 'completed'>('all');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [toast, setToast] = useState<Toast>(null);
 
   // Pagination states
@@ -191,7 +195,8 @@ const ServiceRequest: React.FC = () => {
       if (statusFilter !== 'all') {
         // Show "Rejected" rows only in 'all' mode
         if (statusStr === 'rejected') {
-          return statusFilter === 'all';
+          // This previously compared statusFilter === 'all', which is not valid for RecordStatusFilter - fix by returning false.
+          return false;
         }
         if (statusFilter === 'completed') {
           if (!statusStr.includes('complet') && !statusStr.includes('verif') && !statusStr.includes('approv')) return false;

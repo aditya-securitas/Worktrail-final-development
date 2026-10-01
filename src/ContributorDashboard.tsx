@@ -12,6 +12,9 @@ import {
 import bgVideo from "./assets/video/the_element_related_to_BGV.mp4";
 import { useAuth } from "./useAuth";
 import axios from "axios";
+import { API_HEADER,API_ENDPOINTS } from "./endpoint";
+import { ContributorBarChart } from "./Components/DashboardCharts";
+ 
 
 // Icon mapping for card types (as fallback/icons per column name)
 const columnIconMap: { [key: string]: React.ElementType } = {
@@ -69,7 +72,7 @@ export default function ContributorDashboard() {
       setLoading(true);
       try {
         const res = await axios.post(
-          "https://worktrail.ai/api/ContributorDash",
+          API_ENDPOINTS.ContributorDash,
           {
             Contributor: user?.CompanyName || "",
           },
@@ -135,7 +138,7 @@ export default function ContributorDashboard() {
       </div>
 
       {/* 2. Dynamic Metric Cards Section */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
         {loading ? (
           Array.from({ length: 4 }).map((_, idx) => (
             <div
@@ -178,8 +181,8 @@ export default function ContributorDashboard() {
             return (
               <div
                 key={card.columnName}
-                className="relative bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden p-6 flex flex-col transition-all hover:shadow-md"
-              >
+                    className="relative bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden p-6 flex flex-col transition-all duration-300 ease-out hover:-translate-y-1.5 hover:shadow-lg hover:border-slate-200/80 "
+                >
                 {/* Top Accent Color Bar */}
                 <div className={`absolute top-0 left-0 right-0 h-[3.5px] ${barColor}`} />
 
@@ -202,6 +205,7 @@ export default function ContributorDashboard() {
           })
         )}
       </div>
+      <ContributorBarChart cards={dashboardCards} loading={loading} />
     </div>
   );
 }

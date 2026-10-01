@@ -27,34 +27,34 @@ import {
 import { motion, useInView, animate } from "framer-motion";
 import { useEffect, useState, useRef } from "react";
 import { Link } from "react-router-dom";
-import { API_ENDPOINTS } from "./endpoint";
 import bannerVideo from "./assets/video/banner-video.mp4";
 import logoWhite from "./assets/Img/logo_w.png";
 import logoBlack from "./assets/Img/logo_b.png";
+import challengeImg from "./assets/Img/Screenshot 2026-09-28 165143.png";
 
 const solutions: Array<[string, string, string, LucideIcon]> = [
   [
     "01",
-    "Seamlessly integrate",
-    "Easily integrate with existing ATS/HR platforms.",
+    "Centralise With Confidence",
+    "Keep all exited employee records in one secure location.",
     Database,
   ],
   [
     "02",
-    "Instant Verification",
-    "Verify identity & employment data in real-time.",
+    "Automate With Ease",
+    "Streamline third-party verifications through real-time APIs or simple file uploads.",
     Sparkles,
   ],
   [
     "03",
-    "Real-time Access",
-    "Check results & manage requests via a secure web portal.",
+    "Control With Clarity",
+    "Define how your data is used, shared, and accessed.",
     ShieldCheck,
   ],
   [
     "04",
-    "Regulatory Compliance",
-    "Stay compliant with industry regulations.",
+    "Integrate Seamlessly",
+    "Connect effortlessly with your HRMS or run WorkTrail independently, even offline.",
     FileCheck2,
   ],
 ];
@@ -296,6 +296,7 @@ function Home() {
     setFormState(prev => ({ ...prev, [name]: value }));
   };
 
+  // REWRITTEN: This function now sends data to https://worktrail.ai/api/ContactUS as per API doc.
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -317,31 +318,29 @@ function Home() {
       if (import.meta.env.DEV) {
         console.log("[Contact API] Submit Request:", formState);
       }
-      const response = await fetch(API_ENDPOINTS.auth.register, {
+      // Map the form state to the API request as per the CURL spec.
+      const payload = {
+        CompanyName: formState.companyName,
+        YourName: formState.yourName,
+        WorkEmail: formState.workEmail,
+        JobTitle: formState.jobTitle,
+        BusinessType: formState.businessType,
+        PhoneNumber: formState.phoneNumber,
+        EmployeeCount: formState.employeeCount,
+        Message: formState.message,
+      };
+      const response = await fetch("https://worktrail.ai/api/ContactUS", {
         method: "POST",
         headers: {
           APIKEY: "Securitas@#!1234",
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          username: formState.yourName.trim().toLowerCase().replace(/\s+/g, "_") + "_lead",
-          password: "LeadUserTempPassword@123",
-          UserType: "Lead",
-          EmailID: formState.workEmail,
-          FirstName: formState.yourName,
-          LastName: "",
-          CompanyName: formState.companyName,
-          GSTNumber: "",
-          Address: formState.message,
-          City: formState.jobTitle,
-          State: formState.businessType,
-          Country: formState.phoneNumber,
-          ZIPcode: formState.employeeCount
-        }),
+        body: JSON.stringify(payload),
       });
 
-      const responseText = await response.text();
+      // Try reading JSON or plain text from response
       let responseData: any;
+      let responseText = await response.text();
       try {
         responseData = JSON.parse(responseText);
       } catch {
@@ -607,36 +606,34 @@ function Home() {
             viewport={{ once: true, amount: 0.2 }}
             transition={{ duration: 0.7, ease: "easeOut" }}
           >
-            <div className="kicker-pill-wrapper">
-              <span className="home-kicker kicker-pill">FROM RISK TO IMPACT</span>
-            </div>
-            <h2>The <span className="gradient-text-challenge">Challenge</span></h2>
-            <div className="challenge-title-bar"></div>
-            
-            <div className="challenge-left-overlay">
-              <div className="overlay-icon-wrapper">
-                <Users size={20} />
-              </div>
-              <p>
-                Identifying candidates and <strong>managing manual background</strong> verification and screening.
-              </p>
+            <h2>The Challenge</h2>
+            <p className="challenge-subhead">
+              The challenge of converting compliance risks into measurable business Impact.
+            </p>
+
+            <div className="challenge-image-wrapper">
+              <img 
+                src={challengeImg} 
+                alt="The Challenge - Verification Overview" 
+                className="challenge-img" 
+              />
             </div>
             
             <p className="challenge-desc">
-              Hiring for complex work environments requires thorough screening. Outdated verification processes with manual steps can be <strong>error-prone, time-consuming</strong>, and hard to track, risking non-compliance.
+              A mid-sized supply chain firm with high employee turnover was overwhelmed. Their HR team received
             </p>
-            
-            <motion.a 
-              className="learn-more-glow-btn" 
-              href="#contact"
-              whileHover={{ scale: 1.04 }}
-              whileTap={{ scale: 0.98 }}
-            >
-              LEARN MORE &rarr;
-            </motion.a>
+
+            <div className="challenge-callout-highlight">
+              50+ emails &amp; calls weekly from third-party verifiers
+            </div>
+
+            <p className="challenge-desc">
+              asking to confirm details of former employees. This manual process was delaying their own recruitment efforts, creating compliance risks regarding data privacy, &amp; offering zero return on investment.
+            </p>
           </motion.div>
           
           <div className="impact-stack">
+            {/* The Solution Card */}
             <motion.article 
               className="impact-card solution-impact"
               initial={{ opacity: 0, x: 40 }}
@@ -649,61 +646,33 @@ function Home() {
                 borderColor: "rgba(155, 119, 255, 0.6)"
               }}
             >
-              <div className="card-illustration-wrapper">
-                <svg width="70" height="70" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <rect x="15" y="15" width="40" height="50" rx="6" fill="#080318" stroke="#9b77ff" strokeWidth="2" opacity="0.8"/>
-                  <line x1="25" y1="28" x2="45" y2="28" stroke="#9b77ff" strokeWidth="2" strokeLinecap="round"/>
-                  <line x1="25" y1="36" x2="38" y2="36" stroke="#9b77ff" strokeWidth="2" strokeLinecap="round"/>
-                  <rect x="25" y="44" width="8" height="12" rx="1" fill="#9b77ff"/>
-                  <rect x="37" y="48" width="8" height="8" rx="1" fill="#9b77ff" opacity="0.6"/>
-                  <circle cx="55" cy="55" r="14" fill="#080318" stroke="#ff4d4d" strokeWidth="2"/>
-                  <path d="M55 48V56" stroke="#ff4d4d" strokeWidth="2.5" strokeLinecap="round"/>
-                  <circle cx="55" cy="61" r="1.5" fill="#ff4d4d"/>
-                </svg>
-              </div>
-
-              <span className="card-label">
-                <span className="pulse-dot-purple"></span> IMPACT & RISKS
-              </span>
-              <h3>Operational Inefficiencies</h3>
+              <h3>The Solution</h3>
+              <p className="impact-card-intro">
+                The firm onboarded onto WorkTrail as a &quot;Contributor.&quot; They uploaded their master ex-employee data into our secure, encrypted environment.
+              </p>
               
-              <div className="challenge-list">
-                <motion.div 
-                  className="challenge-item"
-                  whileHover={{ x: 6 }}
-                  transition={{ type: "spring", stiffness: 300, damping: 20 }}
-                >
-                  <div className="item-icon-circle"><Clock size={16} /></div>
-                  <div className="item-copy">
-                    <strong>1. Hiring delays</strong>
-                    <p>Operational inefficiency slows down critical onboarding and candidate progression.</p>
+              <div className="card-two-cols">
+                <div className="card-feature-item">
+                  <div className="feature-icon-wrapper purple">
+                    <Cpu size={22} />
                   </div>
-                </motion.div>
-                <motion.div 
-                  className="challenge-item"
-                  whileHover={{ x: 6 }}
-                  transition={{ type: "spring", stiffness: 300, damping: 20 }}
-                >
-                  <div className="item-icon-circle"><FileText size={16} /></div>
-                  <div className="item-copy">
-                    <strong>2. Lack of standard reports & audit trails</strong>
-                    <p>Compliance issues arise when records are unstructured and hard to audit.</p>
+                  <p>
+                    <strong>Automation:</strong> Instead of HR manually digging through files, our APIs automatically matched incoming requests against the uploaded records.
+                  </p>
+                </div>
+
+                <div className="card-feature-item">
+                  <div className="feature-icon-wrapper purple">
+                    <Database size={22} />
                   </div>
-                </motion.div>
-                <motion.div 
-                  className="challenge-item"
-                  whileHover={{ x: 6 }}
-                  transition={{ type: "spring", stiffness: 300, damping: 20 }}
-                >
-                  <div className="item-icon-circle"><Zap size={16} /></div>
-                  <div className="item-copy">
-                    <strong>3. Lengthy processes & gaps</strong>
-                    <p>Reduced candidate satisfaction due to communication voids and slow verifications.</p>
-                  </div>
-                </motion.div>
+                  <p>
+                    <strong>Centralization:</strong> All verification requests were redirected to our portal.
+                  </p>
+                </div>
               </div>
             </motion.article>
             
+            {/* The Impact Card */}
             <motion.article 
               className="impact-card result-impact"
               initial={{ opacity: 0, x: 40 }}
@@ -716,25 +685,30 @@ function Home() {
                 borderColor: "rgba(77, 255, 149, 0.6)"
               }}
             >
-              <div className="card-illustration-wrapper">
-                <svg width="70" height="70" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <circle cx="40" cy="40" r="22" stroke="#4dff95" strokeWidth="2" strokeDasharray="6 4" />
-                  <circle cx="40" cy="40" r="16" fill="#02140a" stroke="#4dff95" strokeWidth="1.5" />
-                  <path d="M35 40L38 43L45 36" stroke="#4dff95" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  <circle cx="20" cy="28" r="2.5" fill="#4dff95" opacity="0.7"/>
-                  <circle cx="60" cy="52" r="2.5" fill="#4dff95" opacity="0.7"/>
-                  <circle cx="58" cy="26" r="2" fill="#4dff95" opacity="0.5"/>
-                  <circle cx="24" cy="54" r="1.5" fill="#4dff95" opacity="0.5"/>
-                </svg>
-              </div>
-
-              <span className="card-label">
-                <span className="pulse-dot-green"></span> THE FUTURE
-              </span>
-              <h3>Agile & Automated</h3>
-              <p>
-                Embrace the transition from manual, error-prone processes to <span className="gradient-text-green">agile, automated workflows</span>. This shift empowers your HR team to focus on core tasks, making hiring faster and smarter.
+              <h3>The Impact</h3>
+              <p className="impact-card-intro">
+                Within three months, the firm saw a complete transformation:
               </p>
+              
+              <div className="card-two-cols">
+                <div className="card-feature-item">
+                  <div className="feature-icon-wrapper green">
+                    <Clock size={22} />
+                  </div>
+                  <p>
+                    <strong>90% Reduction in Admin Work:</strong> The HR team stopped answering verification calls entirely, freeing them to focus on active hiring.
+                  </p>
+                </div>
+
+                <div className="card-feature-item">
+                  <div className="feature-icon-wrapper green">
+                    <CreditCard size={22} />
+                  </div>
+                  <p>
+                    <strong>New Revenue Channel:</strong> By leveraging our monetisation feature, they began earning a fee for every verified record, turning a tedious task into measurable business impact.
+                  </p>
+                </div>
+              </div>
             </motion.article>
           </div>
         </div>
@@ -916,7 +890,7 @@ function Home() {
                 onClick={() => setBenefitsTab("partner")}
               >
                 <Handshake size={16} />
-                Partner
+                Client
               </button>
             </div>
           </div>
