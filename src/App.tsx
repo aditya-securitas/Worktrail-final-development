@@ -8,6 +8,8 @@
   import ProtectedRoute from './ProtectedRoute'
   import Register from './Register'
   import bgVideo from './assets/video/this_is_good_change_one_thing.mp4'
+  import PrivacyPolicy from './PrivacyPolicy'
+  import CookiePolicy from './CookiePolicy'
   import './App.css'
 
   // Clean up deprecated verification data from local storage
@@ -117,7 +119,11 @@
             }
           />
           <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+          <Route path="/cookie-policy" element={<CookiePolicy />} />
+        
         </Routes>
+        
       </AuthProvider>
     </BrowserRouter>
   )

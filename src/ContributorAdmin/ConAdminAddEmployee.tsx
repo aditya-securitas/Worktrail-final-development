@@ -32,33 +32,34 @@ export const SAMPLE_BULK_ROWS: Record<string, any>[] = [];
 
 function formatDateValue(val: any): string {
     if (val === undefined || val === null || val === "") return "";
+
+    // XLSX with cellDates:true returns actual Date objects
     if (val instanceof Date && !isNaN(val.getTime())) {
         const year = val.getFullYear();
         const month = String(val.getMonth() + 1).padStart(2, "0");
         const day = String(val.getDate()).padStart(2, "0");
+    
         return `${year}-${month}-${day}`;
     }
+
+    // Excel serial number
     if (typeof val === "number") {
-        // Excel serial date to GMT
-        const date = new Date(Math.round((val - 25569) * 86400 * 1000));
-        if (!isNaN(date.getTime())) {
-            const year = date.getUTCFullYear();
-            const month = String(date.getUTCMonth() + 1).padStart(2, "0");
-            const day = String(date.getUTCDate()).padStart(2, "0");
+        const excelDate = XLSX.SSF.parse_date_code(val);
+    
+        if (excelDate) {
+            const year = excelDate.y;
+            const month = String(excelDate.m).padStart(2, "0");
+            const day = String(excelDate.d).padStart(2, "0");
+    
             return `${year}-${month}-${day}`;
         }
     }
     const str = String(val).trim();
+
     if (str.includes("T")) {
         return str.split("T")[0];
     }
-    const ddmmyyyy = str.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
-    if (ddmmyyyy) {
-        const day = ddmmyyyy[1].padStart(2, "0");
-        const month = ddmmyyyy[2].padStart(2, "0");
-        const year = ddmmyyyy[3];
-        return `${year}-${month}-${day}`;
-    }
+
     return str;
 }
 
@@ -714,7 +715,11 @@ export default function ConAdminAddEmployee() {
                     const firstSheetName = workbook.SheetNames[0];
                     if (!firstSheetName) return resolve([]);
                     const worksheet = workbook.Sheets[firstSheetName];
-                    const jsonRows = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+                    const jsonRows = XLSX.utils.sheet_to_json(worksheet, {
+                        defval: "",
+                        raw: false,
+                        dateNF: "yyyy-mm-dd"
+                        });
                     resolve(jsonRows);
                 } catch (err) {
                     reject(err);
@@ -897,6 +902,8 @@ export default function ConAdminAddEmployee() {
 
             console.log("[handleBulkSubmit] Normalizing rows with company:", company);
             const normalizedRows = rawRows.map(row => normalizeBulkRow(row, company));
+            console.log("Raw Excel Data:", rawRows);
+            console.log("Normalized Data:", normalizedRows);
             console.log("[handleBulkSubmit] Normalized rows:", normalizedRows);
 
             // Find missing required fields except for "middlename"

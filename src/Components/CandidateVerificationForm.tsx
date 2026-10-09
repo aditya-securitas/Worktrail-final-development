@@ -1352,13 +1352,13 @@ function CandidateVerificationForm() {
     }))
 
     try {
-      const checkUrl = API_ENDPOINTS.reviewClientData 
+      //const checkUrl =  
       let liveStatus = record.status || 'Pending'
       let feedbackMsg = `Status confirmed: ${liveStatus} at ${record.verifierName}. In queue for verification.`
 
       try {
         const response = await axios.post(
-          checkUrl,
+          API_ENDPOINTS.reviewClientData,
           {
             requestId: reqId,
             EmployeeCode: record.employeeId,
